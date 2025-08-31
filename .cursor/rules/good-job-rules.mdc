@@ -1,0 +1,177 @@
+# Good Job NestJS Cursor Rules
+
+## 🏗️ Project Architecture & Structure
+
+### Feature-Based Module Organization
+
+- Follow the established feature-based structure: `users/`, `companies/`, `auth/`, `career/`, `education/`, `admin/`
+- Each feature module should contain: `*.controller.ts`, `*.service.ts`, `*.module.ts`
+- Include `dto/` and `entities/` folders when needed based on the architecture rules
+- Use kebab-case for folder names (e.g., `business-profile/`, not `businessProfile/`)
+
+### File Naming Conventions
+
+- Controllers: `*.controller.ts` (e.g., `users.controller.ts`)
+- Services: `*.service.ts` (e.g., `users.service.ts`)
+- Modules: `*.module.ts` (e.g., `users.module.ts`)
+- DTOs: `*.dto.ts` (e.g., `create-user.dto.ts`, `update-user.dto.ts`)
+- Entities: `*.entity.ts` (e.g., `user.entity.ts`)
+- Interfaces: `*.interface.ts` (e.g., `user.interface.ts`)
+
+## 📝 Code Style & Standards
+
+### TypeScript Best Practices
+
+- Always use strict TypeScript configuration
+- Prefer interfaces over types for object shapes
+- Use enums for constants (e.g., `UserRole`, `CompanyType`)
+- Implement proper type guards and validation
+- Use generics for reusable components
+
+### NestJS Decorators & Patterns
+
+- Use `@Injectable()` for all services
+- Implement `OnModuleInit` or `OnModuleDestroy` when lifecycle hooks are needed
+- Use `@UseGuards()` for authentication/authorization
+- Implement proper exception filters with `@Catch()`
+- Use interceptors for cross-cutting concerns
+
+### DTO Validation
+
+- Always use `class-validator` decorators for input validation
+- Implement `class-transformer` for data transformation
+- Create separate DTOs for create, update, and response operations
+- Use `@IsOptional()` for partial updates
+- Implement custom validation pipes when needed
+
+## 🔐 Authentication & Security
+
+### JWT Implementation
+
+- Use `@nestjs/passport` with `passport-jwt` strategy
+- Implement proper JWT token validation and refresh mechanisms
+- Use `@UseGuards(JwtAuthGuard)` for protected routes
+- Implement role-based access control (RBAC) with custom decorators
+
+### Security Best Practices
+
+- Use `helmet` for security headers
+- Implement CORS properly with `@nestjs/config`
+- Use `bcrypt` for password hashing (cost factor 12+)
+- Validate all inputs with `class-validator`
+- Implement rate limiting for sensitive endpoints
+
+## 🗄️ Database & SQL
+
+### Raw SQL Implementation
+
+- Use `mysql2` or `pg` for direct database connections
+- Write raw SQL queries using query builders or template literals
+- Implement proper SQL injection prevention with parameterized queries
+- Use connection pooling for better performance
+- Handle database transactions manually when needed
+
+### SQL Query Patterns
+
+- Create dedicated SQL files in `database/queries/` folder for complex queries
+- Use prepared statements for all user inputs
+- Implement proper error handling for database connection failures
+- Use database views for complex joins and aggregations
+- Implement proper indexing strategies in SQL scripts
+
+### Data Access Layer
+
+- Create service methods that execute raw SQL queries
+- Use `@nestjs/config` for database connection strings
+- Implement proper connection management and cleanup
+- Use query result mapping to DTOs and interfaces
+- Handle database migrations manually with SQL scripts
+
+## 📚 API Documentation
+
+### Swagger/OpenAPI
+
+- Use `@nestjs/swagger` decorators for all endpoints
+- Document DTOs with `@ApiProperty()`
+- Provide meaningful descriptions for all operations
+- Use proper HTTP status codes
+- Implement proper error response schemas
+
+### API Design
+
+- Follow RESTful conventions
+- Use proper HTTP methods (GET, POST, PUT, PATCH, DELETE)
+- Implement proper pagination for list endpoints
+- Use consistent response formats
+- Implement proper error handling with custom exception filters
+
+## 🚀 Performance & Optimization
+
+### Caching Strategy
+
+- Use `cache-manager` for Redis or in-memory caching
+- Implement proper cache invalidation strategies
+- Cache frequently accessed data (user profiles, company info)
+- Use cache decorators (`@UseInterceptors(CacheInterceptor)`)
+
+### Async Operations
+
+- Use `rxjs` for reactive programming patterns
+- Implement proper error handling with `catchError`
+- Use `from()` and `of()` for observable creation
+- Implement proper timeout handling for external API calls
+
+## 🔧 Development Workflow
+
+### Package Management
+
+- Use `pnpm` exclusively (enforced by preinstall script)
+- Keep dependencies up to date
+- Use exact versions for critical packages
+- Document any version-specific requirements
+
+### Environment Configuration
+
+- Use `@nestjs/config` for environment management
+- Implement proper configuration validation
+- Use `.env` files for local development
+- Implement configuration service pattern
+
+## 📁 Common Patterns
+
+### Error Handling
+
+- Create custom exception classes extending `HttpException`
+- Implement global exception filters
+- Use proper HTTP status codes
+- Provide meaningful error messages
+
+### Logging & Monitoring
+
+- Implement structured logging
+- Use appropriate log levels (error, warn, info, debug)
+- Log important business events
+- Implement request ID tracking
+
+### Data Transformation
+
+- Use `class-transformer` for DTO transformations
+- Implement proper serialization/deserialization
+- Handle nested object transformations
+- Use `@Transform()` decorator for custom transformations
+
+## ⚠️ Common Pitfalls to Avoid
+
+- Don't mix different naming conventions
+- Don't skip DTO validation
+- Don't expose sensitive information in responses
+- Don't ignore TypeScript strict mode warnings
+- Don't skip error handling
+- Don't use `any` type without proper justification
+- Don't forget to implement proper logging
+- Don't skip unit tests for business logic
+  description:
+  globs:
+  alwaysApply: true
+
+---

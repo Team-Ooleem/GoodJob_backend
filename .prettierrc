@@ -7,5 +7,7 @@
     "jsxSingleQuote": true,
     "bracketSpacing": true,
     "endOfLine": "lf",
-    "arrowParens": "always"
+    "arrowParens": "always",
+    "insertPragma": false,
+    "proseWrap": "preserve"
 }
