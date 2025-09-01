@@ -8,7 +8,7 @@
     "scripts": {
         "preinstall": "npx only-allow pnpm",
         "build": "nest build",
-        "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+        "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"scripts/**/*.{js,ts}\"",
         "start": "nest start",
         "start:dev": "nest start --watch",
         "start:debug": "nest start --debug --watch",
@@ -19,8 +19,8 @@
         "test:cov": "jest --coverage",
         "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
         "test:e2e": "jest --config ./test/jest-e2e.json",
-        "db:create": "node scripts/create-database.js",
-        "db:setup": "npm run db:create"
+        "db:setup": "node scripts/setup-database-universal.js",
+        "db:reset": "node scripts/setup-database-universal.js --reset"
     },
     "dependencies": {
         "@nestjs/axios": "^4.0.1",
@@ -37,6 +37,7 @@
         "class-validator": "^0.14.2",
         "cors": "^2.8.5",
         "helmet": "^8.1.0",
+        "dotenv": "^16.4.5",
         "mysql2": "^3.14.3",
         "passport": "^0.7.0",
         "passport-jwt": "^4.0.1",
@@ -52,6 +53,7 @@
         "@nestjs/testing": "^11.0.1",
         "@types/bcrypt": "^6.0.0",
         "@types/cors": "^2.8.19",
+        "@types/dotenv": "^8.2.0",
         "@types/express": "^5.0.0",
         "@types/jest": "^30.0.0",
         "@types/node": "^22.10.7",
