@@ -229,7 +229,7 @@ class DatabaseSetup {
     }
 
     async importSchema() {
-        const sqlFilePath = path.join(__dirname, '..', 'sql', 'good_job.sql');
+        const sqlFilePath = path.join(__dirname, '..', 'sql', 'schema.sql');
 
         if (!fs.existsSync(sqlFilePath)) {
             logError(`SQL 파일을 찾을 수 없습니다: ${sqlFilePath}`);
@@ -248,6 +248,42 @@ class DatabaseSetup {
         return await this.executeQueries(queries);
     }
 
+    async importData() {
+        const dataFiles = [
+            { name: 'job-role.sql', path: path.join(__dirname, '..', 'sql', 'job-role.sql') },
+            { name: 'data.sql', path: path.join(__dirname, '..', 'sql', 'data.sql') },
+        ];
+
+        let allSuccess = true;
+
+        for (const file of dataFiles) {
+            if (!fs.existsSync(file.path)) {
+                logError(`${file.name} 파일을 찾을 수 없습니다: ${file.path}`);
+                allSuccess = false;
+                continue;
+            }
+
+            logInfo(`${file.name} import를 시작합니다...`);
+
+            const queries = splitSQLFile(file.path);
+            if (queries.length === 0) {
+                logError(`${file.name} 파일에서 유효한 쿼리를 찾을 수 없습니다.`);
+                allSuccess = false;
+                continue;
+            }
+
+            const success = await this.executeQueries(queries);
+            if (!success) {
+                logWarning(`${file.name} import에 실패했습니다.`);
+                allSuccess = false;
+            } else {
+                logSuccess(`${file.name} import 완료`);
+            }
+        }
+
+        return allSuccess;
+    }
+
     async close() {
         if (this.connection) {
             await this.connection.end();
@@ -255,8 +291,9 @@ class DatabaseSetup {
         }
     }
 
-    async initialize() {
-        log('🚀 mysql2를 사용한 데이터베이스 초기화 시작...', 'bright');
+    async initialize(withData = false) {
+        const initType = withData ? '스키마 + 데이터' : '스키마만';
+        log(`🚀 mysql2를 사용한 데이터베이스 초기화 시작 (${initType})...`, 'bright');
         console.log('');
 
         // 1. MySQL 서버 연결
@@ -286,16 +323,32 @@ class DatabaseSetup {
             logWarning('일부 스키마 import에 실패했습니다.');
         }
 
+        // 5. 데이터 import (옵션)
+        if (withData) {
+            console.log('');
+            logInfo('데이터 import 시작...');
+            const isDataImported = await this.importData();
+            if (!isDataImported) {
+                logWarning('일부 데이터 import에 실패했습니다.');
+            }
+        }
+
         await this.close();
 
         console.log('');
         logSuccess('데이터베이스 초기화 완료!');
         log(`📊 데이터베이스: ${this.config.database}`, 'white');
         log(`🌐 호스트: ${this.config.host}:${this.config.port}`, 'white');
+        if (withData) {
+            logSuccess('✅ 스키마와 기본 데이터가 모두 로드되었습니다.');
+        } else {
+            logSuccess('✅ 스키마가 로드되었습니다.');
+        }
     }
 
-    async reset() {
-        log('🔄 mysql2를 사용한 데이터베이스 리셋 시작...', 'bright');
+    async reset(withData = false) {
+        const resetType = withData ? '스키마 + 데이터' : '스키마만';
+        log(`🔄 mysql2를 사용한 데이터베이스 리셋 시작 (${resetType})...`, 'bright');
         console.log('');
 
         // 1. MySQL 서버 연결
@@ -332,12 +385,27 @@ class DatabaseSetup {
             logWarning('일부 스키마 import에 실패했습니다.');
         }
 
+        // 6. 데이터 import (옵션)
+        if (withData) {
+            console.log('');
+            logInfo('데이터 import 시작...');
+            const isDataImported = await this.importData();
+            if (!isDataImported) {
+                logWarning('일부 데이터 import에 실패했습니다.');
+            }
+        }
+
         await this.close();
 
         console.log('');
         logSuccess('데이터베이스 리셋 완료!');
         log(`📊 데이터베이스: ${this.config.database}`, 'white');
         log(`🌐 호스트: ${this.config.host}:${this.config.port}`, 'white');
+        if (withData) {
+            logSuccess('✅ 스키마와 기본 데이터가 모두 재로드되었습니다.');
+        } else {
+            logSuccess('✅ 스키마가 재로드되었습니다.');
+        }
     }
 }
 
@@ -373,11 +441,12 @@ async function main() {
         // 명령행 인수 확인
         const args = process.argv.slice(2);
         const isReset = args.includes('--reset');
+        const withData = args.includes('--with-data');
 
         if (isReset) {
-            await dbSetup.reset();
+            await dbSetup.reset(withData);
         } else {
-            await dbSetup.initialize();
+            await dbSetup.initialize(withData);
         }
     } catch (error) {
         logError(`오류가 발생했습니다: ${error.message}`);

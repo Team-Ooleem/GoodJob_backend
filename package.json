@@ -20,7 +20,11 @@
         "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
         "test:e2e": "jest --config ./test/jest-e2e.json",
         "db:setup": "node scripts/setup-database-universal.js",
-        "db:reset": "node scripts/setup-database-universal.js --reset"
+        "db:reset": "node scripts/setup-database-universal.js --reset",
+        "db:init": "node scripts/setup-database-universal.js",
+        "db:init:reset": "node scripts/setup-database-universal.js --reset",
+        "db:init:with-data": "node scripts/setup-database-universal.js --with-data",
+        "db:init:with-data:reset": "node scripts/setup-database-universal.js --reset --with-data"
     },
     "dependencies": {
         "@nestjs/axios": "^4.0.1",

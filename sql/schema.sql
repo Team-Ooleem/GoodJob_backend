@@ -33,12 +33,12 @@ DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
   `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유값',
   `name` varchar(45) NOT NULL COMMENT '사용자 이름',
-  `phone` varchar(45) NOT NULL COMMENT '사용자 핸드폰번호',
-  `email` varchar(45) NOT NULL COMMENT '사용자 이메일',
+  `phone` varchar(15) NOT NULL COMMENT '사용자 핸드폰번호',
+  `email` varchar(255) NOT NULL COMMENT '사용자 이메일',
   `short_bio` varchar(100) DEFAULT NULL COMMENT '짧은 소개',
   `bio` text COMMENT '소개\n',
   `created_at` datetime NOT NULL COMMENT '생성일',
-  `update_at` datetime DEFAULT NULL COMMENT '수정일',
+  `updated_at` datetime DEFAULT NULL COMMENT '수정일',
   PRIMARY KEY (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='공통 유저 정보 테이블 입니다.';
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -51,10 +51,10 @@ DROP TABLE IF EXISTS `sido`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `sido` (
-  `sido_code` char(2) NOT NULL,
-  `sido_name` varchar(50) NOT NULL,
+  `sido_code` char(2) NOT NULL COMMENT '시도 코드 (예: 11-서울, 26-부산)',
+  `sido_name` varchar(50) NOT NULL COMMENT '시도명 (예: 서울특별시, 부산광역시)',
   PRIMARY KEY (`sido_code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='시도 정보 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -65,12 +65,12 @@ DROP TABLE IF EXISTS `career_type`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `career_type` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `code` varchar(10) NOT NULL,
-  `name` varchar(20) NOT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유 인덱스',
+  `code` varchar(10) NOT NULL COMMENT '경력 타입 코드',
+  `name` varchar(20) NOT NULL COMMENT '경력 타입명 (신입, 경력, 무관 등)',
   PRIMARY KEY (`idx`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='경력 타입 코드 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -81,12 +81,12 @@ DROP TABLE IF EXISTS `education_level`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `education_level` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `code` varchar(10) NOT NULL,
-  `name` varchar(50) NOT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유 인덱스',
+  `code` varchar(10) NOT NULL COMMENT '학력 레벨 코드',
+  `name` varchar(50) NOT NULL COMMENT '학력 레벨명 (고등학교, 전문대, 대학교, 대학원 등)',
   PRIMARY KEY (`idx`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='학력 레벨 코드 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -97,13 +97,13 @@ DROP TABLE IF EXISTS `employment_type`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `employment_type` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `code` varchar(16) NOT NULL,
-  `name` varchar(50) NOT NULL,
-  `description` varchar(200) DEFAULT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유 인덱스',
+  `code` varchar(25) NOT NULL COMMENT '고용 형태 코드',
+  `name` varchar(50) NOT NULL COMMENT '고용 형태명 (정규직, 계약직, 인턴 등)',
+  `description` varchar(200) DEFAULT NULL COMMENT '고용 형태 상세 설명',
   PRIMARY KEY (`idx`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=6 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='고용 형태 코드 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -114,10 +114,10 @@ DROP TABLE IF EXISTS `company_type`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `company_type` (
-  `id` char(2) NOT NULL,
-  `name` varchar(50) NOT NULL,
+  `id` char(2) NOT NULL COMMENT '기업 규모 코드',
+  `name` varchar(50) NOT NULL COMMENT '기업 규모명 (대기업, 중견기업, 중소기업 등)',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='기업 규모 분류 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -128,12 +128,12 @@ DROP TABLE IF EXISTS `corporate_entity`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `corporate_entity` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `code` varchar(20) NOT NULL,
-  `name` varchar(100) NOT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유 인덱스',
+  `code` varchar(20) NOT NULL COMMENT '법인 형태 코드',
+  `name` varchar(100) NOT NULL COMMENT '법인 형태명 (주식회사, 유한회사 등)',
   PRIMARY KEY (`idx`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='법인 형태 코드 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -144,12 +144,12 @@ DROP TABLE IF EXISTS `foreign_affiliation`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `foreign_affiliation` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `code` varchar(20) NOT NULL,
-  `name` varchar(100) NOT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유 인덱스',
+  `code` varchar(20) NOT NULL COMMENT '외국계 소속 코드',
+  `name` varchar(100) NOT NULL COMMENT '외국계 소속명 (외국계, 내국계 등)',
   PRIMARY KEY (`idx`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='외국계 소속 분류 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -160,12 +160,12 @@ DROP TABLE IF EXISTS `institution_type`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `institution_type` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `code` varchar(20) NOT NULL,
-  `name` varchar(100) NOT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유 인덱스',
+  `code` varchar(20) NOT NULL COMMENT '기관 타입 코드',
+  `name` varchar(100) NOT NULL COMMENT '기관 타입명 (공공기관, 민간기업 등)',
   PRIMARY KEY (`idx`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='기관 타입 코드 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -176,12 +176,12 @@ DROP TABLE IF EXISTS `legal_structure`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `legal_structure` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `code` varchar(20) NOT NULL,
-  `name` varchar(100) NOT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유 인덱스',
+  `code` varchar(20) NOT NULL COMMENT '법적 구조 코드',
+  `name` varchar(100) NOT NULL COMMENT '법적 구조명 (개인사업자, 법인사업자 등)',
   PRIMARY KEY (`idx`),
   UNIQUE KEY `code` (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='법적 구조 분류 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -192,10 +192,10 @@ DROP TABLE IF EXISTS `job_category`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `job_category` (
-  `id` char(2) NOT NULL,
-  `name` varchar(50) NOT NULL,
+  `id` int NOT NULL COMMENT '직무 카테고리 코드',
+  `name` varchar(50) NOT NULL COMMENT '직무 카테고리명 (IT/개발, 마케팅, 영업 등)',
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='직무 카테고리 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -206,13 +206,13 @@ DROP TABLE IF EXISTS `resume`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `resume` (
-  `resume_id` int NOT NULL AUTO_INCREMENT,
-  `user_id` int NOT NULL,
-  `title` varchar(255) NOT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `resume_id` int NOT NULL AUTO_INCREMENT COMMENT '이력서 고유 ID',
+  `user_id` int NOT NULL COMMENT '사용자 ID',
+  `title` varchar(255) NOT NULL COMMENT '이력서 제목',
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP COMMENT '생성일시',
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일시',
   PRIMARY KEY (`resume_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='이력서 기본 정보 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -223,16 +223,16 @@ DROP TABLE IF EXISTS `posts`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `posts` (
-  `post_id` int NOT NULL AUTO_INCREMENT,
-  `user_id` int NOT NULL,
-  `content` text,
-  `media_url` varchar(500) DEFAULT NULL,
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`post_id`),
+  `post_idx` int NOT NULL AUTO_INCREMENT COMMENT '게시글 고유 ID',
+  `user_id` int NOT NULL COMMENT '작성자 ID',
+  `content` text COMMENT '게시글 내용',
+  `media_url` varchar(500) DEFAULT NULL COMMENT '첨부 미디어 파일 URL',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '작성일시',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일시',
+  PRIMARY KEY (`post_idx`),
   KEY `user_id` (`user_id`),
   CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='게시글 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 -- =====================================================
@@ -247,13 +247,13 @@ DROP TABLE IF EXISTS `gu`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `gu` (
-  `gu_code` char(5) NOT NULL,
-  `gu_name` varchar(50) NOT NULL,
-  `sido_code` char(2) NOT NULL,
+  `gu_code` char(5) NOT NULL COMMENT '구/군 코드',
+  `gu_name` varchar(50) NOT NULL COMMENT '구/군명 (예: 강남구, 서초구)',
+  `sido_code` char(2) NOT NULL COMMENT '소속 시도 코드',
   PRIMARY KEY (`gu_code`),
   KEY `ix_gu_sido` (`sido_code`),
   CONSTRAINT `fk_gu_sido` FOREIGN KEY (`sido_code`) REFERENCES `sido` (`sido_code`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='구/군 정보 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -266,7 +266,7 @@ DROP TABLE IF EXISTS `companies`;
 CREATE TABLE `companies` (
   `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유키',
   `ceo_name` varchar(45) NOT NULL COMMENT '대표 이름',
-  `business_number` varchar(45) NOT NULL COMMENT '사업자 번호',
+  `business_number` varchar(10) NOT NULL COMMENT '사업자 번호',
   `business_certificate_img_name` varchar(255) NOT NULL COMMENT '사업자 등록 증명서 사진 이름',
   `company_size_code` char(2) NOT NULL COMMENT '기업 형태 ( 대기업, 중소기업,중견기업)',
   `homepage` varchar(255) DEFAULT NULL COMMENT '홈페이지 주소',
@@ -281,6 +281,7 @@ CREATE TABLE `companies` (
   `bio` text COMMENT '기업 소개',
   `vision` text COMMENT '기업 비젼',
   PRIMARY KEY (`idx`),
+  UNIQUE KEY `business_number_UNIQUE` (`business_number`),
   KEY `company_size_code_idx` (`company_size_code`),
   KEY `foreign_affiliation_idx` (`foreign_affiliation`),
   KEY `legal_structure_idx` (`legal_structure`),
@@ -294,22 +295,7 @@ CREATE TABLE `companies` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='기업 리스트';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `job_group`
---
 
-DROP TABLE IF EXISTS `job_group`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `job_group` (
-  `id` char(4) NOT NULL,
-  `category_id` char(2) NOT NULL,
-  `name` varchar(50) NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `category_id` (`category_id`),
-  CONSTRAINT `job_group_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `job_category` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `business_profile`
@@ -320,40 +306,18 @@ DROP TABLE IF EXISTS `business_profile`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `business_profile` (
   `user_idx` int NOT NULL COMMENT 'users 테이블을 참조하는 참조키',
-  `business_number` char(10) NOT NULL COMMENT '사업자 등록번호',
+  `business_number` varchar(10) NOT NULL COMMENT '사업자 등록번호',
   `business_certificate_img_name` varchar(255) NOT NULL COMMENT '사업자 등록 증명원 url 이름',
   `company_name` varchar(255) NOT NULL COMMENT '회사 이름',
   `company_intro` text NOT NULL COMMENT '회사 소개',
-  `id` varchar(45) NOT NULL,
-  `password` varchar(45) NOT NULL,
-  `ceo_name` varchar(45) NOT NULL,
-  `address` varchar(255) DEFAULT NULL,
+  `id` varchar(45) NOT NULL COMMENT '기업 로그인 ID',
+  `password` varchar(45) NOT NULL COMMENT '기업 로그인 비밀번호',
+  `ceo_name` varchar(45) NOT NULL COMMENT '대표자명',
+  `address` varchar(255) DEFAULT NULL COMMENT '기업 주소',
   PRIMARY KEY (`user_idx`),
   UNIQUE KEY `business_number_UNIQUE` (`business_number`),
   CONSTRAINT `bp_user_idx` FOREIGN KEY (`user_idx`) REFERENCES `users` (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='기업회원 정보입니다.';
-/*!40101 SET character_set_client = @saved_cs_client */;
-
---
--- Table structure for table `individual_profile`
---
-
-DROP TABLE IF EXISTS `individual_profile`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `individual_profile` (
-  `user_idx` int NOT NULL COMMENT 'users 테이블 참조키',
-  `desired_job` char(6) NOT NULL COMMENT '희망직군',
-  `desired_sido` char(2) NOT NULL COMMENT '희망 근무지역',
-  `desired_salary` int NOT NULL COMMENT '희망 연봉',
-  `desired_gu` char(5) NOT NULL,
-  PRIMARY KEY (`user_idx`),
-  KEY `desired_sido_idx` (`desired_sido`),
-  KEY `desired_gu_idx` (`desired_gu`),
-  CONSTRAINT `desired_gu` FOREIGN KEY (`desired_gu`) REFERENCES `gu` (`gu_code`),
-  CONSTRAINT `desired_sido` FOREIGN KEY (`desired_sido`) REFERENCES `sido` (`sido_code`),
-  CONSTRAINT `ip_user_idx` FOREIGN KEY (`user_idx`) REFERENCES `users` (`idx`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='개인회원 정보입니다.';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -364,14 +328,14 @@ DROP TABLE IF EXISTS `educate`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `educate` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `user_idx` int NOT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유 인덱스',
+  `user_idx` int NOT NULL COMMENT '사용자 ID',
   `school_name` varchar(255) NOT NULL COMMENT '학교명',
-  `major` varchar(255) NOT NULL,
+  `major` varchar(255) NOT NULL COMMENT '전공명',
   `degree` int NOT NULL COMMENT '학위',
-  `start_date` date DEFAULT NULL,
-  `end_date` date DEFAULT NULL,
-  `is_current` tinyint(1) NOT NULL DEFAULT '0',
+  `start_date` date DEFAULT NULL COMMENT '입학일',
+  `end_date` date DEFAULT NULL COMMENT '졸업일',
+  `is_current` tinyint(1) NOT NULL DEFAULT '0' COMMENT '재학 중 여부',
   PRIMARY KEY (`idx`),
   KEY `educate_degree_idx_idx` (`degree`),
   KEY `educate_user_idx_idx` (`user_idx`),
@@ -388,10 +352,10 @@ DROP TABLE IF EXISTS `follow`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `follow` (
-  `idx` int NOT NULL AUTO_INCREMENT,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유 인덱스',
   `follower_idx` int NOT NULL COMMENT '팔로워',
   `following_idx` int NOT NULL COMMENT '팔로잉',
-  `created_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL COMMENT '팔로우 시작일시',
   PRIMARY KEY (`idx`),
   KEY `follow_user_idx_idx` (`follower_idx`),
   KEY `following_user_idx_idx` (`following_idx`),
@@ -408,17 +372,17 @@ DROP TABLE IF EXISTS `messages`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `messages` (
-  `message_id` int NOT NULL AUTO_INCREMENT,
-  `sender_id` int NOT NULL,
-  `receiver_id` int NOT NULL,
-  `content` text NOT NULL,
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `message_id` int NOT NULL AUTO_INCREMENT COMMENT '메시지 고유 ID',
+  `sender_id` int NOT NULL COMMENT '발신자 ID',
+  `receiver_id` int NOT NULL COMMENT '수신자 ID',
+  `content` text NOT NULL COMMENT '메시지 내용',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '발송일시',
   PRIMARY KEY (`message_id`),
   KEY `sender_id` (`sender_id`),
   KEY `receiver_id` (`receiver_id`),
   CONSTRAINT `messages_ibfk_1` FOREIGN KEY (`sender_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE,
   CONSTRAINT `messages_ibfk_2` FOREIGN KEY (`receiver_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='메시지 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -431,7 +395,7 @@ DROP TABLE IF EXISTS `social_accout`;
 CREATE TABLE `social_accout` (
   `user_idx` int NOT NULL COMMENT '유저정보',
   `provider_id` varchar(255) NOT NULL COMMENT '서비스토큰',
-  `created_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT NULL COMMENT '소셜 계정 연동일시',
   KEY `social_user_idx_idx` (`user_idx`),
   CONSTRAINT `social_user_idx` FOREIGN KEY (`user_idx`) REFERENCES `users` (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='소셜로그인';
@@ -445,18 +409,18 @@ DROP TABLE IF EXISTS `resume_career`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `resume_career` (
-  `career_id` int NOT NULL AUTO_INCREMENT,
-  `resume_id` int NOT NULL,
-  `company_name` varchar(255) NOT NULL,
-  `position` varchar(45) NOT NULL,
-  `is_current` tinyint(1) NOT NULL DEFAULT '0',
-  `start_date` date DEFAULT NULL,
-  `end_date` date DEFAULT NULL,
-  `description` text,
+  `career_id` int NOT NULL AUTO_INCREMENT COMMENT '경력 고유 ID',
+  `resume_id` int NOT NULL COMMENT '이력서 ID',
+  `company_name` varchar(255) NOT NULL COMMENT '회사명',
+  `position` varchar(45) NOT NULL COMMENT '직책/직위',
+  `is_current` tinyint(1) NOT NULL DEFAULT '0' COMMENT '현재 재직 중 여부',
+  `start_date` date DEFAULT NULL COMMENT '입사일',
+  `end_date` date DEFAULT NULL COMMENT '퇴사일',
+  `description` text COMMENT '업무 설명',
   PRIMARY KEY (`career_id`),
   KEY `resume_id` (`resume_id`),
   CONSTRAINT `resume_career_ibfk_1` FOREIGN KEY (`resume_id`) REFERENCES `resume` (`resume_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='이력서 경력 사항 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -467,14 +431,14 @@ DROP TABLE IF EXISTS `resume_coverletter`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `resume_coverletter` (
-  `coverletter_id` int NOT NULL AUTO_INCREMENT,
-  `resume_id` int NOT NULL,
-  `coverletter_title` varchar(255) DEFAULT NULL,
-  `description` text,
+  `coverletter_id` int NOT NULL AUTO_INCREMENT COMMENT '자기소개서 고유 ID',
+  `resume_id` int NOT NULL COMMENT '이력서 ID',
+  `coverletter_title` varchar(255) DEFAULT NULL COMMENT '자기소개서 제목',
+  `description` text COMMENT '자기소개서 내용',
   PRIMARY KEY (`coverletter_id`),
   KEY `resume_id` (`resume_id`),
   CONSTRAINT `resume_coverletter_ibfk_1` FOREIGN KEY (`resume_id`) REFERENCES `resume` (`resume_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='이력서 자기소개서 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -485,18 +449,18 @@ DROP TABLE IF EXISTS `resume_education`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `resume_education` (
-  `education_id` int NOT NULL AUTO_INCREMENT,
-  `resume_id` int NOT NULL,
-  `school_name` varchar(255) NOT NULL,
-  `major` varchar(100) NOT NULL,
-  `degree` varchar(100) NOT NULL,
-  `start_date` date DEFAULT NULL,
-  `end_date` date DEFAULT NULL,
-  `is_current` tinyint(1) NOT NULL DEFAULT '0',
+  `education_id` int NOT NULL AUTO_INCREMENT COMMENT '학력 고유 ID',
+  `resume_id` int NOT NULL COMMENT '이력서 ID',
+  `school_name` varchar(255) NOT NULL COMMENT '학교명',
+  `major` varchar(100) NOT NULL COMMENT '전공명',
+  `degree` varchar(100) NOT NULL COMMENT '학위명',
+  `start_date` date DEFAULT NULL COMMENT '입학일',
+  `end_date` date DEFAULT NULL COMMENT '졸업일',
+  `is_current` tinyint(1) NOT NULL DEFAULT '0' COMMENT '재학 중 여부',
   PRIMARY KEY (`education_id`),
   KEY `resume_id` (`resume_id`),
   CONSTRAINT `resume_education_ibfk_1` FOREIGN KEY (`resume_id`) REFERENCES `resume` (`resume_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='이력서 학력 사항 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -507,16 +471,16 @@ DROP TABLE IF EXISTS `resume_experience`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `resume_experience` (
-  `experience_id` int NOT NULL AUTO_INCREMENT,
-  `resume_id` int NOT NULL,
-  `experience_name` varchar(100) NOT NULL,
-  `start_date` date DEFAULT NULL,
-  `end_date` date DEFAULT NULL,
-  `description` text,
+  `experience_id` int NOT NULL AUTO_INCREMENT COMMENT '경험 고유 ID',
+  `resume_id` int NOT NULL COMMENT '이력서 ID',
+  `experience_name` varchar(100) NOT NULL COMMENT '경험/활동명 (프로젝트, 봉사활동 등)',
+  `start_date` date DEFAULT NULL COMMENT '시작일',
+  `end_date` date DEFAULT NULL COMMENT '종료일',
+  `description` text COMMENT '경험/활동 상세 설명',
   PRIMARY KEY (`experience_id`),
   KEY `resume_id` (`resume_id`),
   CONSTRAINT `resume_experience_ibfk_1` FOREIGN KEY (`resume_id`) REFERENCES `resume` (`resume_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='이력서 경험/활동 사항 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -527,13 +491,13 @@ DROP TABLE IF EXISTS `resume_portfolio`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `resume_portfolio` (
-  `portfolio_id` int NOT NULL AUTO_INCREMENT,
-  `resume_id` int NOT NULL,
-  `link` varchar(500) DEFAULT NULL,
+  `portfolio_id` int NOT NULL AUTO_INCREMENT COMMENT '포트폴리오 고유 ID',
+  `resume_id` int NOT NULL COMMENT '이력서 ID',
+  `link` varchar(500) DEFAULT NULL COMMENT '포트폴리오 링크 URL',
   PRIMARY KEY (`portfolio_id`),
   KEY `resume_id` (`resume_id`),
   CONSTRAINT `resume_portfolio_ibfk_1` FOREIGN KEY (`resume_id`) REFERENCES `resume` (`resume_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='이력서 포트폴리오 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -544,13 +508,13 @@ DROP TABLE IF EXISTS `resume_skill`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `resume_skill` (
-  `skill_id` int NOT NULL AUTO_INCREMENT,
-  `resume_id` int NOT NULL,
-  `skill_name` varchar(100) NOT NULL,
+  `skill_id` int NOT NULL AUTO_INCREMENT COMMENT '스킬 고유 ID',
+  `resume_id` int NOT NULL COMMENT '이력서 ID',
+  `skill_name` varchar(100) NOT NULL COMMENT '보유 기술/스킬명',
   PRIMARY KEY (`skill_id`),
   KEY `resume_id` (`resume_id`),
   CONSTRAINT `resume_skill_ibfk_1` FOREIGN KEY (`resume_id`) REFERENCES `resume` (`resume_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='이력서 보유 기술 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -561,17 +525,17 @@ DROP TABLE IF EXISTS `post_comments`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `post_comments` (
-  `comment_id` int NOT NULL AUTO_INCREMENT,
-  `post_id` int NOT NULL,
-  `user_id` int NOT NULL,
-  `content` text NOT NULL,
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `comment_id` int NOT NULL AUTO_INCREMENT COMMENT '댓글 고유 ID',
+  `post_idx` int NOT NULL COMMENT '게시글 ID',
+  `user_id` int NOT NULL COMMENT '댓글 작성자 ID',
+  `content` text NOT NULL COMMENT '댓글 내용',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '댓글 작성일시',
   PRIMARY KEY (`comment_id`),
-  KEY `post_id` (`post_id`),
+  KEY `post_idx` (`post_idx`),
   KEY `user_id` (`user_id`),
-  CONSTRAINT `post_comments_ibfk_1` FOREIGN KEY (`post_id`) REFERENCES `posts` (`post_id`) ON DELETE CASCADE,
+  CONSTRAINT `post_comments_ibfk_1` FOREIGN KEY (`post_idx`) REFERENCES `posts` (`post_idx`) ON DELETE CASCADE,
   CONSTRAINT `post_comments_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='게시글 댓글 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -582,16 +546,16 @@ DROP TABLE IF EXISTS `post_likes`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `post_likes` (
-  `like_id` int NOT NULL AUTO_INCREMENT,
-  `post_id` int NOT NULL,
-  `user_id` int NOT NULL,
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+  `like_id` int NOT NULL AUTO_INCREMENT COMMENT '좋아요 고유 ID',
+  `post_idx` int NOT NULL COMMENT '게시글 ID',
+  `user_id` int NOT NULL COMMENT '좋아요 누른 사용자 ID',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '좋아요 누른 일시',
   PRIMARY KEY (`like_id`),
-  UNIQUE KEY `unique_like` (`post_id`,`user_id`),
+  UNIQUE KEY `unique_like` (`post_idx`,`user_id`),
   KEY `user_id` (`user_id`),
-  CONSTRAINT `post_likes_ibfk_1` FOREIGN KEY (`post_id`) REFERENCES `posts` (`post_id`) ON DELETE CASCADE,
+  CONSTRAINT `post_likes_ibfk_1` FOREIGN KEY (`post_idx`) REFERENCES `posts` (`post_idx`) ON DELETE CASCADE,
   CONSTRAINT `post_likes_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='게시글 좋아요 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 -- =====================================================
@@ -606,13 +570,37 @@ DROP TABLE IF EXISTS `job_role`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `job_role` (
-  `id` char(6) NOT NULL,
-  `group_id` char(4) NOT NULL,
-  `name` varchar(50) NOT NULL,
+  `id` int NOT NULL COMMENT '직무 코드 (사람인 직무코드 형식)',
+  `category_id` int NOT NULL COMMENT '소속 직무 카테고리 코드',
+  `name` varchar(50) NOT NULL COMMENT '직무명 (프론트엔드 개발자, 백엔드 개발자 등)',
   PRIMARY KEY (`id`),
-  KEY `group_id` (`group_id`),
-  CONSTRAINT `job_role_ibfk_1` FOREIGN KEY (`group_id`) REFERENCES `job_group` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  KEY `category_id` (`category_id`),
+  CONSTRAINT `job_role_ibfk_1` FOREIGN KEY (`category_id`) REFERENCES `job_category` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='직무 상세 테이블 (사람인 2depth 구조)';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `individual_profile`
+--
+
+DROP TABLE IF EXISTS `individual_profile`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `individual_profile` (
+  `user_idx` int NOT NULL COMMENT 'users 테이블 참조키',
+  `desired_job` int NOT NULL COMMENT '희망직무 (job_role의 id 참조)',
+  `desired_sido` char(2) NOT NULL COMMENT '희망 근무지역',
+  `desired_salary` int NOT NULL COMMENT '희망 연봉',
+  `desired_gu` char(5) NOT NULL COMMENT '희망 근무 구/군',
+  PRIMARY KEY (`user_idx`),
+  KEY `desired_sido_idx` (`desired_sido`),
+  KEY `desired_gu_idx` (`desired_gu`),
+  KEY `desired_job_idx` (`desired_job`),
+  CONSTRAINT `desired_gu` FOREIGN KEY (`desired_gu`) REFERENCES `gu` (`gu_code`),
+  CONSTRAINT `desired_sido` FOREIGN KEY (`desired_sido`) REFERENCES `sido` (`sido_code`),
+  CONSTRAINT `desired_job` FOREIGN KEY (`desired_job`) REFERENCES `job_role` (`id`),
+  CONSTRAINT `ip_user_idx` FOREIGN KEY (`user_idx`) REFERENCES `users` (`idx`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='개인회원 정보입니다.';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -623,21 +611,21 @@ DROP TABLE IF EXISTS `career`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `career` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `user_idx` int NOT NULL,
-  `company_idx` int NOT NULL,
-  `position` varchar(45) NOT NULL,
-  `is_current` tinyint NOT NULL,
-  `description` text NOT NULL,
-  `department` varchar(100) NOT NULL,
-  `job_title` varchar(100) DEFAULT NULL,
-  `start_date` datetime NOT NULL,
-  `end_date` datetime DEFAULT NULL,
-  `carrercol` varchar(45) DEFAULT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유 인덱스',
+  `user_idx` int NOT NULL COMMENT '사용자 ID',
+  `company_idx` int NOT NULL COMMENT '회사 ID',
+  `position` varchar(45) NOT NULL COMMENT '직책/직위',
+  `is_current` tinyint NOT NULL COMMENT '현재 재직 중 여부',
+  `description` text NOT NULL COMMENT '업무 설명',
+  `department` varchar(100) NOT NULL COMMENT '소속 부서',
+  `job_title` varchar(100) DEFAULT NULL COMMENT '직무명',
+  `start_date` datetime NOT NULL COMMENT '입사일',
+  `end_date` datetime DEFAULT NULL COMMENT '퇴사일',
+  `carrercol` varchar(45) DEFAULT NULL COMMENT '기타 경력 정보',
   PRIMARY KEY (`idx`),
   KEY `career_business_number_idx` (`company_idx`),
   CONSTRAINT `career_business_number` FOREIGN KEY (`company_idx`) REFERENCES `companies` (`idx`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='사용자 경력 정보 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -648,34 +636,36 @@ DROP TABLE IF EXISTS `job_post`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `job_post` (
-  `idx` int NOT NULL AUTO_INCREMENT,
-  `business_number` varchar(45) NOT NULL,
-  `title` varchar(45) NOT NULL,
-  `employment_type` int NOT NULL,
-  `career_required` int NOT NULL,
-  `education_required` int NOT NULL,
-  `salary` varchar(45) NOT NULL,
-  `location_sido` char(2) NOT NULL,
-  `location_gu` char(5) NOT NULL,
-  `work_hours` varchar(45) NOT NULL,
-  `benefit` text NOT NULL,
-  `workplace_location` varchar(45) NOT NULL,
-  `apply_deadline` datetime NOT NULL,
-  `apply_method` varchar(45) NOT NULL,
-  `created_at` datetime NOT NULL,
-  `updated_at` datetime DEFAULT NULL,
+  `idx` int NOT NULL AUTO_INCREMENT COMMENT '채용공고 고유 ID',
+  `business_number` varchar(10) NOT NULL COMMENT '기업 사업자등록번호',
+  `title` varchar(45) NOT NULL COMMENT '채용공고 제목',
+  `employment_type` int NOT NULL COMMENT '고용 형태 (정규직, 계약직 등)',
+  `career_required` int NOT NULL COMMENT '필요 경력 수준',
+  `education_required` int NOT NULL COMMENT '필요 학력 수준',
+  `salary` varchar(45) NOT NULL COMMENT '급여 정보',
+  `location_sido` char(2) NOT NULL COMMENT '근무지 시도',
+  `location_gu` char(5) NOT NULL COMMENT '근무지 구/군',
+  `work_hours` varchar(45) NOT NULL COMMENT '근무 시간',
+  `benefit` text NOT NULL COMMENT '복리후생',
+  `workplace_location` varchar(45) NOT NULL COMMENT '상세 근무지 주소',
+  `apply_deadline` datetime NOT NULL COMMENT '지원 마감일',
+  `apply_method` varchar(45) NOT NULL COMMENT '지원 방법',
+  `created_at` datetime NOT NULL COMMENT '공고 등록일',
+  `updated_at` datetime DEFAULT NULL COMMENT '공고 수정일',
   PRIMARY KEY (`idx`),
+  KEY `business_number_idx` (`business_number`),
   KEY `location_sido_idx` (`location_sido`),
   KEY `loacation_gu_idx` (`location_gu`),
   KEY `user_career_type_idx` (`career_required`),
   KEY `user_education_level_idx` (`education_required`),
   KEY `job_employment_type_idx` (`employment_type`),
+  CONSTRAINT `job_post_business_number` FOREIGN KEY (`business_number`) REFERENCES `companies` (`business_number`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `job_employment_type` FOREIGN KEY (`employment_type`) REFERENCES `employment_type` (`idx`),
   CONSTRAINT `loacation_gu` FOREIGN KEY (`location_gu`) REFERENCES `gu` (`gu_code`),
   CONSTRAINT `location_sido` FOREIGN KEY (`location_sido`) REFERENCES `sido` (`sido_code`),
   CONSTRAINT `user_career_type` FOREIGN KEY (`career_required`) REFERENCES `career_type` (`idx`),
   CONSTRAINT `user_education_level` FOREIGN KEY (`education_required`) REFERENCES `education_level` (`idx`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='채용공고 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 -- =====================================================
@@ -700,7 +690,7 @@ CREATE TABLE `job_application` (
   KEY `job_application_post_idx_idx` (`job_post_idx`),
   CONSTRAINT `job_application_post_idx` FOREIGN KEY (`job_post_idx`) REFERENCES `job_post` (`idx`),
   CONSTRAINT `job_application_user_idx` FOREIGN KEY (`user_idx`) REFERENCES `users` (`idx`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='채용 지원 내역 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

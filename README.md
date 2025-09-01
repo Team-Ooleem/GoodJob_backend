@@ -31,13 +31,33 @@ pnpm install
 
 ## 🗄️ 데이터베이스 설정
 
+### SQL 파일 구조
+
+프로젝트의 SQL 파일들이 다음과 같이 분리되어 있습니다:
+
+- `sql/schema.sql` - 데이터베이스 테이블 구조 (CREATE TABLE 문)
+- `sql/data.sql` - 기본 데이터 (INSERT 문)
+
 ### 자동 설정 (권장)
 
 범용 스크립트가 운영체제를 자동으로 감지하여 적절한 방법으로 데이터베이스를 설정합니다.
 
 ```bash
-# 범용 스크립트 (운영체제 자동 감지)
+# 데이터베이스 초기화 (스키마만)
 pnpm run db:setup
+# 또는
+pnpm run db:init
+
+# 데이터베이스 초기화 (스키마 + 기본 데이터)
+pnpm run db:init:with-data
+
+# 데이터베이스 리셋 (기존 데이터 삭제 후 재생성, 스키마만)
+pnpm run db:reset
+# 또는
+pnpm run db:init:reset
+
+# 데이터베이스 리셋 (기존 데이터 삭제 후 재생성, 스키마 + 기본 데이터)
+pnpm run db:init:with-data:reset
 ```
 
 ### 환경 변수 설정
@@ -87,13 +107,24 @@ pnpm test:e2e
 
 ## 📝 스크립트
 
+### 애플리케이션
+
 - `pnpm start:dev` - 개발 모드로 실행
 - `pnpm build` - 프로덕션 빌드
 - `pnpm test` - 단위 테스트 실행
 - `pnpm lint` - 코드 린팅
 - `pnpm format` - 코드 포맷팅
-- `pnpm db:setup` - 데이터베이스 자동 설정 (운영체제 자동 감지)
-- `pnpm db:reset` - 데이터베이스 리셋 (기존 데이터 삭제 후 재생성)
+
+### 데이터베이스
+
+- `pnpm db:setup` - 데이터베이스 초기화 (스키마만)
+- `pnpm db:reset` - 데이터베이스 리셋 (기존 데이터 삭제 후 재생성, 스키마만)
+- `pnpm db:init` - 데이터베이스 초기화 (스키마만)
+- `pnpm db:init:reset` - 데이터베이스 리셋 (스키마만)
+- `pnpm db:init:with-data` - 데이터베이스 초기화 (스키마 + 기본 데이터)
+- `pnpm db:init:with-data:reset` - 데이터베이스 리셋 (스키마 + 기본 데이터)
+
+> **참고**: 모든 데이터베이스 명령어는 `setup-database-universal.js` 스크립트를 사용하여 Windows, Mac, Linux에서 동일하게 작동합니다.
 
 ## ⚠️ 중요 사항
 

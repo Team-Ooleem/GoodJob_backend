@@ -11,64 +11,62 @@ NestJS에서는 보통 두 가지 방식으로 프로젝트를 구조화합니�
 
 ## 📂 폴더 구조 예시
 
-src/
-├── common/ # 공통 유틸, 파이프, 데코레이터, 예외 필터 등
-│ ├── decorators/
-│ ├── filters/
-│ ├── interceptors/
-│ ├── pipes/
-│ └── utils/
-│
-├── database/ # DB 관련 (엔티티, 마이그레이션, 시드 데이터 등)
-│ ├── entities/
-│ ├── migrations/
-│ └── seeds/
-│
-├── auth/ # 인증/인가
-│ ├── auth.controller.ts
-│ ├── auth.service.ts
-│ └── auth.module.ts
-│
-├── users/ # 사용자 (users 테이블)
-│ ├── dto/
-│ ├── entities/
-│ ├── users.controller.ts
-│ ├── users.service.ts
-│ └── users.module.ts
-│
-├── business-profile/ # 기업 회원 정보 (business_profile)
-│ ├── dto/
-│ ├── entities/
-│ ├── business-profile.controller.ts
-│ ├── business-profile.service.ts
-│ └── business-profile.module.ts
-│
-├── companies/ # 기업 정보 (companies, company_type, etc.)
-│ ├── dto/
-│ ├── entities/
-│ ├── companies.controller.ts
-│ ├── companies.service.ts
-│ └── companies.module.ts
-│
-├── career/ # 경력 관리 (career, career_type)
-│ ├── dto/
-│ ├── entities/
-│ ├── career.controller.ts
-│ ├── career.service.ts
-│ └── career.module.ts
-│
-├── education/ # 학력 관리 (educate, education_level)
-│ ├── dto/
-│ ├── entities/
-│ ├── education.controller.ts
-│ ├── education.service.ts
-│ └── education.module.ts
-│
-├── admin/ # 관리자 기능 (기업 승인, 회원 관리 등)
-│ ├── admin.controller.ts
-│ ├── admin.service.ts
-│ └── admin.module.ts
-│
+src/  
+├── common/ # 공통 유틸, 파이프, 데코레이터, 예외 필터 등  
+│ ├── decorators/  
+│ ├── filters/  
+│ ├── interceptors/  
+│ ├── pipes/  
+│ └── utils/  
+│  
+├── database/ # DB 관련 (엔티티, 마이그레이션, 시드 데이터 등)  
+│ ├── entities/  
+│ ├── migrations/  
+│ └── seeds/  
+│  
+├── auth/ # 인증/인가  
+│ ├── auth.controller.ts  
+│ ├── auth.service.ts  
+│ └── auth.module.ts  
+│  
+├── users/ # 사용자 (users 테이블)  
+│ ├── dto/  
+│ ├── entities/  
+│ ├── users.controller.ts  
+│ ├── users.service.ts  
+│ └── users.module.ts  
+│  
+├── business-profile/ # 기업 회원 정보 (business_profile)  
+│ ├── dto/  
+│ ├── entities/  
+│ ├── business-profile.controller.ts  
+│ ├── business-profile.service.ts  
+│ └── business-profile.module.ts  
+│  
+├── companies/ # 기업 정보 (companies, company_type, etc.)  
+│ ├── dto/  
+│ ├── entities/  
+│ ├── companies.controller.ts  
+│ ├── companies.service.ts  
+│ └── companies.module.ts  
+│  
+├── career/ # 경력 관리 (career, career_type)  
+│ ├── dto/  
+│ ├── entities/  
+│ ├── career.controller.ts  
+│ ├── career.service.ts  
+│ └── career.module.ts  
+│  
+├── education/ # 학력 관리 (educate, education_level)  
+│ ├── dto/  
+│ ├── entities/  
+│ ├── education.controller.ts  
+│ ├── education.service.ts  
+│ └── education.module.ts  
+│  
+│ ├── admin.service.ts  
+│ └── admin.module.ts  
+│  
 ├── app.module.ts # 루트 모듈
 └── main.ts # 진입점
 
