@@ -6,4 +6,4 @@ import { AiService } from './ai.service';
   controllers: [AiController],
   providers: [AiService],
 })
-export class AiModule {}
+export class AiModule {}   // ← 반드시 'export class AiModule' 여야 합니다.
