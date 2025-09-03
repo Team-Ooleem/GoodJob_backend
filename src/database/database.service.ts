@@ -106,6 +106,30 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    async queryWithSort<T = any>(
+        sql: string,
+        params?: any[],
+        sortBy?: string,
+        sortOrder: 'ASC' | 'DESC' = 'ASC',
+    ): Promise<T[]> {
+        if (!this.pool) {
+            throw new Error('데이터베이스 풀이 초기화되지 않았습니다.');
+        }
+
+        try {
+            let finalSql = sql;
+            if (sortBy) {
+                finalSql += ` ORDER BY ${sortBy} ${sortOrder}`;
+            }
+
+            const [rows] = await this.pool.execute(finalSql, params);
+            return rows as T[];
+        } catch (error) {
+            console.error('쿼리 실행 오류:', error);
+            throw error;
+        }
+    }
+
     async transaction<T>(callback: (connection: mysql.Connection) => Promise<T>): Promise<T> {
         if (!this.pool) {
             throw new Error('데이터베이스 풀이 초기화되지 않았습니다.');
