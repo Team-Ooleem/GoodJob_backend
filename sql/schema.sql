@@ -37,6 +37,7 @@ CREATE TABLE `users` (
   `email` varchar(255) NOT NULL COMMENT '사용자 이메일',
   `short_bio` varchar(100) DEFAULT NULL COMMENT '짧은 소개',
   `bio` text COMMENT '소개\n',
+  `profile_img` varchar(500) DEFAULT NULL COMMENT '프로필 이미지 URL',
   `created_at` datetime NOT NULL COMMENT '생성일',
   `updated_at` datetime DEFAULT NULL COMMENT '수정일',
   PRIMARY KEY (`idx`)
