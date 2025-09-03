@@ -5,27 +5,19 @@ import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 
-// @Module({
-//     imports: [
-//         ConfigModule.forRoot({
-//             isGlobal: true,
-//             envFilePath: '.env',
-//         }),
-//         DatabaseModule,
-//     ],
-//     controllers: [AppController],
-//     providers: [AppService],
-// })
-// export class AppModule {}
+import { CollabModule } from './modules/collab/collab.module';
 
-
-// src/app.module.ts
 @Module({
-  imports: [
-    ConfigModule.forRoot({ 
-      isGlobal: true, 
-      envFilePath: '.env' }),
-    AuthModule,
-  ],
+    imports: [
+        ConfigModule.forRoot({
+            isGlobal: true,
+            envFilePath: '.env',
+        }),
+        AuthModule,
+        DatabaseModule,
+        CollabModule,
+    ],
+    controllers: [AppController],
+    providers: [AppService],
 })
 export class AppModule {}
