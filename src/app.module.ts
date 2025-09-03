@@ -7,19 +7,20 @@ import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './auth/auth.module';
 // ai 면접 질문 관련 모듈
 import { AiModule } from './ai/ai.module';
-
+import { CollabModule } from './modules/collab/collab.module';
 
 @Module({
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      envFilePath: '.env',
-    }),
-    DatabaseModule,
-    AuthModule,
-    AiModule,
-  ],
-  controllers: [AppController],
-  providers: [AppService],
+    imports: [
+        ConfigModule.forRoot({
+            isGlobal: true,
+            envFilePath: '.env',
+        }),
+        AuthModule,
+        AiModule,
+        DatabaseModule,
+        CollabModule,
+    ],
+    controllers: [AppController],
+    providers: [AppService],
 })
 export class AppModule {}

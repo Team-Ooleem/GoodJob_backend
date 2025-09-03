@@ -15,12 +15,12 @@ import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-
+  
   app.use(cookieParser());
 
   // 프론트와 API 도메인이 다르면 CORS + credentials 설정
   app.enableCors({
-    origin: ['https://example.com', 'http://localhost:3000'], // 프론트 도메인들
+    origin: ['https://example.com', 'http://localhost:3000', 'http://localhost:3001'], // 프론트 도메인들
     credentials: true,
   });
 
@@ -29,4 +29,5 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT ?? 4000);
 }
+
 bootstrap();
