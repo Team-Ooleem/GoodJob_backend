@@ -17,9 +17,10 @@ async function bootstrap() {
 
     app.use(cookieParser());
 
-    // 프론트와 API 도메인이 다르면 CORS + credentials 설정
+    // CORS 설정 추가
     app.enableCors({
-        origin: ['https://example.com', 'http://localhost:3000', 'http://localhost:3001'], // 프론트 도메인들
+        origin: ['https://example.com', 'http://localhost:3000', 'http://localhost:3001'],
+        methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
         credentials: true,
     });
 
