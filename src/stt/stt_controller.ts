@@ -73,7 +73,6 @@ export class STTController {
 
             const s3Key = fileS3Key(
                 audioFile.originalname || 'voice_recording',
-                'stt_test',
                 audioFile.mimetype,
             );
             const s3Result = await uploadFileToS3(audioFile.buffer, s3Key, audioFile.mimetype);
@@ -88,6 +87,7 @@ export class STTController {
             return { success: true, timestamp: new Date().toISOString(), processingTime, result };
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`STT 변환 실패: ${message}`);
             throw new InternalServerErrorException(`STT 변환 실패: ${message}`);
         }
     }

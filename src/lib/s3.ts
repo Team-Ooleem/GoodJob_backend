@@ -127,7 +127,7 @@ export function validateAudioFile(file: { mimetype?: string; size?: number }): {
     return { isValid: true };
 }
 
-export function fileS3Key(originalName: string, folder: string, mimeType?: string): string {
+export function fileS3Key(originalName: string, mimeType?: string): string {
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2, 8);
 
@@ -151,9 +151,10 @@ export function fileS3Key(originalName: string, folder: string, mimeType?: strin
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-    const dateFolder = `${year}-${month}-${day}`;
+    const dateFolder = `${month}-${day}`;
 
-    return `$${dateFolder}/${timestamp}_${randomString}${extension.startsWith('.') ? extension : '.' + extension}`;
+    /* 연도별 폴더 관리 */
+    return `${year}/${dateFolder}/${timestamp}_${randomString}${extension.startsWith('.') ? extension : '.' + extension}`;
 }
 /**
  * 고유한 S3 키 생성

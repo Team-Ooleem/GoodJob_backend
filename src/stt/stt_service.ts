@@ -2,10 +2,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SpeechClient } from '@google-cloud/speech';
 
+// 실시간 녹음 처리를 위한 새로운 인터페이스
 export interface STTResult {
     transcript: string;
     confidence: number;
     words?: Array<{ word: string; startTime: number; endTime: number }>;
+}
+
+export interface StreamingSTTSession {
+    sessionId: string;
+    isRecording: boolean;
+    chunks: STTResult[];
+    startTime: number;
+    currentChunkIndex: number;
 }
 
 interface Duration {
@@ -16,17 +25,6 @@ interface GoogleSpeechWordInfo {
     word: string;
     startTime?: Duration;
     endTime?: Duration;
-}
-interface GoogleSpeechAlternative {
-    transcript: string;
-    confidence: number;
-    words?: GoogleSpeechWordInfo[];
-}
-interface GoogleSpeechResult {
-    alternatives?: GoogleSpeechAlternative[];
-}
-interface GoogleSpeechResponse {
-    results?: GoogleSpeechResult[];
 }
 interface ConnectionTestResult {
     status: 'success' | 'error';
@@ -82,14 +80,28 @@ export class STTService {
             return [];
         }
 
-        return words.map((w) => ({
-            word: w.word || '',
-            startTime: this.convertDurationToSeconds(w.startTime),
-            endTime: this.convertDurationToSeconds(w.endTime),
-        }));
+        // 더 강력한 필터링
+        const filteredWords = words
+            .filter((w) => {
+                const word = w.word || '';
+                return (
+                    word.trim() &&
+                    word.length > 1 && // 2글자 이상만
+                    !['아', '어', '음', '으'].includes(word) && // 감탄사 제거
+                    word !== '▁' &&
+                    word !== ' '
+                );
+            })
+            .map((w) => ({
+                word: (w.word || '').replace(/^▁/, '').trim(),
+                startTime: this.convertDurationToSeconds(w.startTime),
+                endTime: this.convertDurationToSeconds(w.endTime),
+            }))
+            .filter((w) => w.word.length > 0);
+
+        return filteredWords;
     }
 
-    // transcript를 기반으로 단어 배열 생성하는 새로운 메서드
     private createWordsFromTranscript(
         transcript: string,
     ): Array<{ word: string; startTime: number; endTime: number }> {
@@ -97,36 +109,25 @@ export class STTService {
             return [];
         }
 
-        // 한국어 단어 분할 (공백, 구두점 기준)
         const words = transcript
-            .replace(/[.,!?;:]/g, ' ') // 구두점을 공백으로 변경
+            .replace(/[.,!?;:]/g, ' ')
             .split(/\s+/)
             .filter((word) => word.trim().length > 0);
 
-        // 각 단어에 대략적인 시간 할당 (단어당 0.5초 가정)
         return words.map((word, index) => ({
             word: word.trim(),
-            startTime: index * 0.5,
-            endTime: (index + 1) * 0.5,
+            startTime: index * 1,
+            endTime: (index + 1) * 1,
         }));
     }
 
     async transcribeBase64Audio(base64Data: string, mimeType = 'audio/wav'): Promise<STTResult> {
         if (!this.speechClient) {
-            console.log('⚠️ Speech Client 없음, 샘플 반환');
             return this.createSampleResult();
         }
 
         try {
-            console.log('🎯 STT 변환 시작:');
-            console.log('- MIME타입:', mimeType);
-            console.log('- Base64 길이:', base64Data.length);
-
             const { encoding, sampleRate } = this.getAudioConfig(mimeType);
-
-            console.log('🎵 사용할 설정:');
-            console.log('- encoding:', encoding);
-            console.log('- sampleRate:', sampleRate);
 
             const request = {
                 audio: { content: base64Data },
@@ -136,72 +137,55 @@ export class STTService {
                     languageCode: 'ko-KR',
                     enableWordTimeOffsets: true,
                     enableAutomaticPunctuation: true,
-                    model: 'latest_long', // 긴 오디오 처리에 적합
+                    model: 'latest_long',
                     useEnhanced: true,
                     enableSpeakerDiarization: false,
                     diarizationSpeakerCount: 0,
-                    // WebM 최적화를 위한 추가 설정
                     maxAlternatives: 1,
                     profanityFilter: false,
                     enableSeparateRecognitionPerChannel: false,
                 },
             };
 
-            console.log('📡 Google STT API 호출 시작...');
-            console.log('🔧 요청 설정:', JSON.stringify(request.config, null, 2));
+            // longRunningRecognize 사용
+            const [operation] = await this.speechClient.longRunningRecognize(request);
+            const [response] = await operation.promise();
 
-            const rawResponse = await this.speechClient.recognize(request);
-
-            // Google Speech API는 배열 형태로 응답을 반환할 수 있음
-            const response = Array.isArray(rawResponse)
-                ? rawResponse[0]
-                : (rawResponse as GoogleSpeechResponse);
-
-            console.log('📥 Google STT 응답:');
-            console.log('- 원본 응답 타입:', Array.isArray(rawResponse) ? 'array' : 'object');
-            console.log('- results 존재:', !!response.results);
-            console.log('- results 개수:', response.results?.length || 0);
-
-            if (response.results && response.results.length > 0) {
-                console.log(
-                    '- 첫 번째 result alternatives 개수:',
-                    response.results[0].alternatives?.length || 0,
-                );
-            }
-
-            // 상세 응답 로그 (디버깅용)
-            console.log('🔍 전체 응답:', JSON.stringify(response, null, 2));
-
-            const alternative = response.results?.[0]?.alternatives?.[0];
-
-            if (!alternative) {
-                console.log('⚠️ alternative 없음 - 음성 인식 실패');
-                console.log('- 가능한 원인: 무음, 인식 불가능한 음성, 형식 문제');
+            // 타입 안전한 응답 처리
+            const results = response.results;
+            if (!results || results.length === 0) {
                 return { transcript: '', confidence: 0, words: [] };
             }
 
+            const firstResult = results[0];
+            if (!firstResult.alternatives || firstResult.alternatives.length === 0) {
+                return { transcript: '', confidence: 0, words: [] };
+            }
+
+            const alternative = firstResult.alternatives[0];
             const transcript = alternative.transcript || '';
             const confidence = alternative.confidence || 0;
 
-            console.log('✅ STT 변환 성공:');
-            console.log('- transcript:', transcript);
-            console.log('- confidence:', confidence);
-            console.log('- words 존재:', !!alternative.words);
-            console.log('- words 개수:', alternative.words?.length || 0);
-
-            // 워드 정보 처리 - API에서 제공되지 않으면 transcript 기반으로 생성
             let words = this.processWordTimings(
-                alternative.words as GoogleSpeechWordInfo[] | undefined,
+                (alternative.words as GoogleSpeechWordInfo[]) || undefined,
             );
 
-            // 워드 정보가 없거나 비어있으면 transcript를 기반으로 단어 분할
             if (!words || words.length === 0) {
-                console.log('🔧 단어 타이밍 정보 없음, transcript 기반으로 생성');
                 words = this.createWordsFromTranscript(transcript);
             }
 
-            console.log('📊 최종 결과:');
-            console.log('- 단어 개수:', words.length);
+            console.log('📊 최종 변환된 JSON:');
+            console.log(
+                JSON.stringify(
+                    {
+                        transcript,
+                        confidence,
+                        words,
+                    },
+                    null,
+                    2,
+                ),
+            );
 
             return {
                 transcript,
@@ -210,15 +194,6 @@ export class STTService {
             };
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);
-
-            // 특정 에러에 대한 추가 정보
-            if (msg.includes('invalid argument')) {
-                console.error('💡 해결 방법: 오디오 형식이나 인코딩 설정 확인 필요');
-            }
-            if (msg.includes('permission')) {
-                console.error('💡 해결 방법: Google Cloud 권한 설정 확인 필요');
-            }
-
             throw new Error(`STT 변환 실패: ${msg}`);
         }
     }
