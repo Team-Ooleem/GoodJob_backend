@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 // ai 면접 질문 관련 모듈
 import { AiModule } from './ai/ai.module';
 import { CollabModule } from './modules/collab/collab.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
     imports: [
@@ -16,11 +17,12 @@ import { CollabModule } from './modules/collab/collab.module';
             isGlobal: true,
             envFilePath: '.env',
         }),
+        DatabaseModule,
         AuthModule,
         AiModule,
-        DatabaseModule,
         SocialModule,
         CollabModule,
+        UsersModule,
     ],
     controllers: [AppController],
     providers: [AppService],
