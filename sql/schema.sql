@@ -601,7 +601,7 @@ CREATE TABLE `individual_profile` (
   `user_idx` int NOT NULL COMMENT 'users 테이블 참조키',
   `desired_job` int NOT NULL COMMENT '희망직무 (job_role의 id 참조)',
   `desired_sido` char(2) NOT NULL COMMENT '희망 근무지역',
-  `desired_salary` int NOT NULL COMMENT '희망 연봉',
+  `desired_salary` int NOT NULL COMMENT '희망 연봉 범위 ID (salary_range 테이블 참조)',
   `desired_gu` char(5) NOT NULL COMMENT '희망 근무 구/군',
   PRIMARY KEY (`user_idx`),
   KEY `desired_sido_idx` (`desired_sido`),
@@ -610,7 +610,8 @@ CREATE TABLE `individual_profile` (
   CONSTRAINT `desired_gu` FOREIGN KEY (`desired_gu`) REFERENCES `gu` (`gu_code`),
   CONSTRAINT `desired_sido` FOREIGN KEY (`desired_sido`) REFERENCES `sido` (`sido_code`),
   CONSTRAINT `desired_job` FOREIGN KEY (`desired_job`) REFERENCES `job_role` (`id`),
-  CONSTRAINT `ip_user_idx` FOREIGN KEY (`user_idx`) REFERENCES `users` (`idx`)
+  CONSTRAINT `ip_user_idx` FOREIGN KEY (`user_idx`) REFERENCES `users` (`idx`),
+  CONSTRAINT `desired_salary_range` FOREIGN KEY (`desired_salary`) REFERENCES `salary_range` (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='개인회원 정보입니다.';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
