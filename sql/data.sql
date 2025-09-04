@@ -472,20 +472,10 @@ INSERT INTO `job_post` (`idx`, `business_number`, `title`, `employment_type`, `c
 (1, '1234567890', '백엔드 개발자 모집', 1, 2, 3, '연봉 4500~6000만원', '11', '11680', '09:00~18:00', '4대 보험, 유연근무제', '서울시 강남구', '2025-02-28 23:59:59', '온라인 지원', NOW(), NULL),
 (2, '9876543210', 'UI/UX 디자이너 채용', 1, 2, 3, '연봉 4000~5500만원', '11', '11440', '09:30~18:30', '4대 보험, 교육비 지원', '서울시 마포구', '2025-03-15 23:59:59', '온라인 지원', NOW(), NULL);
 
--- 게시글 데이터
-INSERT INTO `posts` (`post_idx`, `user_id`, `content`, `media_url`, `created_at`, `updated_at`) VALUES
-(1, 1, '백엔드 개발 공부 중입니다. 좋은 자료 추천해주세요!', NULL, NOW(), NOW()),
-(2, 2, '새로운 디자인 프로젝트 완료했습니다 🎨', 'design_project.jpg', NOW(), NOW());
-
 -- 지원 내역
 INSERT INTO `job_application` (`idx`, `user_idx`, `job_post_idx`, `is_viewed`, `created_at`) VALUES
 (1, 1, 1, 0, NOW()),
 (2, 2, 2, 1, NOW());
-
--- 팔로우 관계
-INSERT INTO `follow` (`idx`, `follower_idx`, `following_idx`, `created_at`) VALUES
-(1, 1, 2, NOW()),
-(2, 2, 1, NOW());
 
 -- 이력서 경력
 INSERT INTO `resume_career` (`career_id`, `resume_id`, `company_name`, `position`, `is_current`, `start_date`, `end_date`, `description`) VALUES
@@ -530,16 +520,6 @@ INSERT INTO `resume_experience` (`experience_id`, `resume_id`, `experience_name`
 INSERT INTO `resume_portfolio` (`portfolio_id`, `resume_id`, `link`) VALUES
 (1, 1, 'https://github.com/kimdev'),
 (2, 2, 'https://behance.net/leedesign');
-
--- 게시글 댓글
-INSERT INTO `post_comments` (`comment_id`, `post_idx`, `user_id`, `content`, `created_at`) VALUES
-(1, 1, 2, '백엔드 공부라면 Clean Code 책 추천드려요!', NOW()),
-(2, 2, 1, '디자인 정말 깔끔하네요! 어떤 툴 사용하셨나요?', NOW());
-
--- 게시글 좋아요
-INSERT INTO `post_likes` (`like_id`, `post_idx`, `user_id`, `created_at`) VALUES
-(1, 1, 2, NOW()),
-(2, 2, 1, NOW());
 
 -- 경력 정보
 INSERT INTO `career` (`idx`, `user_idx`, `company_idx`, `position`, `is_current`, `description`, `department`, `job_title`, `start_date`, `end_date`, `carrercol`) VALUES
