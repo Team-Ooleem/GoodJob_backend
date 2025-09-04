@@ -7,7 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { SocialModule } from './social/social.module';
 import { AuthModule } from './auth/auth.module';
 // ai 면접 질문 관련 모듈
-import { AiModule } from './ai/ai.module';
+import { AiModule } from './modules/interview/interview.module';
 import { CollabModule } from './modules/collab/collab.module';
 import { UsersModule } from './users/users.module';
 
@@ -20,11 +20,9 @@ import { UsersModule } from './users/users.module';
         DatabaseModule,
         AuthModule,
         AiModule,
-<<<<<<< HEAD
-=======
+
         DatabaseModule,
         SocialModule,
->>>>>>> main
         CollabModule,
         UsersModule,
     ],
