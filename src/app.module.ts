@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
+import { SocialModule } from './social/social.module';
 import { AuthModule } from './auth/auth.module';
 // ai 면접 질문 관련 모듈
 import { AiModule } from './ai/ai.module';
@@ -19,6 +20,7 @@ import { UsersModule } from './users/users.module';
         DatabaseModule,
         AuthModule,
         AiModule,
+        SocialModule,
         CollabModule,
         UsersModule,
     ],
