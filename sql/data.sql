@@ -491,15 +491,6 @@ INSERT INTO `resume_skill` (`skill_id`, `resume_id`, `skill_name`) VALUES
 (5, 2, 'Adobe XD'),
 (6, 2, 'Sketch');
 
--- 메시지 데이터
-INSERT INTO `messages` (`message_id`, `sender_id`, `receiver_id`, `content`, `created_at`) VALUES
-(1, 1, 2, '안녕하세요! 디자인 포트폴리오 잘 봤습니다.', NOW()),
-(2, 2, 1, '감사합니다! 개발 관련 질문이 있어서 메시지 드려요.', NOW());
-
--- 소셜 계정 데이터
-INSERT INTO `social_accout` (`user_idx`, `provider_id`, `created_at`) VALUES
-(1, 'google_123456789', NOW()),
-(2, 'kakao_987654321', NOW());
 
 -- 이력서 자기소개서
 INSERT INTO `resume_coverletter` (`coverletter_id`, `resume_id`, `coverletter_title`, `description`) VALUES
@@ -525,6 +516,10 @@ INSERT INTO `resume_portfolio` (`portfolio_id`, `resume_id`, `link`) VALUES
 INSERT INTO `career` (`idx`, `user_idx`, `company_idx`, `position`, `is_current`, `description`, `department`, `job_title`, `start_date`, `end_date`, `carrercol`) VALUES
 (1, 1, 1, '백엔드 개발자', 0, 'Node.js 기반 API 서버 개발 및 운영', '개발팀', '주니어 개발자', '2022-03-01 09:00:00', '2024-12-31 18:00:00', NULL),
 (2, 2, 2, 'UI/UX 디자이너', 0, '웹/모바일 서비스 UI/UX 디자인', '디자인팀', '시니어 디자이너', '2023-03-01 09:00:00', '2024-12-31 18:00:00', NULL);
+
+-- =====================================================
+-- 1:1 채팅 기능을 위한 테이블들
+-- =====================================================
 
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

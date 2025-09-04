@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { AiModule } from './ai/ai.module';
 import { CollabModule } from './modules/collab/collab.module';
 import { UsersModule } from './users/users.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
     imports: [
@@ -23,6 +24,7 @@ import { UsersModule } from './users/users.module';
         SocialModule,
         CollabModule,
         UsersModule,
+        ChatModule,
     ],
     controllers: [AppController],
     providers: [AppService],

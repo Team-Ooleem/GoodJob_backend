@@ -33,7 +33,7 @@ DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
   `idx` int NOT NULL AUTO_INCREMENT COMMENT '고유값',
   `name` varchar(45) NOT NULL COMMENT '사용자 이름',
-  `phone` varchar(15) NOT NULL COMMENT '사용자 핸드폰번호',
+  `phone` varchar(15) DEFAULT NULL COMMENT '사용자 핸드폰번호',
   `email` varchar(255) NOT NULL COMMENT '사용자 이메일',
   `short_bio` varchar(100) DEFAULT NULL COMMENT '짧은 소개',
   `bio` text COMMENT '소개\n',
@@ -365,26 +365,7 @@ CREATE TABLE `follow` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='팔로우';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
---
--- Table structure for table `messages`
---
-
-DROP TABLE IF EXISTS `messages`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `messages` (
-  `message_id` int NOT NULL AUTO_INCREMENT COMMENT '메시지 고유 ID',
-  `sender_id` int NOT NULL COMMENT '발신자 ID',
-  `receiver_id` int NOT NULL COMMENT '수신자 ID',
-  `content` text NOT NULL COMMENT '메시지 내용',
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '발송일시',
-  PRIMARY KEY (`message_id`),
-  KEY `sender_id` (`sender_id`),
-  KEY `receiver_id` (`receiver_id`),
-  CONSTRAINT `messages_ibfk_1` FOREIGN KEY (`sender_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE,
-  CONSTRAINT `messages_ibfk_2` FOREIGN KEY (`receiver_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='메시지 테이블';
-/*!40101 SET character_set_client = @saved_cs_client */;
+-- messages 테이블은 conversations 테이블 이후에 생성됩니다 (4단계로 이동)
 
 --
 -- Table structure for table `social_accout`
@@ -672,6 +653,82 @@ CREATE TABLE `job_post` (
 -- =====================================================
 -- 4단계: 3차 의존 테이블들 (2차 의존 테이블을 참조하는 테이블)
 -- =====================================================
+
+--
+-- Table structure for table `conversations` (1:1 채팅방)
+--
+
+DROP TABLE IF EXISTS `conversations`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `conversations` (
+  `conversation_id` int NOT NULL AUTO_INCREMENT COMMENT '채팅방 고유 ID',
+  `user1_id` int NOT NULL COMMENT '사용자 1 ID (작은 ID가 우선)',
+  `user2_id` int NOT NULL COMMENT '사용자 2 ID (큰 ID)',
+  `last_message_id` int DEFAULT NULL COMMENT '마지막 메시지 ID',
+  `last_message_time` datetime DEFAULT NULL COMMENT '마지막 메시지 시간',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '채팅방 생성일시',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '채팅방 수정일시',
+  PRIMARY KEY (`conversation_id`),
+  UNIQUE KEY `unique_conversation` (`user1_id`, `user2_id`),
+  KEY `user1_id_idx` (`user1_id`),
+  KEY `user2_id_idx` (`user2_id`),
+  KEY `last_message_time_idx` (`last_message_time`),
+  CONSTRAINT `conversations_user1_fk` FOREIGN KEY (`user1_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE,
+  CONSTRAINT `conversations_user2_fk` FOREIGN KEY (`user2_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='1:1 채팅방 테이블';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `messages`
+--
+
+DROP TABLE IF EXISTS `messages`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `messages` (
+  `message_id` int NOT NULL AUTO_INCREMENT COMMENT '메시지 고유 ID',
+  `conversation_id` int DEFAULT NULL COMMENT '채팅방 ID',
+  `sender_id` int NOT NULL COMMENT '발신자 ID',
+  `receiver_id` int NOT NULL COMMENT '수신자 ID',
+  `content` text NOT NULL COMMENT '메시지 내용',
+  `is_read` tinyint(1) NOT NULL DEFAULT '0' COMMENT '읽음 상태 (0: 안읽음, 1: 읽음)',
+  `read_at` datetime DEFAULT NULL COMMENT '읽은 시간',
+  `created_at` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '발송일시',
+  PRIMARY KEY (`message_id`),
+  KEY `conversation_id_idx` (`conversation_id`),
+  KEY `sender_id` (`sender_id`),
+  KEY `receiver_id` (`receiver_id`),
+  KEY `is_read` (`is_read`),
+  CONSTRAINT `messages_conversation_fk` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`conversation_id`) ON DELETE CASCADE,
+  CONSTRAINT `messages_ibfk_1` FOREIGN KEY (`sender_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE,
+  CONSTRAINT `messages_ibfk_2` FOREIGN KEY (`receiver_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='메시지 테이블';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `conversation_read_status` (채팅방 읽음 상태)
+--
+
+DROP TABLE IF EXISTS `conversation_read_status`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `conversation_read_status` (
+  `id` int NOT NULL AUTO_INCREMENT COMMENT '고유 ID',
+  `conversation_id` int NOT NULL COMMENT '채팅방 ID',
+  `user_id` int NOT NULL COMMENT '사용자 ID',
+  `last_read_message_id` int DEFAULT NULL COMMENT '마지막으로 읽은 메시지 ID',
+  `last_read_time` datetime DEFAULT NULL COMMENT '마지막 읽은 시간',
+  `unread_count` int NOT NULL DEFAULT '0' COMMENT '읽지 않은 메시지 수',
+  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일시',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_user_conversation` (`conversation_id`, `user_id`),
+  KEY `conversation_id_idx` (`conversation_id`),
+  KEY `user_id_idx` (`user_id`),
+  CONSTRAINT `conversation_read_status_conversation_fk` FOREIGN KEY (`conversation_id`) REFERENCES `conversations` (`conversation_id`) ON DELETE CASCADE,
+  CONSTRAINT `conversation_read_status_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='채팅방 읽음 상태 테이블';
+/*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `job_application`
