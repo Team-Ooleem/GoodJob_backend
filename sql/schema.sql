@@ -235,6 +235,17 @@ CREATE TABLE `posts` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='게시글 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+
+-- 연봉 범위 테이블 (프론트 토글용)
+DROP TABLE IF EXISTS `salary_range`;
+CREATE TABLE `salary_range` (
+  `idx` int NOT NULL AUTO_INCREMENT,
+  `min_salary` int NOT NULL,
+  `display_text` varchar(100) NOT NULL,
+  PRIMARY KEY (`idx`)
+);
+
+
 -- =====================================================
 -- 2단계: 1차 의존 테이블들 (독립적인 테이블을 참조하는 테이블)
 -- =====================================================
