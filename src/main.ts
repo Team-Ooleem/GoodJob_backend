@@ -17,7 +17,6 @@ async function bootstrap() {
 
     app.use(cookieParser());
 
-    // CORS 설정 추가
     app.enableCors({
         origin: ['https://example.com', 'http://localhost:3000', 'http://localhost:3001'],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],

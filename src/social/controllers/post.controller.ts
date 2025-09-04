@@ -48,17 +48,6 @@ export class PostController {
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 
-            // 잘못된 파라미터인 경우 (400 Bad Request)
-            if (errorMessage.includes('limit은 1-20 사이의 값이어야 합니다')) {
-                throw new HttpException(
-                    {
-                        status: HttpStatus.BAD_REQUEST,
-                        error: errorMessage,
-                    },
-                    HttpStatus.BAD_REQUEST,
-                );
-            }
-
             // 기타 서버 오류 (500 Internal Server Error)
             throw new HttpException(
                 {
@@ -150,6 +139,43 @@ export class PostController {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 
             // 서버 오류 (500 Internal Server Error)
+            throw new HttpException(
+                {
+                    status: HttpStatus.INTERNAL_SERVER_ERROR,
+                    error: errorMessage,
+                },
+                HttpStatus.INTERNAL_SERVER_ERROR,
+            );
+        }
+    }
+
+    /**
+     * 특정 사용자의 포스트 조회 (cursor 기반 페이지네이션)
+     * GET /social/posts/user/:userId?currentUserId=1&limit=10&cursor=20
+     */
+    @Get('user/:userId')
+    async getUserPosts(
+        @Param('userId', ParseIntPipe) userId: number,
+        @Query('currentUserId') currentUserId?: string,
+        @Query('limit') limit?: string,
+        @Query('cursor') cursor?: string,
+    ): Promise<PostsResponse> {
+        try {
+            const currentUserIdNum = currentUserId ? parseInt(currentUserId, 10) : 1;
+            const limitNum = limit ? parseInt(limit, 10) : 10;
+            const cursorNum = cursor ? parseInt(cursor, 10) : undefined;
+
+            const posts = await this.postService.getUserPosts(
+                userId,
+                currentUserIdNum,
+                limitNum,
+                cursorNum,
+            );
+            return posts;
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+
+            // 기타 서버 오류 (500 Internal Server Error)
             throw new HttpException(
                 {
                     status: HttpStatus.INTERNAL_SERVER_ERROR,
