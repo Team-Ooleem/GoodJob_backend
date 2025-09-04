@@ -173,20 +173,6 @@ export class STTService {
             if (!words || words.length === 0) {
                 words = this.createWordsFromTranscript(transcript);
             }
-
-            console.log('📊 최종 변환된 JSON:');
-            console.log(
-                JSON.stringify(
-                    {
-                        transcript,
-                        confidence,
-                        words,
-                    },
-                    null,
-                    2,
-                ),
-            );
-
             return {
                 transcript,
                 confidence,
