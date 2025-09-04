@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { STTService, STTResult } from './stt_service';
-import { uploadFileToS3, generateS3Key } from '../lib/s3';
+import { uploadFileToS3, fileS3Key } from '../lib/s3';
 
 interface TranscribeBase64Request {
     audioData: string;
@@ -35,14 +35,6 @@ interface ConnectionTestResponse {
     status: 'success' | 'error';
     message: string;
 }
-
-interface S3UploadResult {
-    success: boolean;
-    key?: string;
-    url?: string;
-    error?: string;
-}
-
 @Controller('stt')
 export class STTController {
     private readonly logger = new Logger(STTController.name);
@@ -71,6 +63,7 @@ export class STTController {
      * @returns STT 변환 결과와 처리 정보
      */
     @Post('transcribe')
+    @Post('transcribe')
     @UseInterceptors(FileInterceptor('audio'))
     async transcribeAudio(@UploadedFile() audioFile: Express.Multer.File): Promise<STTResponse> {
         if (!audioFile) {
@@ -85,22 +78,35 @@ export class STTController {
         try {
             const startTime = Date.now();
 
-            // STT 변환 실행
+            // 1️⃣ STT 변환 실행
             const result = await this.sttService.transcribeAudioBuffer(
                 audioFile.buffer,
                 audioFile.mimetype,
             );
 
-            // S3에 음성 파일 업로드 (병렬 처리는 하지 않고 순차적으로)
-            const s3Result: S3UploadResult | null = await uploadFileToS3(
-                audioFile.buffer,
-                generateS3Key(audioFile.originalname || 'voice_recording', 'stt_test'),
+            // 2️⃣ S3 업로드
+            const s3Key = fileS3Key(
+                audioFile.originalname || 'voice_recording',
+                'stt_test',
                 audioFile.mimetype,
-            ).catch((s3Error) => {
-                this.logger.warn('S3 업로드 실패:', s3Error);
-                // S3 실패는 전체 처리를 중단하지 않음
-                return null;
-            });
+            );
+            const s3Result = await uploadFileToS3(audioFile.buffer, s3Key, audioFile.mimetype);
+
+            // // 3️⃣ 세션 ID 생성
+            // const sessionId = uuidv4(); // UUID로 고유 세션 ID 생성
+
+            // // 4️⃣ DB 저장
+            // const connection = getConnection(); // TypeORM 기준
+            // await connection.query(
+            //     `INSERT INTO transcriptions (session_id, s3_key, transcript, confidence, words) VALUES (?, ?, ?, ?, ?)`,
+            //     [
+            //         sessionId,
+            //         s3Result?.success ? s3Result.key : null,
+            //         result.transcript,
+            //         result.confidence,
+            //         JSON.stringify(result.words || []),
+            //     ],
+            // );
 
             const endTime = Date.now();
             const processingTime = endTime - startTime;
