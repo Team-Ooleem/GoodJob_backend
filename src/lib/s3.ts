@@ -151,7 +151,7 @@ export function fileS3Key(originalName: string, folder: string, mimeType?: strin
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-    const dateFolder = `${year}/${month}/${day}`;
+    const dateFolder = `${year}-${month}-${day}`;
 
     return `$${dateFolder}/${timestamp}_${randomString}${extension.startsWith('.') ? extension : '.' + extension}`;
 }
