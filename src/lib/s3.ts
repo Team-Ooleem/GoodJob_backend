@@ -91,7 +91,7 @@ export function validateImageFile(file: any): { isValid: boolean; error?: string
 
 /* 오디오 파일 검증  */
 export function validateFile(
-    file: any,
+    file: { size?: number },
     maxSize: number = 20 * 1024 * 1024,
 ): { isValid: boolean; error?: string } {
     if (!file || typeof file !== 'object') {
@@ -106,7 +106,10 @@ export function validateFile(
     return { isValid: true };
 }
 
-export function validateAudioFile(file: any): { isValid: boolean; error?: string } {
+export function validateAudioFile(file: { mimetype?: string; size?: number }): {
+    isValid: boolean;
+    error?: string;
+} {
     const baseValidation = validateFile(file);
     if (!baseValidation.isValid) {
         return baseValidation;
@@ -125,7 +128,7 @@ export function validateAudioFile(file: any): { isValid: boolean; error?: string
 }
 
 export function getFileExtension(mimeType: string): string {
-    const extensions = {
+    const extensions: Record<string, string> = {
         'audio/webm': '.webm',
         'audio/wav': '.wav',
         'audio/mp3': '.mp3',

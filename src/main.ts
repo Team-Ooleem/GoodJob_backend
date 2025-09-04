@@ -7,16 +7,15 @@
 // }
 // bootstrap();
 
-
 // src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  
-  app.use(cookieParser());
+    const app = await NestFactory.create(AppModule);
+
+    app.use(cookieParser());
 
     // CORS 설정 추가
     app.enableCors({
@@ -24,12 +23,11 @@ async function bootstrap() {
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
         credentials: true,
     });
- 
 
-  // 모든 요청 경로에 /api prefix 추가
-  app.setGlobalPrefix('api');
+    // 모든 요청 경로에 /api prefix 추가
+    app.setGlobalPrefix('api');
 
-  await app.listen(process.env.PORT ?? 4000);
+    await app.listen(process.env.PORT ?? 4000);
 }
 
 bootstrap();

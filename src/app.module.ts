@@ -10,6 +10,10 @@ import { AuthModule } from './auth/auth.module';
 import { AiModule } from './ai/ai.module';
 import { CollabModule } from './modules/collab/collab.module';
 
+/* stt 모듈 */
+import { STTController } from './stt/stt_controller';
+import { STTService } from './stt/stt_service';
+
 @Module({
     imports: [
         ConfigModule.forRoot({
@@ -22,7 +26,7 @@ import { CollabModule } from './modules/collab/collab.module';
         SocialModule,
         CollabModule,
     ],
-    controllers: [AppController],
-    providers: [AppService],
+    controllers: [AppController, STTController],
+    providers: [AppService, STTService],
 })
 export class AppModule {}
