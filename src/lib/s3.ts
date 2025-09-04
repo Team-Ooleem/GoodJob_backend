@@ -89,6 +89,56 @@ export function validateImageFile(file: any): { isValid: boolean; error?: string
     return { isValid: true };
 }
 
+/* 오디오 파일 검증  */
+export function validateFile(
+    file: any,
+    maxSize: number = 20 * 1024 * 1024,
+): { isValid: boolean; error?: string } {
+    if (!file || typeof file !== 'object') {
+        return { isValid: false, error: '유효하지 않은 파일입니다.' };
+    }
+    if (file.size && file.size > maxSize) {
+        return {
+            isValid: false,
+            error: `파일 크기는 ${maxSize / (1024 * 1024)}MB를 초과할 수 없습니다.`,
+        };
+    }
+    return { isValid: true };
+}
+
+export function validateAudioFile(file: any): { isValid: boolean; error?: string } {
+    const baseValidation = validateFile(file);
+    if (!baseValidation.isValid) {
+        return baseValidation;
+    }
+
+    // 허용된 오디오 타입
+    const allowedMimeTypes = ['audio/webm', 'audio/wav', 'audio/mp3', 'audio/mp4', 'audio/ogg'];
+    if (file.mimetype && !allowedMimeTypes.includes(file.mimetype)) {
+        return {
+            isValid: false,
+            error: '지원되지 않는 오디오 형식입니다. (WebM, WAV, MP3, MP4, OGG만 허용)',
+        };
+    }
+
+    return { isValid: true };
+}
+
+export function getFileExtension(mimeType: string): string {
+    const extensions = {
+        'audio/webm': '.webm',
+        'audio/wav': '.wav',
+        'audio/mp3': '.mp3',
+        'audio/mp4': '.mp4',
+        'audio/ogg': '.ogg',
+        'image/jpeg': '.jpg',
+        'image/jpg': '.jpg',
+        'image/png': '.png',
+        'image/gif': '.gif',
+        'image/webp': '.webp',
+    };
+    return extensions[mimeType] || '.file';
+}
 /**
  * 고유한 S3 키 생성
  * @param originalName 원본 파일명
