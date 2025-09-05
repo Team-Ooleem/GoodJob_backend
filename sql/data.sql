@@ -515,8 +515,8 @@ INSERT INTO `educate` (`idx`, `user_idx`, `school_name`, `major`, `degree`, `sta
 
 -- 채용 공고 데이터
 INSERT INTO `job_post` (`idx`, `business_number`, `title`, `employment_type`, `career_required`, `education_required`, `salary`, `location_sido`, `location_gu`, `work_hours`, `benefit`, `workplace_location`, `apply_deadline`, `apply_method`, `created_at`, `updated_at`) VALUES
-(1, '1234567890', '백엔드 개발자 모집', 1, 2, 3, '연봉 4500~6000만원', '11', '11680', '09:00~18:00', '4대 보험, 유연근무제', '서울시 강남구', '2025-02-28 23:59:59', '온라인 지원', NOW(), NULL),
-(2, '9876543210', 'UI/UX 디자이너 채용', 1, 2, 3, '연봉 4000~5500만원', '11', '11440', '09:30~18:30', '4대 보험, 교육비 지원', '서울시 마포구', '2025-03-15 23:59:59', '온라인 지원', NOW(), NULL);
+(1, '1234567890', '백엔드 개발자 모집', 1, 2, 3, 18, '11', '11680', '09:00~18:00', '4대 보험, 유연근무제', '서울시 강남구', '2025-02-28 23:59:59', '온라인 지원', NOW(), NULL),
+(2, '9876543210', 'UI/UX 디자이너 채용', 1, 2, 3, 13, '11', '11440', '09:30~18:30', '4대 보험, 교육비 지원', '서울시 마포구', '2025-03-15 23:59:59', '온라인 지원', NOW(), NULL);
 
 -- 게시글 데이터
 INSERT INTO `posts` (`post_idx`, `user_id`, `content`, `media_url`, `created_at`, `updated_at`) VALUES

@@ -654,7 +654,7 @@ CREATE TABLE `job_post` (
   `employment_type` int NOT NULL COMMENT '고용 형태 (정규직, 계약직 등)',
   `career_required` int NOT NULL COMMENT '필요 경력 수준',
   `education_required` int NOT NULL COMMENT '필요 학력 수준',
-  `salary` varchar(45) NOT NULL COMMENT '급여 정보',
+  `salary` int NOT NULL COMMENT '급여 범위 ID (salary_range 테이블 참조)',
   `location_sido` char(2) NOT NULL COMMENT '근무지 시도',
   `location_gu` char(5) NOT NULL COMMENT '근무지 구/군',
   `work_hours` varchar(45) NOT NULL COMMENT '근무 시간',
@@ -676,7 +676,8 @@ CREATE TABLE `job_post` (
   CONSTRAINT `loacation_gu` FOREIGN KEY (`location_gu`) REFERENCES `gu` (`gu_code`),
   CONSTRAINT `location_sido` FOREIGN KEY (`location_sido`) REFERENCES `sido` (`sido_code`),
   CONSTRAINT `user_career_type` FOREIGN KEY (`career_required`) REFERENCES `career_type` (`idx`),
-  CONSTRAINT `user_education_level` FOREIGN KEY (`education_required`) REFERENCES `education_level` (`idx`)
+  CONSTRAINT `user_education_level` FOREIGN KEY (`education_required`) REFERENCES `education_level` (`idx`),
+  CONSTRAINT `job_post_salary_range` FOREIGN KEY (`salary`) REFERENCES `salary_range` (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='채용공고 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -716,3 +717,63 @@ CREATE TABLE `job_application` (
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2025-09-01 11:12:08
+
+
+/* STT 데이터 */
+DROP TABLE IF EXISTS `stt_transcriptions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `stt_transcriptions` (
+  `stt_session_idx` INT NOT NULL AUTO_INCREMENT COMMENT '세션 고유 ID',
+  `canvas_idx` INT NOT NULL COMMENT '캔버스 ID ',
+  `mentor_idx` INT NOT NULL COMMENT '멘토 user_id',
+  `mentee_idx` INT NOT NULL COMMENT '멘티 user_id',
+  `audio_url` TEXT NOT NULL COMMENT '오디오 파일 URL',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시간',
+  PRIMARY KEY (`stt_session_idx`),
+  KEY `mentor_idx_idx` (`mentor_idx`),
+  KEY `mentee_idx_idx` (`mentee_idx`),
+  CONSTRAINT `fk_stt_transcriptions_mentor` FOREIGN KEY (`mentor_idx`) REFERENCES `users`(`user_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_stt_transcriptions_mentee` FOREIGN KEY (`mentee_idx`) REFERENCES `users`(`user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='STT 세션 테이블';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `stt_speaker_segments`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `stt_speaker_segments` (
+  `segment_idx` INT NOT NULL AUTO_INCREMENT COMMENT '세그먼트 고유 ID',
+  `stt_session_idx` INT NOT NULL COMMENT '세션 ID (FK)',
+  `speaker_idx` INT NOT NULL COMMENT '화자 번호 (0=멘토, 1=멘티)',
+  `text_content` TEXT NOT NULL COMMENT '인식된 텍스트',
+  `start_time` DECIMAL(10,3) NOT NULL COMMENT '시작 시각 (초)',
+  `end_time` DECIMAL(10,3) NOT NULL COMMENT '종료 시각 (초)',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시간',
+  PRIMARY KEY (`segment_idx`),
+  KEY `stt_session_idx_idx` (`stt_session_idx`),
+  CONSTRAINT `fk_stt_segments_session` FOREIGN KEY (`stt_session_idx`) REFERENCES `stt_transcriptions`(`stt_session_idx`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='STT 화자 세그먼트 테이블';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `canvas`;
+-- 캔버스 기본 정보
+CREATE TABLE canvas (
+    id CHAR(36) NOT NULL PRIMARY KEY,   -- UUID (문자열)
+    name VARCHAR(255) NULL,             -- 캔버스 이름
+    created_by INT NOT NULL,            -- 캔버스를 만든 유저
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(idx) ON DELETE CASCADE
+);
+
+DROP TABLE IF EXISTS `canvas_participant`;
+-- 캔버스 참여자 정보
+CREATE TABLE canvas_participant (
+    canvas_id CHAR(36) NOT NULL,        -- 캔버스 ID
+    user_id INT NOT NULL,               -- 참여자 유저 ID
+    role ENUM('owner','editor','viewer') DEFAULT 'editor',
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (canvas_id, user_id),
+    FOREIGN KEY (canvas_id) REFERENCES canvas(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE CASCADE
+);
+
