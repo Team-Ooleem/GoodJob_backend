@@ -77,6 +77,19 @@ interface ConnectionTestResponse {
     message: string;
 }
 
+interface SessionUserResponse {
+    success: boolean;
+    canvasIdx: number;
+    mentor: {
+        idx: number;
+        name: string;
+    };
+    mentee: {
+        idx: number;
+        name: string;
+    };
+}
+
 @Controller('stt')
 export class STTController {
     private readonly logger = new Logger(STTController.name);
@@ -86,6 +99,40 @@ export class STTController {
         private readonly databaseService: DatabaseService,
     ) {}
 
+    // canvasIdx로 세션 사용자 정보 조회 (새로 추가)
+    @Get('session-users/:canvasIdx')
+    async getSessionUsers(@Param('canvasIdx') canvasIdx: number): Promise<SessionUserResponse> {
+        try {
+            const result = await this.databaseService.query(
+                'SELECT * FROM sessions WHERE canvas_idx = ?',
+                [canvasIdx],
+            );
+            const session = result[0] as { mentor_idx: number; mentee_idx: number };
+            const mentorIdx = session.mentor_idx;
+            const menteeIdx = session.mentee_idx;
+
+            this.logger.log(
+                `세션 사용자 조회: canvasIdx=${canvasIdx}, mentorIdx=${mentorIdx}, menteeIdx=${menteeIdx}`,
+            );
+
+            return {
+                success: true,
+                canvasIdx,
+                mentor: {
+                    idx: mentorIdx,
+                    name: `멘토${mentorIdx}`, // 실제로는 DB에서 조회
+                },
+                mentee: {
+                    idx: menteeIdx,
+                    name: `멘티${menteeIdx}`, // 실제로는 DB에서 조회
+                },
+            };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`세션 사용자 조회 실패: ${message}`);
+            throw new InternalServerErrorException(`세션 사용자 조회 실패: ${message}`);
+        }
+    }
     // 화자 분리 + 컨텍스트 추출 + DB 저장
     @Post('transcribe-with-context')
     async transcribeWithContext(
