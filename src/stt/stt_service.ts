@@ -6,7 +6,12 @@ import { SpeechClient } from '@google-cloud/speech';
 export interface STTResult {
     transcript: string;
     confidence: number;
-    words?: Array<{ word: string; startTime: number; endTime: number }>;
+    speakers?: Array<{
+        text_Content: string; // DB 컬럼명과 일치 (snake_case)
+        startTime: number;
+        endTime: number;
+        speakerTag: number;
+    }>;
 }
 
 export interface StreamingSTTSession {
@@ -21,11 +26,14 @@ interface Duration {
     seconds?: string | number;
     nanos?: string | number;
 }
+
 interface GoogleSpeechWordInfo {
-    word: string;
+    speaker: string;
     startTime?: Duration;
     endTime?: Duration;
+    speakerTag?: number; // 화자 태그 추가
 }
+
 interface ConnectionTestResult {
     status: 'success' | 'error';
     message: string;
@@ -50,6 +58,7 @@ export class STTService {
             this.speechClient = null;
         }
     }
+
     async transcribeAudioBuffer(audioBuffer: Buffer, mimeType = 'audio/webm'): Promise<STTResult> {
         const base64Data = audioBuffer.toString('base64');
         return this.transcribeBase64Audio(base64Data, mimeType);
@@ -75,49 +84,51 @@ export class STTService {
         }
     }
 
-    private processWordTimings(words?: GoogleSpeechWordInfo[]) {
-        if (!words || !Array.isArray(words)) {
+    private processWordTimings(wordSegments?: GoogleSpeechWordInfo[]) {
+        if (!wordSegments || !Array.isArray(wordSegments)) {
             return [];
         }
 
         // 더 강력한 필터링
-        const filteredWords = words
-            .filter((w) => {
-                const word = w.word || '';
+        const filteredWordSegments = wordSegments
+            .filter((wordSegment: { speaker: string }) => {
+                const textContent = wordSegment.speaker || '';
                 return (
-                    word.trim() &&
-                    word.length > 1 && // 2글자 이상만
-                    !['아', '어', '음', '으'].includes(word) && // 감탄사 제거
-                    word !== '▁' &&
-                    word !== ' '
+                    textContent.trim() &&
+                    textContent.length > 1 && // 2글자 이상만
+                    !['아', '어', '음', '으'].includes(textContent) && // 감탄사 제거
+                    textContent !== '▁' &&
+                    textContent !== ' '
                 );
             })
-            .map((w) => ({
-                word: (w.word || '').replace(/^▁/, '').trim(),
-                startTime: this.convertDurationToSeconds(w.startTime),
-                endTime: this.convertDurationToSeconds(w.endTime),
+            .map((wordSegment) => ({
+                text_Content: (wordSegment.speaker || '').replace(/^▁/, '').trim(),
+                startTime: this.convertDurationToSeconds(wordSegment.startTime),
+                endTime: this.convertDurationToSeconds(wordSegment.endTime),
+                speakerTag: wordSegment.speakerTag || 0, // 실제 화자 태그 사용
             }))
-            .filter((w) => w.word.length > 0);
+            .filter((wordSegment) => wordSegment.text_Content.length > 0);
 
-        return filteredWords;
+        return filteredWordSegments;
     }
 
     private createWordsFromTranscript(
         transcript: string,
-    ): Array<{ word: string; startTime: number; endTime: number }> {
+    ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
         if (!transcript.trim()) {
             return [];
         }
 
-        const words = transcript
+        const textSegments = transcript
             .replace(/[.,!?;:]/g, ' ')
             .split(/\s+/)
-            .filter((word) => word.trim().length > 0);
+            .filter((textSegment) => textSegment.trim().length > 0);
 
-        return words.map((word, index) => ({
-            word: word.trim(),
+        return textSegments.map((textSegment, index) => ({
+            text_Content: textSegment.trim(),
             startTime: index * 1,
             endTime: (index + 1) * 1,
+            speakerTag: 0, // 기본값으로 화자 0 설정
         }));
     }
 
@@ -139,8 +150,8 @@ export class STTService {
                     enableAutomaticPunctuation: true,
                     model: 'latest_long',
                     useEnhanced: true,
-                    enableSpeakerDiarization: false,
-                    diarizationSpeakerCount: 0,
+                    enableSpeakerDiarization: true, // 화자 분리 활성화
+                    diarizationSpeakerCount: 2, // 멘토, 멘티 2명
                     maxAlternatives: 1,
                     profanityFilter: false,
                     enableSeparateRecognitionPerChannel: false,
@@ -154,35 +165,37 @@ export class STTService {
             // 타입 안전한 응답 처리
             const results = response.results;
             if (!results || results.length === 0) {
-                return { transcript: '', confidence: 0, words: [] };
+                return { transcript: '', confidence: 0, speakers: [] };
             }
 
             const firstResult = results[0];
             if (!firstResult.alternatives || firstResult.alternatives.length === 0) {
-                return { transcript: '', confidence: 0, words: [] };
+                return { transcript: '', confidence: 0, speakers: [] };
             }
 
             const alternative = firstResult.alternatives[0];
             const transcript = alternative.transcript || '';
             const confidence = alternative.confidence || 0;
 
-            let words = this.processWordTimings(
+            let wordSegments = this.processWordTimings(
                 (alternative.words as GoogleSpeechWordInfo[]) || undefined,
             );
 
-            if (!words || words.length === 0) {
-                words = this.createWordsFromTranscript(transcript);
+            if (!wordSegments || wordSegments.length === 0) {
+                wordSegments = this.createWordsFromTranscript(transcript);
             }
+
             return {
                 transcript,
                 confidence,
-                words,
+                speakers: wordSegments,
             };
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);
             throw new Error(`STT 변환 실패: ${msg}`);
         }
     }
+
     private getAudioConfig(mimeType: string): {
         encoding: 'LINEAR16' | 'MP3' | 'WEBM_OPUS' | 'FLAC';
         sampleRate: number;
@@ -204,11 +217,11 @@ export class STTService {
         return {
             transcript: '안녕하세요. 구글 STT 테스트입니다.',
             confidence: 0.95,
-            words: [
-                { word: '안녕하세요', startTime: 0.5, endTime: 1.2 },
-                { word: '구글', startTime: 2.0, endTime: 2.3 },
-                { word: 'STT', startTime: 2.4, endTime: 2.7 },
-                { word: '테스트입니다', startTime: 2.8, endTime: 3.5 },
+            speakers: [
+                { text_Content: '안녕하세요', startTime: 0.5, endTime: 1.2, speakerTag: 0 },
+                { text_Content: '구글', startTime: 2.0, endTime: 2.3, speakerTag: 0 },
+                { text_Content: 'STT', startTime: 2.4, endTime: 2.7, speakerTag: 1 },
+                { text_Content: '테스트입니다', startTime: 2.8, endTime: 3.5, speakerTag: 1 },
             ],
         };
     }

@@ -127,7 +127,14 @@ export function validateAudioFile(file: { mimetype?: string; size?: number }): {
     return { isValid: true };
 }
 
-export function fileS3Key(originalName: string, mimeType?: string): string {
+export function fileS3Key(
+    originalName: string,
+    mimeType?: string,
+    canvasIdx?: number,
+    mentorIdx?: number,
+    menteeIdx?: number,
+    speakerTag?: number,
+): string {
     const timestamp = Date.now();
     const randomString = Math.random().toString(36).substring(2, 8);
 
@@ -146,16 +153,41 @@ export function fileS3Key(originalName: string, mimeType?: string): string {
         extension = mimeMap[mimeType] || '.file';
     }
 
-    // 날짜별 폴더
+    // 파일 타입별 폴더 분류
+    let typeFolder = 'files';
+    if (mimeType) {
+        if (mimeType.startsWith('audio/')) {
+            typeFolder = 'audio';
+        } else if (mimeType.startsWith('video/')) {
+            typeFolder = 'video';
+        } else if (mimeType.startsWith('image/')) {
+            typeFolder = 'images';
+        } else if (mimeType.startsWith('application/')) {
+            typeFolder = 'documents';
+        }
+    }
+
+    // 날짜별 폴더 (월-일)
     const now = new Date();
-    const year = now.getFullYear();
+    const year = String(now.getFullYear());
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
     const dateFolder = `${month}-${day}`;
 
-    /* 연도별 폴더 관리 */
-    return `${year}/${dateFolder}/${timestamp}_${randomString}${extension.startsWith('.') ? extension : '.' + extension}`;
+    // 파일명 구성: {캔버스ID}_{멘토ID}-{멘티ID}_{화자ID}_{타임스탬프}_{랜덤문자}
+    let fileName = '';
+
+    if (canvasIdx && mentorIdx && menteeIdx) {
+        const [first, second] = [mentorIdx, menteeIdx].sort((a, b) => a - b);
+        const speakerInfo = speakerTag !== undefined ? `_S${speakerTag}` : '';
+        fileName = `${canvasIdx}_${first}-${second}${speakerInfo}_${timestamp}_${randomString}`;
+    } else {
+        fileName = `${timestamp}_${randomString}`;
+    }
+    // 폴더 구조: {년도}/{월-일}/{파일타입}/{파일명}
+    return `${year}/${dateFolder}/${typeFolder}/${fileName}${extension.startsWith('.') ? extension : '.' + extension}`;
 }
+
 /**
  * 고유한 S3 키 생성
  * @param originalName 원본 파일명

@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
+import { DatabaseService } from './database/database.service';
 import { SocialModule } from './social/social.module';
 import { AuthModule } from './auth/auth.module';
 // ai 면접 질문 관련 모듈
@@ -29,6 +30,6 @@ import { STTService } from './stt/stt_service';
         UsersModule,
     ],
     controllers: [AppController, STTController],
-    providers: [AppService, STTService],
+    providers: [AppService, STTService, DatabaseService],
 })
 export class AppModule {}

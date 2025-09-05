@@ -54,9 +54,6 @@ export class AuthController {
         //   headers: { Authorization: `Bearer ${access_token}` },
         // });
 
-        // 4) DB upsert(여기선 스킵) 후, 우리 서버 세션(JWT) 발급
-        const sessionJwt = jwt.sign(
-            {
         // 4) DB에 사용자 정보 저장/조회 후 idx 가져오기
         const userIdx = await this.createOrGetUser(decoded);
 
@@ -101,7 +98,6 @@ export class AuthController {
             return {
                 authenticated: true,
                 user: {
-                    id: payload.sub,
                     idx: payload.idx, // 우리 DB의 사용자 idx
                     id: payload.sub, // 구글 사용자 고유 ID
                     email: payload.email,
@@ -112,14 +108,6 @@ export class AuthController {
         } catch {
             return { authenticated: false };
         }
-    }
-
-    // 로그아웃 엔드포인트, 세션 쿠키 삭제
-    @Get('logout')
-    logout(@Res() res: Response) {
-        res.clearCookie('session', { path: '/' });
-        return res.status(204).send();
-    }
     }
 
     // 로그아웃 엔드포인트, 세션 쿠키 삭제
