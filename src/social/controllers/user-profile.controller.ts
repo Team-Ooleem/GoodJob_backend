@@ -6,12 +6,18 @@ import {
     Query,
     HttpException,
     HttpStatus,
+    Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import {
     UserProfileService,
     UserProfileInfo,
     UserProfileDetailResponse,
 } from '../services/user-profile.service';
+
+interface AuthenticatedRequest extends Request {
+    user_idx: number;
+}
 
 @Controller('social/profile')
 export class UserProfileController {
@@ -24,13 +30,13 @@ export class UserProfileController {
     @Get(':userId')
     async getUserProfile(
         @Param('userId', ParseIntPipe) userId: number,
-        @Query('currentUserId') currentUserId?: string,
+        @Req() req: AuthenticatedRequest,
     ): Promise<UserProfileInfo> {
+        const currentUserId = req.user_idx;
         try {
-            const currentUserIdNum = currentUserId ? parseInt(currentUserId, 10) : undefined;
             const userProfile = await this.userProfileService.getUserProfileInfo(
                 userId,
-                currentUserIdNum,
+                currentUserId,
             );
 
             // 성공 응답 (200 OK)
@@ -67,11 +73,12 @@ export class UserProfileController {
     @Get(':userId/detail')
     async getUserProfileDetail(
         @Param('userId', ParseIntPipe) userId: number,
-        @Query('currentUserId', ParseIntPipe) currentUserId: number,
+        @Req() req: AuthenticatedRequest,
         @Query('limit') limit?: string,
         @Query('cursor') cursor?: string,
     ): Promise<UserProfileDetailResponse> {
         try {
+            const currentUserId = req.user_idx;
             const postsLimit = limit ? parseInt(limit, 10) : 10;
             const postsCursor = cursor ? parseInt(cursor, 10) : undefined;
 
