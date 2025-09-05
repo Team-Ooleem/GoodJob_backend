@@ -156,6 +156,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    // interview 쪽에서 추가
+    async execute(sql: string, params: any[] = []) {
+        if (!this.pool) {
+            throw new Error('데이터베이스 풀이 초기화되지 않았습니다.');
+        }
+        const [res] = await this.pool.execute(sql, params);
+        return res;
+    }
+
     async healthCheck(): Promise<boolean> {
         try {
             if (!this.connection) {

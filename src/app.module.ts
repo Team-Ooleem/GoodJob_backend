@@ -7,8 +7,9 @@ import { DatabaseModule } from './database/database.module';
 import { SocialModule } from './social/social.module';
 import { AuthModule } from './auth/auth.module';
 // ai 면접 질문 관련 모듈
-import { AiModule } from './ai/ai.module';
+import { AiModule } from './modules/interview/interview.module';
 import { CollabModule } from './modules/collab/collab.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
 import { UsersModule } from './users/users.module';
 import { ChatModule } from './chat/chat.module';
 import { JobsModule } from './jobs/jobs.module';
@@ -27,6 +28,7 @@ import { ProfileModule } from './profile/profile.module';
         AiModule,
         SocialModule,
         CollabModule,
+        MetricsModule,
         UsersModule,
         ChatModule,
         JobsModule,
