@@ -1,6 +1,7 @@
 // 여기에 임포트해야 nestJS가 인식함
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
@@ -17,6 +18,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { LocationsModule } from './locations/locations.module';
 import { SalariesModule } from './salaries/salaries.module';
 import { ProfileModule } from './profile/profile.module';
+import { SessionGuard } from './auth/session.guard
 // resume
 import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 
@@ -43,8 +45,17 @@ import { STTService } from './stt/stt_service';
         SalariesModule,
         ProfileModule,
         CanvasModule,
+        SocialModule,
     ],
     controllers: [AppController, STTController],
-    providers: [AppService, STTService, DatabaseService],
+    providers: [
+        AppService,
+        STTService,
+        DatabaseService,
+        {
+            provide: APP_GUARD,
+            useClass: SessionGuard,
+        },
+    ],
 })
 export class AppModule {}
