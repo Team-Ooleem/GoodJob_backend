@@ -3,9 +3,11 @@ import { Controller, Get, Query, Res, Req } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import axios from 'axios';
 import * as jwt from 'jsonwebtoken';
+import { DatabaseService } from '../database/database.service';
 
 @Controller('auth')
 export class AuthController {
+    constructor(private readonly databaseService: DatabaseService) {}
     // 프론트에서 구글로 로그인 버튼 누르면 이동하는 엔드포인트
     @Get('google')
     async redirectToGoogle(@Res() res: Response, @Req() req: Request) {
@@ -52,9 +54,13 @@ export class AuthController {
         //   headers: { Authorization: `Bearer ${access_token}` },
         // });
 
-        // 4) DB upsert(여기선 스킵) 후, 우리 서버 세션(JWT) 발급
+        // 4) DB에 사용자 정보 저장/조회 후 idx 가져오기
+        const userIdx = await this.createOrGetUser(decoded);
+
+        // 5) 우리 서버 세션(JWT) 발급 (idx 포함)
         const sessionJwt = jwt.sign(
             {
+                idx: userIdx, // 우리 DB의 사용자 idx
                 sub: decoded.sub, // 구글 사용자 고유 ID
                 email: decoded.email,
                 name: decoded.name,
@@ -92,7 +98,8 @@ export class AuthController {
             return {
                 authenticated: true,
                 user: {
-                    id: payload.sub,
+                    idx: payload.idx, // 우리 DB의 사용자 idx
+                    id: payload.sub, // 구글 사용자 고유 ID
                     email: payload.email,
                     name: payload.name,
                     picture: payload.picture,
@@ -108,5 +115,57 @@ export class AuthController {
     logout(@Res() res: Response) {
         res.clearCookie('session', { path: '/' });
         return res.status(204).send();
+    }
+
+    // 구글 로그인 사용자 생성/조회 메서드
+    private async createOrGetUser(decoded: any): Promise<number> {
+        try {
+            // 1) email로 기존 사용자 확인
+            const existingUsers = await this.databaseService.query(
+                'SELECT idx FROM users WHERE email = ?',
+                [decoded.email],
+            );
+
+            if (existingUsers.length > 0) {
+                // 기존 사용자가 있으면 idx 반환
+                const userIdx = existingUsers[0].idx;
+
+                // social_accout 테이블에 구글 정보가 있는지 확인
+                const socialAccounts = await this.databaseService.query(
+                    'SELECT * FROM social_accout WHERE user_idx = ? AND provider_id = ?',
+                    [userIdx, decoded.sub],
+                );
+
+                // social_accout에 구글 정보가 없으면 추가
+                if (socialAccounts.length === 0) {
+                    await this.databaseService.query(
+                        'INSERT INTO social_accout (user_idx, provider_id, created_at) VALUES (?, ?, NOW())',
+                        [userIdx, decoded.sub],
+                    );
+                }
+
+                return userIdx;
+            }
+
+            // 2) 새 사용자 생성
+            const insertResult = await this.databaseService.query(
+                'INSERT INTO users (name, phone, email, created_at) VALUES (?, ?, ?, NOW())',
+                [decoded.name || 'Unknown', '', decoded.email], // phone을 빈 문자열로 설정
+            );
+
+            // MySQL insertId 가져오기
+            const userIdx = (insertResult as any).insertId;
+
+            // 3) social_accout 테이블에 구글 정보 저장
+            await this.databaseService.query(
+                'INSERT INTO social_accout (user_idx, provider_id, created_at) VALUES (?, ?, NOW())',
+                [userIdx, decoded.sub],
+            );
+
+            return userIdx;
+        } catch (error) {
+            console.error('사용자 생성/조회 오류:', error);
+            throw new Error('사용자 정보 처리 중 오류가 발생했습니다.');
+        }
     }
 }

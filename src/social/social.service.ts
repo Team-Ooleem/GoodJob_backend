@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { UserProfileService, UserProfileInfo } from './services/user-profile.service';
+import {
+    UserProfileService,
+    UserProfileInfo,
+    UserProfileDetailResponse,
+} from './services/user-profile.service';
 import {
     PostService,
     PostsResponse,
@@ -21,7 +25,7 @@ import {
 import { FollowService, FollowRequest, FollowResponse } from './services/follow.service';
 
 // Re-export interfaces from individual services for backward compatibility
-export type { UserProfileInfo } from './services/user-profile.service';
+export type { UserProfileInfo, UserProfileDetailResponse } from './services/user-profile.service';
 export type {
     Post,
     PostsResponse,
@@ -64,6 +68,23 @@ export class SocialService {
         return this.userProfileService.getUserProfileInfo(userId);
     }
 
+    /**
+     * 사용자 프로필 상세 정보 조회 (프로필 정보 + 포스트 목록) (Facade)
+     */
+    async getUserProfileDetail(
+        targetUserId: number,
+        currentUserId: number,
+        postsLimit: number = 10,
+        postsCursor?: number,
+    ): Promise<UserProfileDetailResponse> {
+        return this.userProfileService.getUserProfileDetail(
+            targetUserId,
+            currentUserId,
+            postsLimit,
+            postsCursor,
+        );
+    }
+
     // ==================== Post 관련 메서드 ====================
 
     /**
@@ -96,6 +117,18 @@ export class SocialService {
      */
     async deletePost(request: DeletePostRequest): Promise<DeletePostResponse> {
         return this.postService.deletePost(request);
+    }
+
+    /**
+     * 특정 사용자의 포스트 조회 (Facade)
+     */
+    async getUserPosts(
+        targetUserId: number,
+        currentUserId: number,
+        limit: number = 10,
+        cursor?: number,
+    ): Promise<PostsResponse> {
+        return this.postService.getUserPosts(targetUserId, currentUserId, limit, cursor);
     }
 
     // ==================== Comment 관련 메서드 ====================

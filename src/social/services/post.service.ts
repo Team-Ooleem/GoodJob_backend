@@ -238,13 +238,11 @@ export class PostService {
                 await this.databaseService.query(LikeQueries.removePostLike, [postId, userId]);
                 isLiked = false;
                 message = '좋아요를 취소했습니다.';
-                console.log(`❌ 좋아요 취소 완료`);
             } else {
                 // 좋아요 추가 (INSERT)
                 await this.databaseService.query(LikeQueries.addPostLike, [postId, userId]);
                 isLiked = true;
                 message = '좋아요를 눌렀습니다.';
-                console.log(`✅ 좋아요 추가 완료`);
             }
 
             // 현재 좋아요 수 조회
@@ -260,12 +258,76 @@ export class PostService {
                 likeCount,
             };
 
-            console.log(`🎉 포스트 좋아요 토글 완료:`, response);
             return response;
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
             console.error(`❌ 포스트 좋아요 토글 실패:`, error);
             throw new Error(`포스트 좋아요 토글 실패: ${errorMessage}`);
+        }
+    }
+
+    /**
+     * 특정 사용자의 포스트 조회 (cursor 기반 페이지네이션)
+     * @param targetUserId - 조회할 사용자 ID
+     * @param currentUserId - 현재 사용자 ID (좋아요, 팔로우 상태 확인용)
+     * @param limit - 조회할 포스트 수 (기본값: 10)
+     * @param cursor - 커서 (post_idx 기준, null이면 처음부터)
+     */
+    async getUserPosts(
+        targetUserId: number,
+        currentUserId: number,
+        limit: number = 10,
+        cursor?: number,
+    ): Promise<PostsResponse> {
+        try {
+            console.log(
+                `👤 사용자 포스트 조회 시작 - targetUserId: ${targetUserId}, currentUserId: ${currentUserId}`,
+            );
+
+            const queryParams = [
+                Number(currentUserId), // 좋아요 확인용 (user_like)
+                Number(currentUserId), // 팔로우 확인용 (follow)
+                Number(targetUserId), // 조회할 사용자 ID
+                cursor ?? null, // WHERE 조건 첫 번째 cursor
+                cursor ?? null, // WHERE 조건 두 번째 cursor
+                Number(limit), // LIMIT
+            ];
+
+            const result = await this.databaseService.query(PostQueries.getUserPosts, queryParams);
+
+            const posts: Post[] = result.map((row: PostRow) => ({
+                postIdx: row.post_idx,
+                userId: row.user_id,
+                content: row.content,
+                mediaUrl: row.media_url,
+                createdAt: row.created_at,
+                updatedAt: row.updated_at,
+                authorName: row.author_name,
+                authorProfileImage: row.author_profile_image,
+                authorShortBio: row.author_short_bio,
+                likeCount: row.like_count,
+                commentCount: row.comment_count,
+                isLikedByCurrentUser: row.is_liked_by_current_user === 1,
+                isFollowingAuthor: row.is_following_author === 1,
+            }));
+
+            const nextCursor = posts.length > 0 ? posts[posts.length - 1].postIdx : undefined;
+            const hasMore = posts.length === limit;
+
+            const response: PostsResponse = {
+                posts,
+                nextCursor,
+                hasMore,
+            };
+
+            console.log(
+                `✅ 사용자 포스트 조회 완료 - 포스트 수: ${posts.length}, hasMore: ${hasMore}`,
+            );
+            return response;
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            console.error(`❌ 사용자 포스트 조회 실패:`, error);
+            throw new Error(`사용자 포스트 조회 실패: ${errorMessage}`);
         }
     }
 

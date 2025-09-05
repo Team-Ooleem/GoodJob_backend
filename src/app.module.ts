@@ -9,8 +9,13 @@ import { AuthModule } from './auth/auth.module';
 // ai 면접 질문 관련 모듈
 import { AiModule } from './modules/interview/interview.module';
 import { CollabModule } from './modules/collab/collab.module';
-//import { UsersModule } from './users/users.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
+import { UsersModule } from './users/users.module';
+import { ChatModule } from './chat/chat.module';
+import { JobsModule } from './jobs/jobs.module';
+import { LocationsModule } from './locations/locations.module';
+import { SalariesModule } from './salaries/salaries.module';
+import { ProfileModule } from './profile/profile.module';
 
 @Module({
     imports: [
@@ -21,11 +26,15 @@ import { MetricsModule } from './modules/metrics/metrics.module';
         DatabaseModule,
         AuthModule,
         AiModule,
-        DatabaseModule,
         SocialModule,
         CollabModule,
-        //UsersModule,
         MetricsModule,
+        UsersModule,
+        ChatModule,
+        JobsModule,
+        LocationsModule,
+        SalariesModule,
+        ProfileModule,
     ],
     controllers: [AppController],
     providers: [AppService],
