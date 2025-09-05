@@ -9,7 +9,8 @@ import { AuthModule } from './auth/auth.module';
 // ai 면접 질문 관련 모듈
 import { AiModule } from './modules/interview/interview.module';
 import { CollabModule } from './modules/collab/collab.module';
-import { UsersModule } from './users/users.module';
+//import { UsersModule } from './users/users.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
 
 @Module({
     imports: [
@@ -20,11 +21,11 @@ import { UsersModule } from './users/users.module';
         DatabaseModule,
         AuthModule,
         AiModule,
-
         DatabaseModule,
         SocialModule,
         CollabModule,
-        UsersModule,
+        //UsersModule,
+        MetricsModule,
     ],
     controllers: [AppController],
     providers: [AppService],

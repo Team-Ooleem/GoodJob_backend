@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { AnalysisClient } from './analysis.client';
+import { AnalysisClient } from './audio-metrics.client';
 
 @Module({
     providers: [AnalysisClient],
