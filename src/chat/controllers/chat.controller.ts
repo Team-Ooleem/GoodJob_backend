@@ -126,21 +126,40 @@ export class ChatController {
         @Query('user_id') currentUserId: number,
         @Query('limit') limit?: number,
     ) {
+        console.log('🔍 사용자 검색 요청 받음:');
+        console.log('  - 검색어:', searchTerm);
+        console.log('  - 현재 사용자 ID:', currentUserId);
+        console.log('  - 제한 수:', limit);
+
         if (!searchTerm || searchTerm.trim().length < 1) {
+            console.log('❌ 검색어가 비어있음');
             throw new HttpException('검색어를 입력해주세요.', HttpStatus.BAD_REQUEST);
         }
 
         if (!currentUserId || currentUserId <= 0) {
+            console.log('❌ 유효하지 않은 사용자 ID:', currentUserId);
             throw new HttpException('유효하지 않은 사용자 ID입니다.', HttpStatus.BAD_REQUEST);
         }
 
         const limitNum = limit ? parseInt(limit.toString()) : 20;
 
         if (limitNum < 1 || limitNum > 50) {
+            console.log('❌ 잘못된 limit 값:', limitNum);
             throw new HttpException('limit은 1-50 사이의 값이어야 합니다.', HttpStatus.BAD_REQUEST);
         }
 
-        return await this.chatService.searchUsers(searchTerm, currentUserId, limitNum);
+        console.log('✅ 검증 통과, 서비스 호출 시작');
+        const result = await this.chatService.searchUsers(searchTerm, currentUserId, limitNum);
+
+        console.log('📤 사용자 검색 응답 데이터:');
+        console.log('  - success:', result.success);
+        console.log('  - message:', result.message);
+        console.log('  - data 개수:', result.data ? result.data.length : 0);
+        if (result.data && result.data.length > 0) {
+            console.log('  - 첫 번째 사용자:', result.data[0]);
+        }
+
+        return result;
     }
 
     /**

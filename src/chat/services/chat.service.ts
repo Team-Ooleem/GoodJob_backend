@@ -322,12 +322,22 @@ export class ChatService {
         message: string;
     }> {
         try {
+            console.log('🔍 ChatService.searchUsers 호출됨:');
+            console.log('  - searchTerm:', searchTerm);
+            console.log('  - currentUserId:', currentUserId);
+            console.log('  - limit:', limit);
+
             if (!searchTerm || searchTerm.trim().length < 1) {
+                console.log('❌ 검색어가 비어있음');
                 return {
                     success: false,
                     message: '검색어를 입력해주세요.',
                 };
             }
+
+            console.log('📊 데이터베이스 쿼리 실행 중...');
+            console.log('  - 쿼리:', ChatQueries.searchUsers);
+            console.log('  - 파라미터:', [currentUserId, searchTerm, searchTerm, limit]);
 
             const users = await this.databaseService.query(ChatQueries.searchUsers, [
                 currentUserId,
@@ -336,13 +346,20 @@ export class ChatService {
                 limit,
             ]);
 
-            return {
+            console.log('📊 데이터베이스 쿼리 결과:');
+            console.log('  - 결과 개수:', users ? users.length : 0);
+            console.log('  - 결과 데이터:', users);
+
+            const result = {
                 success: true,
                 data: users,
                 message: '사용자 검색을 완료했습니다.',
             };
+
+            console.log('✅ 최종 응답 데이터:', result);
+            return result;
         } catch (error) {
-            console.error('사용자 검색 실패:', error);
+            console.error('❌ 사용자 검색 실패:', error);
             return {
                 success: false,
                 message: '사용자 검색에 실패했습니다.',

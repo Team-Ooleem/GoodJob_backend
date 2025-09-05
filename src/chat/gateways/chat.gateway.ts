@@ -33,8 +33,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     handleConnection(client: Socket) {
         console.log('✅ 채팅 클라이언트 연결됨:', client.id);
 
-        // 클라이언트에서 사용자 ID를 전송하도록 기다림
-        client.on('register_user', (userId: number) => {
+        // 클라이언트에서 사용자 ID를 전송하도록 기다림 (한 번만 실행)
+        client.once('register_user', (userId: number) => {
             if (userId && userId > 0) {
                 this.userSocketMap.set(userId, client);
                 console.log(`👤 사용자 ${userId}가 채팅에 등록됨`);
@@ -59,7 +59,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
      * 메시지 전송
      */
     @SubscribeMessage('send_message')
-    async handleSendMessage(
+    handleSendMessage(
         @ConnectedSocket() client: Socket,
         @MessageBody() data: { senderId: number; receiverId: number; content: string },
     ) {
@@ -91,44 +91,38 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 return;
             }
 
-            // 메시지 저장
-            const result = await this.chatService.sendMessage({
-                sender_id: senderId,
-                receiver_id: receiverId,
-                content: content.trim(),
-            });
+            // ⚠️ 주의: WebSocket은 실시간 알림용으로만 사용
+            // 실제 메시지 저장은 HTTP API (/api/chat/messages)에서만 처리
+            console.log('📡 WebSocket 메시지 수신 - 실시간 전달만 처리');
 
-            if (!result.success) {
-                client.emit('error', { message: result.message });
-                return;
-            }
-
-            // 메시지 객체 생성
+            // 메시지 객체 생성 (DB 저장 없이 실시간 전달용)
             const messageData = {
-                message_id: result.message_id,
                 sender_id: senderId,
                 receiver_id: receiverId,
                 content: content.trim(),
                 created_at: new Date().toISOString(),
+                is_realtime_only: true, // 실시간 전달임을 표시
             };
 
-            // 발신자에게 전송 성공 알림
+            // 발신자에게 확인 알림 (DB 저장은 HTTP API에서 처리됨을 알림)
             client.emit('message_sent', {
                 success: true,
-                message: result.message,
+                message: '실시간 메시지가 전달되었습니다. (저장은 HTTP API에서 처리)',
                 messageData,
             });
 
-            // 수신자에게만 메시지 전송
+            // 수신자에게만 실시간 메시지 전송
             const receiverSocket = this.userSocketMap.get(receiverId);
             if (receiverSocket) {
                 receiverSocket.emit('receive_message', messageData);
-                console.log(`📤 메시지 전송됨: ${senderId} → ${receiverId}`);
+                console.log(`📤 실시간 메시지 전달됨: ${senderId} → ${receiverId}`);
             } else {
                 console.log(`⚠️ 수신자 ${receiverId}가 온라인이 아닙니다.`);
             }
 
-            console.log(`💬 메시지 저장됨: ${senderId} → ${receiverId} (${content.length}자)`);
+            console.log(
+                `💬 WebSocket 메시지 처리 완료: ${senderId} → ${receiverId} (${content.length}자)`,
+            );
         } catch (error) {
             console.error('메시지 전송 에러:', error);
             client.emit('error', { message: '메시지 전송에 실패했습니다.' });
