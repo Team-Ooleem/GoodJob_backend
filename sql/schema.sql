@@ -636,7 +636,7 @@ CREATE TABLE `job_post` (
   `employment_type` int NOT NULL COMMENT '고용 형태 (정규직, 계약직 등)',
   `career_required` int NOT NULL COMMENT '필요 경력 수준',
   `education_required` int NOT NULL COMMENT '필요 학력 수준',
-  `salary` varchar(45) NOT NULL COMMENT '급여 정보',
+  `salary` int NOT NULL COMMENT '급여 범위 ID (salary_range 테이블 참조)',
   `location_sido` char(2) NOT NULL COMMENT '근무지 시도',
   `location_gu` char(5) NOT NULL COMMENT '근무지 구/군',
   `work_hours` varchar(45) NOT NULL COMMENT '근무 시간',
@@ -658,7 +658,8 @@ CREATE TABLE `job_post` (
   CONSTRAINT `loacation_gu` FOREIGN KEY (`location_gu`) REFERENCES `gu` (`gu_code`),
   CONSTRAINT `location_sido` FOREIGN KEY (`location_sido`) REFERENCES `sido` (`sido_code`),
   CONSTRAINT `user_career_type` FOREIGN KEY (`career_required`) REFERENCES `career_type` (`idx`),
-  CONSTRAINT `user_education_level` FOREIGN KEY (`education_required`) REFERENCES `education_level` (`idx`)
+  CONSTRAINT `user_education_level` FOREIGN KEY (`education_required`) REFERENCES `education_level` (`idx`),
+  CONSTRAINT `job_post_salary_range` FOREIGN KEY (`salary`) REFERENCES `salary_range` (`idx`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='채용공고 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
