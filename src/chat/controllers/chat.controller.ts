@@ -7,9 +7,15 @@ import {
     Query,
     HttpException,
     HttpStatus,
+    Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ChatService } from '../services/chat.service';
 import type { SendMessageRequest } from '../services/chat.service';
+
+interface AuthenticatedRequest extends Request {
+    user_idx: number;
+}
 
 @Controller('chat')
 export class ChatController {
@@ -17,10 +23,11 @@ export class ChatController {
 
     /**
      * 내 채팅방 목록 조회
-     * GET /api/chat/conversations/:userId
+     * GET /api/chat/conversations
      */
-    @Get('conversations/:userId')
-    async getMyConversations(@Param('userId') userId: number) {
+    @Get('conversations')
+    async getMyConversations(@Req() req: AuthenticatedRequest) {
+        const userId = req.user_idx;
         if (!userId || userId <= 0) {
             throw new HttpException('유효하지 않은 사용자 ID입니다.', HttpStatus.BAD_REQUEST);
         }
@@ -64,10 +71,8 @@ export class ChatController {
      * POST /api/chat/messages
      */
     @Post('messages')
-    async sendMessage(@Body() request: SendMessageRequest) {
-        if (!request.sender_id || request.sender_id <= 0) {
-            throw new HttpException('유효하지 않은 발신자 ID입니다.', HttpStatus.BAD_REQUEST);
-        }
+    async sendMessage(@Body() request: SendMessageRequest, @Req() req: AuthenticatedRequest) {
+        const senderId = req.user_idx;
 
         if (!request.receiver_id || request.receiver_id <= 0) {
             throw new HttpException('유효하지 않은 수신자 ID입니다.', HttpStatus.BAD_REQUEST);
@@ -81,11 +86,17 @@ export class ChatController {
             throw new HttpException('메시지는 1000자 이하로 입력해주세요.', HttpStatus.BAD_REQUEST);
         }
 
-        if (request.sender_id === request.receiver_id) {
+        if (senderId === request.receiver_id) {
             throw new HttpException('자신에게 메시지를 보낼 수 없습니다.', HttpStatus.BAD_REQUEST);
         }
 
-        return await this.chatService.sendMessage(request);
+        // sender_id를 세션에서 가져온 값으로 설정
+        const messageRequest = {
+            ...request,
+            sender_id: senderId,
+        };
+
+        return await this.chatService.sendMessage(messageRequest);
     }
 
     /**
@@ -95,13 +106,15 @@ export class ChatController {
     @Post('messages/:conversationId/read')
     async markAsRead(
         @Param('conversationId') conversationId: number,
-        @Body() body: { user_id: number; last_message_id: number },
+        @Body() body: { last_message_id: number },
+        @Req() req: AuthenticatedRequest,
     ) {
         if (!conversationId || conversationId <= 0) {
             throw new HttpException('유효하지 않은 채팅방 ID입니다.', HttpStatus.BAD_REQUEST);
         }
 
-        if (!body.user_id || body.user_id <= 0) {
+        const userId = req.user_idx;
+        if (!userId || userId <= 0) {
             throw new HttpException('유효하지 않은 사용자 ID입니다.', HttpStatus.BAD_REQUEST);
         }
 
@@ -109,11 +122,7 @@ export class ChatController {
             throw new HttpException('유효하지 않은 메시지 ID입니다.', HttpStatus.BAD_REQUEST);
         }
 
-        return await this.chatService.markAsRead(
-            conversationId,
-            body.user_id,
-            body.last_message_id,
-        );
+        return await this.chatService.markAsRead(conversationId, userId, body.last_message_id);
     }
 
     /**
@@ -123,9 +132,11 @@ export class ChatController {
     @Get('search/users')
     async searchUsers(
         @Query('q') searchTerm: string,
-        @Query('user_id') currentUserId: number,
+        @Req() req: AuthenticatedRequest,
         @Query('limit') limit?: number,
     ) {
+        const currentUserId = req.user_idx;
+
         console.log('🔍 사용자 검색 요청 받음:');
         console.log('  - 검색어:', searchTerm);
         console.log('  - 현재 사용자 ID:', currentUserId);
@@ -164,10 +175,11 @@ export class ChatController {
 
     /**
      * 읽지 않은 메시지가 있는 채팅방 목록 조회
-     * GET /api/chat/unread/:userId
+     * GET /api/chat/unread
      */
-    @Get('unread/:userId')
-    async getUnreadConversations(@Param('userId') userId: number) {
+    @Get('unread')
+    async getUnreadConversations(@Req() req: AuthenticatedRequest) {
+        const userId = req.user_idx;
         if (!userId || userId <= 0) {
             throw new HttpException('유효하지 않은 사용자 ID입니다.', HttpStatus.BAD_REQUEST);
         }
@@ -177,10 +189,11 @@ export class ChatController {
 
     /**
      * 채팅 통계 조회
-     * GET /api/chat/stats/:userId
+     * GET /api/chat/stats
      */
-    @Get('stats/:userId')
-    async getChatStats(@Param('userId') userId: number) {
+    @Get('stats')
+    async getChatStats(@Req() req: AuthenticatedRequest) {
+        const userId = req.user_idx;
         if (!userId || userId <= 0) {
             throw new HttpException('유효하지 않은 사용자 ID입니다.', HttpStatus.BAD_REQUEST);
         }
@@ -193,34 +206,30 @@ export class ChatController {
      * DELETE /api/chat/conversations
      */
     @Post('conversations/delete')
-    async deleteConversation(@Body() body: { user1_id: number; user2_id: number }) {
-        if (!body.user1_id || body.user1_id <= 0) {
-            throw new HttpException('유효하지 않은 사용자 1 ID입니다.', HttpStatus.BAD_REQUEST);
-        }
+    async deleteConversation(@Body() body: { user2_id: number }, @Req() req: AuthenticatedRequest) {
+        const user1Id = req.user_idx;
 
         if (!body.user2_id || body.user2_id <= 0) {
             throw new HttpException('유효하지 않은 사용자 2 ID입니다.', HttpStatus.BAD_REQUEST);
         }
 
-        if (body.user1_id === body.user2_id) {
+        if (user1Id === body.user2_id) {
             throw new HttpException(
                 '같은 사용자 간의 채팅방은 삭제할 수 없습니다.',
                 HttpStatus.BAD_REQUEST,
             );
         }
 
-        return await this.chatService.deleteConversation(body.user1_id, body.user2_id);
+        return await this.chatService.deleteConversation(user1Id, body.user2_id);
     }
 
     /**
      * 두 사용자 간의 채팅방 ID 조회
-     * GET /api/chat/conversation-id/:user1Id/:user2Id
+     * GET /api/chat/conversation-id/:user2Id
      */
-    @Get('conversation-id/:user1Id/:user2Id')
-    async getConversationId(@Param('user1Id') user1Id: number, @Param('user2Id') user2Id: number) {
-        if (!user1Id || user1Id <= 0) {
-            throw new HttpException('유효하지 않은 사용자 1 ID입니다.', HttpStatus.BAD_REQUEST);
-        }
+    @Get('conversation-id/:user2Id')
+    async getConversationId(@Param('user2Id') user2Id: number, @Req() req: AuthenticatedRequest) {
+        const user1Id = req.user_idx;
 
         if (!user2Id || user2Id <= 0) {
             throw new HttpException('유효하지 않은 사용자 2 ID입니다.', HttpStatus.BAD_REQUEST);
