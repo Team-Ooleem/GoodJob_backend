@@ -528,11 +528,6 @@ INSERT INTO `job_application` (`idx`, `user_idx`, `job_post_idx`, `is_viewed`, `
 (1, 1, 1, 0, NOW()),
 (2, 2, 2, 1, NOW());
 
--- 팔로우 관계
-INSERT INTO `follow` (`idx`, `follower_idx`, `following_idx`, `created_at`) VALUES
-(1, 1, 2, NOW()),
-(2, 2, 1, NOW());
-
 -- 이력서 경력
 INSERT INTO `resume_career` (`career_id`, `resume_id`, `company_name`, `position`, `is_current`, `start_date`, `end_date`, `description`) VALUES
 (1, 1, '스타트업A', '주니어 개발자', 0, '2022-03-01', '2024-12-31', 'Node.js 기반 백엔드 API 개발'),
@@ -547,15 +542,6 @@ INSERT INTO `resume_skill` (`skill_id`, `resume_id`, `skill_name`) VALUES
 (5, 2, 'Adobe XD'),
 (6, 2, 'Sketch');
 
--- 메시지 데이터
-INSERT INTO `messages` (`message_id`, `sender_id`, `receiver_id`, `content`, `created_at`) VALUES
-(1, 1, 2, '안녕하세요! 디자인 포트폴리오 잘 봤습니다.', NOW()),
-(2, 2, 1, '감사합니다! 개발 관련 질문이 있어서 메시지 드려요.', NOW());
-
--- 소셜 계정 데이터
-INSERT INTO `social_accout` (`user_idx`, `provider_id`, `created_at`) VALUES
-(1, 'google_123456789', NOW()),
-(2, 'kakao_987654321', NOW());
 
 -- 이력서 자기소개서
 INSERT INTO `resume_coverletter` (`coverletter_id`, `resume_id`, `coverletter_title`, `description`) VALUES
@@ -577,20 +563,14 @@ INSERT INTO `resume_portfolio` (`portfolio_id`, `resume_id`, `link`) VALUES
 (1, 1, 'https://github.com/kimdev'),
 (2, 2, 'https://behance.net/leedesign');
 
--- 게시글 댓글
-INSERT INTO `post_comments` (`comment_id`, `post_idx`, `user_id`, `content`, `created_at`) VALUES
-(1, 1, 2, '백엔드 공부라면 Clean Code 책 추천드려요!', NOW()),
-(2, 2, 1, '디자인 정말 깔끔하네요! 어떤 툴 사용하셨나요?', NOW());
-
--- 게시글 좋아요
-INSERT INTO `post_likes` (`like_id`, `post_idx`, `user_id`, `created_at`) VALUES
-(1, 1, 2, NOW()),
-(2, 2, 1, NOW());
-
 -- 경력 정보
 INSERT INTO `career` (`idx`, `user_idx`, `company_idx`, `position`, `is_current`, `description`, `department`, `job_title`, `start_date`, `end_date`, `carrercol`) VALUES
 (1, 1, 1, '백엔드 개발자', 0, 'Node.js 기반 API 서버 개발 및 운영', '개발팀', '주니어 개발자', '2022-03-01 09:00:00', '2024-12-31 18:00:00', NULL),
 (2, 2, 2, 'UI/UX 디자이너', 0, '웹/모바일 서비스 UI/UX 디자인', '디자인팀', '시니어 디자이너', '2023-03-01 09:00:00', '2024-12-31 18:00:00', NULL);
+
+-- =====================================================
+-- 1:1 채팅 기능을 위한 테이블들
+-- =====================================================
 
 
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

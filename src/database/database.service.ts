@@ -98,7 +98,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }
 
         try {
-            const [rows] = await this.pool.execute(sql, params);
+            // 파라미터가 없거나 빈 배열인 경우 빈 배열로 처리
+            const safeParams = params || [];
+            console.log(`🔍 실행할 SQL:`, sql);
+            console.log(`🔍 파라미터:`, safeParams);
+
+            // execute 대신 query 사용해보기
+            const [rows] = await this.pool.query(sql, safeParams);
             return rows as T[];
         } catch (error) {
             console.error('쿼리 실행 오류:', error);
