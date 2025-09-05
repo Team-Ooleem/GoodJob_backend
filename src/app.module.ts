@@ -16,6 +16,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { LocationsModule } from './locations/locations.module';
 import { SalariesModule } from './salaries/salaries.module';
 import { ProfileModule } from './profile/profile.module';
+// resume
+import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 
 @Module({
     imports: [
@@ -35,6 +37,7 @@ import { ProfileModule } from './profile/profile.module';
         LocationsModule,
         SalariesModule,
         ProfileModule,
+        CanvasModule,
     ],
     controllers: [AppController],
     providers: [AppService],
