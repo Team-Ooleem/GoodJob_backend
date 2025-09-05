@@ -89,6 +89,105 @@ export function validateImageFile(file: any): { isValid: boolean; error?: string
     return { isValid: true };
 }
 
+/* 오디오 파일 검증  */
+export function validateFile(
+    file: { size?: number },
+    maxSize: number = 20 * 1024 * 1024,
+): { isValid: boolean; error?: string } {
+    if (!file || typeof file !== 'object') {
+        return { isValid: false, error: '유효하지 않은 파일입니다.' };
+    }
+    if (file.size && file.size > maxSize) {
+        return {
+            isValid: false,
+            error: `파일 크기는 ${maxSize / (1024 * 1024)}MB를 초과할 수 없습니다.`,
+        };
+    }
+    return { isValid: true };
+}
+
+export function validateAudioFile(file: { mimetype?: string; size?: number }): {
+    isValid: boolean;
+    error?: string;
+} {
+    const baseValidation = validateFile(file);
+    if (!baseValidation.isValid) {
+        return baseValidation;
+    }
+
+    // 허용된 오디오 타입
+    const allowedMimeTypes = ['audio/webm', 'audio/wav', 'audio/mp3', 'audio/mp4', 'audio/ogg'];
+    if (file.mimetype && !allowedMimeTypes.includes(file.mimetype)) {
+        return {
+            isValid: false,
+            error: '지원되지 않는 오디오 형식입니다. (WebM, WAV, MP3, MP4, OGG만 허용)',
+        };
+    }
+
+    return { isValid: true };
+}
+
+export function fileS3Key(
+    originalName: string,
+    mimeType?: string,
+    canvasIdx?: number,
+    mentorIdx?: number,
+    menteeIdx?: number,
+    speakerTag?: number,
+): string {
+    const timestamp = Date.now();
+    const randomString = Math.random().toString(36).substring(2, 8);
+
+    // 확장자 처리
+    let extension = originalName.split('.').pop()?.toLowerCase() || '';
+    if (!extension && mimeType) {
+        const mimeMap: Record<string, string> = {
+            'audio/webm': '.webm',
+            'audio/wav': '.wav',
+            'audio/mp3': '.mp3',
+            'audio/mp4': '.mp4',
+            'audio/ogg': '.ogg',
+            'video/mp4': '.mp4',
+            'video/webm': '.webm',
+        };
+        extension = mimeMap[mimeType] || '.file';
+    }
+
+    // 파일 타입별 폴더 분류
+    let typeFolder = 'files';
+    if (mimeType) {
+        if (mimeType.startsWith('audio/')) {
+            typeFolder = 'audio';
+        } else if (mimeType.startsWith('video/')) {
+            typeFolder = 'video';
+        } else if (mimeType.startsWith('image/')) {
+            typeFolder = 'images';
+        } else if (mimeType.startsWith('application/')) {
+            typeFolder = 'documents';
+        }
+    }
+
+    // 날짜별 폴더 (월-일)
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const dateFolder = `${month}-${day}`;
+
+    // 파일명 구성: {캔버스ID}_{멘토ID}-{멘티ID}_{화자ID}_{타임스탬프}_{랜덤문자}
+    let fileName = '';
+
+    if (canvasIdx && mentorIdx && menteeIdx) {
+        const [first, second] = [mentorIdx, menteeIdx].sort((a, b) => a - b);
+        const speakerInfo = speakerTag !== undefined ? `_S${speakerTag}` : '';
+        fileName = `${canvasIdx}_${first}-${second}${speakerInfo}_${timestamp}_${randomString}`;
+    } else {
+        fileName = `${timestamp}_${randomString}`;
+    }
+    // 폴더 구조: {년도}/{월-일}/{파일타입}/{파일명}
+    return `${year}/${dateFolder}/${typeFolder}/${fileName}${extension.startsWith('.') ? extension : '.' + extension}`;
+}
+
 /**
  * 고유한 S3 키 생성
  * @param originalName 원본 파일명

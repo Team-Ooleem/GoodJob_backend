@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
+import { DatabaseService } from './database/database.service';
 import { SocialModule } from './social/social.module';
 import { AuthModule } from './auth/auth.module';
 // ai 면접 질문 관련 모듈
@@ -18,6 +19,10 @@ import { SalariesModule } from './salaries/salaries.module';
 import { ProfileModule } from './profile/profile.module';
 // resume
 import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
+
+/* stt 모듈 */
+import { STTController } from './stt/stt_controller';
+import { STTService } from './stt/stt_service';
 
 @Module({
     imports: [
@@ -39,7 +44,7 @@ import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
         ProfileModule,
         CanvasModule,
     ],
-    controllers: [AppController],
-    providers: [AppService],
+    controllers: [AppController, STTController],
+    providers: [AppService, STTService, DatabaseService],
 })
 export class AppModule {}
