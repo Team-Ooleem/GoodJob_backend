@@ -18,13 +18,24 @@ export class CanvasService {
                 userId,
             ]);
 
-            // 2. 생성자를 참여자(owner)로 등록
+            // 2. 생성자 참여자 등록 (owner)
             await conn.execute(
                 `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
                 [canvasId, userId, 'owner'],
             );
 
-            return { id: canvasId, name: dto.name, created_by: userId };
+            // 3. 다른 사람 참여자 등록 (editor)
+            await conn.execute(
+                `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
+                [canvasId, dto.participantId, 'editor'],
+            );
+
+            return {
+                id: canvasId,
+                name: dto.name,
+                created_by: userId,
+                participants: [userId, dto.participantId],
+            };
         });
     }
 }
