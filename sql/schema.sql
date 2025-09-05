@@ -812,3 +812,26 @@ CREATE TABLE `stt_speaker_segments` (
   CONSTRAINT `fk_stt_segments_session` FOREIGN KEY (`stt_session_idx`) REFERENCES `stt_transcriptions`(`stt_session_idx`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='STT 화자 세그먼트 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `canvas`;
+-- 캔버스 기본 정보
+CREATE TABLE canvas (
+    id CHAR(36) NOT NULL PRIMARY KEY,   -- UUID (문자열)
+    name VARCHAR(255) NULL,             -- 캔버스 이름
+    created_by INT NOT NULL,            -- 캔버스를 만든 유저
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(idx) ON DELETE CASCADE
+);
+
+DROP TABLE IF EXISTS `canvas_participant`;
+-- 캔버스 참여자 정보
+CREATE TABLE canvas_participant (
+    canvas_id CHAR(36) NOT NULL,        -- 캔버스 ID
+    user_id INT NOT NULL,               -- 참여자 유저 ID
+    role ENUM('owner','editor','viewer') DEFAULT 'editor',
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (canvas_id, user_id),
+    FOREIGN KEY (canvas_id) REFERENCES canvas(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE CASCADE
+);
+

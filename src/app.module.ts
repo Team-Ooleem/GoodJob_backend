@@ -17,6 +17,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { LocationsModule } from './locations/locations.module';
 import { SalariesModule } from './salaries/salaries.module';
 import { ProfileModule } from './profile/profile.module';
+// resume
+import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 
 /* stt 모듈 */
 import { STTController } from './stt/stt_controller';
@@ -40,6 +42,7 @@ import { STTService } from './stt/stt_service';
         LocationsModule,
         SalariesModule,
         ProfileModule,
+        CanvasModule,
     ],
     controllers: [AppController, STTController],
     providers: [AppService, STTService, DatabaseService],
