@@ -775,3 +775,40 @@ CREATE TABLE `job_application` (
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2025-09-01 11:12:08
+
+
+/* STT 데이터 */
+DROP TABLE IF EXISTS `stt_transcriptions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `stt_transcriptions` (
+  `stt_session_idx` INT NOT NULL AUTO_INCREMENT COMMENT '세션 고유 ID',
+  `canvas_idx` INT NOT NULL COMMENT '캔버스 ID ',
+  `mentor_idx` INT NOT NULL COMMENT '멘토 user_id',
+  `mentee_idx` INT NOT NULL COMMENT '멘티 user_id',
+  `audio_url` TEXT NOT NULL COMMENT '오디오 파일 URL',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시간',
+  PRIMARY KEY (`stt_session_idx`),
+  KEY `mentor_idx_idx` (`mentor_idx`),
+  KEY `mentee_idx_idx` (`mentee_idx`),
+  CONSTRAINT `fk_stt_transcriptions_mentor` FOREIGN KEY (`mentor_idx`) REFERENCES `users`(`user_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_stt_transcriptions_mentee` FOREIGN KEY (`mentee_idx`) REFERENCES `users`(`user_id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='STT 세션 테이블';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+DROP TABLE IF EXISTS `stt_speaker_segments`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `stt_speaker_segments` (
+  `segment_idx` INT NOT NULL AUTO_INCREMENT COMMENT '세그먼트 고유 ID',
+  `stt_session_idx` INT NOT NULL COMMENT '세션 ID (FK)',
+  `speaker_idx` INT NOT NULL COMMENT '화자 번호 (0=멘토, 1=멘티)',
+  `text_content` TEXT NOT NULL COMMENT '인식된 텍스트',
+  `start_time` DECIMAL(10,3) NOT NULL COMMENT '시작 시각 (초)',
+  `end_time` DECIMAL(10,3) NOT NULL COMMENT '종료 시각 (초)',
+  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시간',
+  PRIMARY KEY (`segment_idx`),
+  KEY `stt_session_idx_idx` (`stt_session_idx`),
+  CONSTRAINT `fk_stt_segments_session` FOREIGN KEY (`stt_session_idx`) REFERENCES `stt_transcriptions`(`stt_session_idx`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='STT 화자 세그먼트 테이블';
+/*!40101 SET character_set_client = @saved_cs_client */;
