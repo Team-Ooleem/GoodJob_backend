@@ -791,8 +791,8 @@ CREATE TABLE `stt_transcriptions` (
   PRIMARY KEY (`stt_session_idx`),
   KEY `mentor_idx_idx` (`mentor_idx`),
   KEY `mentee_idx_idx` (`mentee_idx`),
-  CONSTRAINT `fk_stt_transcriptions_mentor` FOREIGN KEY (`mentor_idx`) REFERENCES `users`(`user_id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_stt_transcriptions_mentee` FOREIGN KEY (`mentee_idx`) REFERENCES `users`(`user_id`) ON DELETE CASCADE
+  CONSTRAINT `fk_stt_transcriptions_mentor` FOREIGN KEY (`mentor_idx`) REFERENCES `users`(`idx`) ON DELETE CASCADE,
+  CONSTRAINT `fk_stt_transcriptions_mentee` FOREIGN KEY (`mentee_idx`) REFERENCES `users`(`idx`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='STT 세션 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
