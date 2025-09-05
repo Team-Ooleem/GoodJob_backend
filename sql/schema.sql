@@ -775,3 +775,26 @@ CREATE TABLE `job_application` (
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2025-09-01 11:12:08
+
+
+DROP TABLE IF EXISTS `canvas`;
+-- 캔버스 기본 정보
+CREATE TABLE canvas (
+    id CHAR(36) NOT NULL PRIMARY KEY,   -- UUID (문자열)
+    name VARCHAR(255) NULL,             -- 캔버스 이름
+    created_by INT NOT NULL,            -- 캔버스를 만든 유저
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(idx) ON DELETE CASCADE
+);
+
+DROP TABLE IF EXISTS `canvas_participant`;
+-- 캔버스 참여자 정보
+CREATE TABLE canvas_participant (
+    canvas_id CHAR(36) NOT NULL,        -- 캔버스 ID
+    user_id INT NOT NULL,               -- 참여자 유저 ID
+    role ENUM('owner','editor','viewer') DEFAULT 'editor',
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (canvas_id, user_id),
+    FOREIGN KEY (canvas_id) REFERENCES canvas(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE CASCADE
+);
