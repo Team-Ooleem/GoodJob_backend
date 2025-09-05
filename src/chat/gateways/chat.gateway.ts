@@ -25,14 +25,34 @@ import { ChatService } from '../services/chat.service';
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;
 
+    // 사용자 ID와 소켓 매핑을 위한 Map
+    private userSocketMap = new Map<number, Socket>();
+
     constructor(private readonly chatService: ChatService) {}
 
     handleConnection(client: Socket) {
         console.log('✅ 채팅 클라이언트 연결됨:', client.id);
+
+        // 클라이언트에서 사용자 ID를 전송하도록 기다림
+        client.on('register_user', (userId: number) => {
+            if (userId && userId > 0) {
+                this.userSocketMap.set(userId, client);
+                console.log(`👤 사용자 ${userId}가 채팅에 등록됨`);
+            }
+        });
     }
 
     handleDisconnect(client: Socket) {
         console.log('❌ 채팅 클라이언트 연결 해제됨:', client.id);
+
+        // 연결 해제된 소켓을 사용자 매핑에서 제거
+        for (const [userId, socket] of this.userSocketMap.entries()) {
+            if (socket.id === client.id) {
+                this.userSocketMap.delete(userId);
+                console.log(`👤 사용자 ${userId}가 채팅에서 제거됨`);
+                break;
+            }
+        }
     }
 
     /**
@@ -99,8 +119,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
                 messageData,
             });
 
-            // 모든 연결된 클라이언트에게 메시지 브로드캐스트
-            this.server.emit('receive_message', messageData);
+            // 수신자에게만 메시지 전송
+            const receiverSocket = this.userSocketMap.get(receiverId);
+            if (receiverSocket) {
+                receiverSocket.emit('receive_message', messageData);
+                console.log(`📤 메시지 전송됨: ${senderId} → ${receiverId}`);
+            } else {
+                console.log(`⚠️ 수신자 ${receiverId}가 온라인이 아닙니다.`);
+            }
 
             console.log(`💬 메시지 저장됨: ${senderId} → ${receiverId} (${content.length}자)`);
         } catch (error) {
