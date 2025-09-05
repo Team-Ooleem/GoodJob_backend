@@ -11,6 +11,10 @@ import { AiModule } from './ai/ai.module';
 import { CollabModule } from './modules/collab/collab.module';
 import { UsersModule } from './users/users.module';
 import { ChatModule } from './chat/chat.module';
+import { JobsModule } from './jobs/jobs.module';
+import { LocationsModule } from './locations/locations.module';
+import { SalariesModule } from './salaries/salaries.module';
+import { ProfileModule } from './profile/profile.module';
 
 @Module({
     imports: [
@@ -25,6 +29,10 @@ import { ChatModule } from './chat/chat.module';
         CollabModule,
         UsersModule,
         ChatModule,
+        JobsModule,
+        LocationsModule,
+        SalariesModule,
+        ProfileModule,
     ],
     controllers: [AppController],
     providers: [AppService],
