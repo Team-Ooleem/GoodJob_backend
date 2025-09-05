@@ -4,6 +4,7 @@ import {
     Get,
     Post,
     Body,
+    Delete,
     BadRequestException,
     InternalServerErrorException,
     Logger,
@@ -458,6 +459,43 @@ export class STTController {
             });
 
         return contextTexts.join(' ');
+    }
+
+    // stt.controller.ts에 추가
+    @Delete('canvas/:canvasIdx')
+    async deleteCanvas(@Param('canvasIdx') canvasIdx: number) {
+        try {
+            // 1. 해당 캔버스의 모든 STT 세션 조회
+            const sessions = await this.databaseService.query(
+                'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_idx = ?',
+                [canvasIdx],
+            );
+
+            // 2. 각 세션의 화자 세그먼트 삭제
+            for (const session of sessions as { stt_session_idx: number }[]) {
+                await this.databaseService.query(
+                    'DELETE FROM stt_speaker_segments WHERE stt_session_idx = ?',
+                    [session.stt_session_idx],
+                );
+            }
+
+            // 3. STT 세션 삭제
+            await this.databaseService.query(
+                'DELETE FROM stt_transcriptions WHERE canvas_idx = ?',
+                [canvasIdx],
+            );
+
+            // 4. 세션 정보 삭제 (있다면)
+            await this.databaseService.query('DELETE FROM sessions WHERE canvas_idx = ?', [
+                canvasIdx,
+            ]);
+
+            return { success: true, message: `캔버스 ${canvasIdx} 삭제 완료` };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`캔버스 삭제 실패: ${message}`);
+            throw new InternalServerErrorException('캔버스 삭제 실패');
+        }
     }
 
     // 기존 메서드들...
