@@ -26,6 +26,9 @@ import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 import { STTController } from './stt/stt_controller';
 import { STTService } from './stt/stt_service';
 
+/* tts 모듈 */
+import { TTSModule } from './tts/tts.module';
+
 @Module({
     imports: [
         ConfigModule.forRoot({
@@ -46,6 +49,7 @@ import { STTService } from './stt/stt_service';
         ProfileModule,
         CanvasModule,
         SocialModule,
+        TTSModule,
     ],
     controllers: [AppController, STTController],
     providers: [

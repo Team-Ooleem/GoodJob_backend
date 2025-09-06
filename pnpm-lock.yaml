@@ -14,6 +14,9 @@ importers:
       '@google-cloud/speech':
         specifier: ^7.2.0
         version: 7.2.0
+      '@google-cloud/text-to-speech':
+        specifier: ^6.3.0
+        version: 6.3.0
       '@nestjs/axios':
         specifier: ^4.0.1
         version: 4.0.1(@nestjs/common@11.1.6(class-transformer@0.5.1)(class-validator@0.14.2)(reflect-metadata@0.2.2)(rxjs@7.8.2))(axios@1.11.0)(rxjs@7.8.2)
@@ -626,6 +629,10 @@ packages:
 
   '@google-cloud/speech@7.2.0':
     resolution: {integrity: sha512-bklwpRJlZH6XPsljFkaibeTx5JsbMQZPlhMxTAITs8uY/EOqUkockhQscgpRC4A6Jdl7iHTZfZbYqHRaClS5Mg==}
+    engines: {node: '>=18'}
+
+  '@google-cloud/text-to-speech@6.3.0':
+    resolution: {integrity: sha512-Yy3+vKYFs1/oGWWDQoonvaUc8beDObcZFl+HCMjSu5+Okld2Bk8gjNekv37f5posRlQSN65xF7h5m8r2jmXJZg==}
     engines: {node: '>=18'}
 
   '@grpc/grpc-js@1.13.4':
@@ -5025,6 +5032,12 @@ snapshots:
       pumpify: 2.0.1
       stream-events: 1.0.5
       uuid: 11.1.0
+    transitivePeerDependencies:
+      - supports-color
+
+  '@google-cloud/text-to-speech@6.3.0':
+    dependencies:
+      google-gax: 5.0.3
     transitivePeerDependencies:
       - supports-color
 

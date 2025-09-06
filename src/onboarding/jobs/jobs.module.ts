@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
-import { DatabaseModule } from '../database/database.module';
+import { DatabaseModule } from '../../database/database.module';
 
 @Module({
     imports: [DatabaseModule], // 데이터베이스 연결을 위해 임포트
