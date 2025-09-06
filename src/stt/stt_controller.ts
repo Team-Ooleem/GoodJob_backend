@@ -95,6 +95,34 @@ interface SessionUserResponse {
     };
 }
 
+interface TranscribeChunkRequest {
+    audioData: string;
+    mimeType: string;
+    canvasIdx: number;
+    chunkIdx: number;
+    mentorIdx: number;
+    menteeIdx: number;
+    duration?: number;
+}
+interface ChunkResponse {
+    success: boolean;
+    chunkIndex: number;
+    s3Url: string;
+    sttSessionIdx: number;
+    speakers: Array<{
+        speakerTag: number;
+        textContent: string;
+        startTime: number;
+        endTime: number;
+    }>;
+}
+
+interface MergeChunksRequest {
+    canvasIdx: number;
+    mentorIdx: number;
+    menteeIdx: number;
+}
+
 @Controller('stt')
 export class STTController {
     private readonly logger = new Logger(STTController.name);
@@ -272,24 +300,16 @@ export class STTController {
 
     // 세션별 채팅 메시지 목록 조회
     @Get('session-messages/:canvasIdx')
-    async getSessionMessages(@Param('canvasIdx') canvasIdx: number): Promise<ChatMessagesResponse> {
+    async getSessionMessages(@Param('canvasIdx') canvasIdx: string): Promise<ChatMessagesResponse> {
         try {
+            // 최종 세션만 조회 (audio_url에 'final' 포함)
             const sessions = await this.databaseService.query(
-                `
-                SELECT 
-                    st.stt_session_idx,
-                    st.mentor_idx,     
-                    st.mentee_idx,     
-                    st.audio_url,
-                    st.created_at,
-                    mentor.name as mentor_name,
-                    mentee.name as mentee_name
-                FROM stt_transcriptions st
-                JOIN users mentor ON st.mentor_idx = mentor.idx
-                JOIN users mentee ON st.mentee_idx = mentee.idx
-                WHERE st.canvas_idx = ?
-                ORDER BY st.created_at DESC
-            `,
+                `SELECT st.*, mentor.name as mentor_name, mentee.name as mentee_name
+                 FROM stt_transcriptions st
+                 JOIN users mentor ON st.mentor_idx = mentor.idx
+                 JOIN users mentee ON st.mentee_idx = mentee.idx
+                 WHERE st.canvas_idx = ? AND st.audio_url LIKE '%final%'
+                 ORDER BY st.created_at DESC`,
                 [canvasIdx],
             );
 
@@ -316,7 +336,7 @@ export class STTController {
                         mentor: session.mentor_name,
                         mentee: session.mentee_name,
                     },
-                    canvasIdx: canvasIdx,
+                    canvasIdx: parseInt(canvasIdx, 10),
                 });
             }
 
@@ -632,5 +652,199 @@ export class STTController {
             startTime: speaker.startTime,
             endTime: speaker.endTime,
         }));
+    }
+
+    @Post('transcribe-chunk')
+    async transcribeChunk(@Body() body: TranscribeChunkRequest): Promise<ChunkResponse> {
+        const startTime = Date.now();
+        const { audioData, mimeType, canvasIdx, chunkIdx, mentorIdx, menteeIdx, duration } = body;
+
+        try {
+            // 1. Base64를 Buffer로 변환
+            const audioBuffer = Buffer.from(audioData, 'base64');
+
+            // 2. S3 키 생성 (fileS3Key 함수 사용)
+            const s3Key = fileS3Key(
+                `recording-chunk-${chunkIdx}`,
+                mimeType,
+                canvasIdx,
+                mentorIdx,
+                menteeIdx,
+                undefined, // speakerTag는 STT에서 결정
+            );
+            const s3Result = await uploadFileToS3(audioBuffer, s3Key, mimeType);
+
+            // 3. STT 처리
+            const sttResult = await this.sttService.transcribeAudioBuffer(audioBuffer, mimeType);
+
+            // 4. 시간 정규화 (duration이 있으면)
+            let normalizedSpeakers = sttResult.speakers || [];
+            if (duration && duration > 0) {
+                normalizedSpeakers = this.sttService.normalizeTimings(normalizedSpeakers, duration);
+            }
+
+            // 5. 화자 매핑
+            const mappedSpeakers = this.mapSpeakersToUsers(
+                normalizedSpeakers,
+                mentorIdx,
+                menteeIdx,
+            );
+
+            // 6. 청크 세션을 DB에 저장
+            const chunkSessionIdx = await this.databaseService.query(
+                `INSERT INTO stt_transcriptions 
+             (canvas_idx, mentor_idx, mentee_idx, audio_url, created_at) 
+             VALUES (?, ?, ?, ?, NOW())`,
+                [canvasIdx, mentorIdx, menteeIdx, s3Result.url],
+            );
+
+            // 7. 화자 세그먼트 저장 (시간 오프셋 적용)
+            const timeOffset = chunkIdx * 300; // 5분 = 300초
+            for (const segment of mappedSpeakers) {
+                await this.databaseService.query(
+                    `INSERT INTO stt_speaker_segments 
+                 (stt_session_idx, speaker_idx, text_content, start_time, end_time, created_at) 
+                 VALUES (?, ?, ?, ?, ?, NOW())`,
+                    [
+                        chunkSessionIdx,
+                        segment.userId === mentorIdx ? 0 : 1,
+                        segment.text_Content,
+                        segment.startTime + timeOffset,
+                        segment.endTime + timeOffset,
+                    ],
+                );
+            }
+
+            const chunkProcessingTime = Date.now() - startTime;
+            this.logger.log(`청크 STT 처리 시간: ${chunkProcessingTime}ms`);
+
+            return {
+                success: true,
+                chunkIndex: chunkIdx,
+                s3Url: s3Result.url || '',
+                sttSessionIdx:
+                    typeof chunkSessionIdx === 'object' && 'insertId' in chunkSessionIdx
+                        ? (chunkSessionIdx as { insertId: number }).insertId
+                        : 0,
+                speakers: mappedSpeakers.map((seg) => ({
+                    speakerTag: seg.userId === mentorIdx ? 0 : 1,
+                    textContent: seg.text_Content,
+                    startTime: seg.startTime + timeOffset,
+                    endTime: seg.endTime + timeOffset,
+                })),
+            };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`청크 STT 실패: ${message}`);
+            throw new InternalServerErrorException(`청크 STT 처리 실패: ${message}`);
+        }
+    }
+
+    @Post('merge-chunks')
+    async mergeChunks(@Body() body: MergeChunksRequest): Promise<STTWithContextResponse> {
+        const { canvasIdx, mentorIdx, menteeIdx } = body;
+        const startTime = Date.now();
+
+        try {
+            // 1. 모든 청크 조회 (created_at으로 정렬)
+            const chunks = await this.databaseService.query(
+                `SELECT * FROM stt_transcriptions 
+             WHERE canvas_idx = ? 
+             ORDER BY created_at`,
+                [canvasIdx],
+            );
+
+            if (chunks.length === 0) {
+                throw new BadRequestException('병합할 청크가 없습니다');
+            }
+
+            // 2. 모든 화자 세그먼트 조회
+            const allSpeakers = Array<{
+                speaker_idx: number;
+                text_content: string;
+                start_time: number;
+                end_time: number;
+            }>();
+            for (const chunk of chunks) {
+                const segments = await this.databaseService.query(
+                    `SELECT * FROM stt_speaker_segments 
+                 WHERE stt_session_idx = ? 
+                 ORDER BY start_time`,
+                    [(chunk as { stt_session_idx: number }).stt_session_idx],
+                );
+                allSpeakers.push(
+                    ...(segments as {
+                        speaker_idx: number;
+                        text_content: string;
+                        start_time: number;
+                        end_time: number;
+                    }[]),
+                );
+            }
+
+            // 3. 최종 세션 생성 (fileS3Key 함수 사용)
+            const finalTimestamp = Date.now();
+            const finalS3Key = fileS3Key(
+                `recording-final-${finalTimestamp}`,
+                'audio/webm',
+                canvasIdx,
+                mentorIdx,
+                menteeIdx,
+                undefined,
+            );
+            const finalS3Result = await uploadFileToS3(Buffer.alloc(0), finalS3Key, 'audio/webm');
+
+            const finalSessionIdx = await this.databaseService.query(
+                `INSERT INTO stt_transcriptions 
+             (canvas_idx, mentor_idx, mentee_idx, audio_url, created_at) 
+             VALUES (?, ?, ?, ?, NOW())`,
+                [canvasIdx, mentorIdx, menteeIdx, finalS3Result.url],
+            );
+
+            // 4. 화자 세그먼트를 최종 세션으로 이동
+            for (const segment of allSpeakers) {
+                await this.databaseService.query(
+                    `INSERT INTO stt_speaker_segments 
+                 (stt_session_idx, speaker_idx, text_content, start_time, end_time, created_at) 
+                 VALUES (?, ?, ?, ?, ?, NOW())`,
+                    [
+                        (finalSessionIdx as unknown as { insertId: number }).insertId,
+                        segment.speaker_idx,
+                        segment.text_content,
+                        segment.start_time,
+                        segment.end_time,
+                    ],
+                );
+            }
+
+            // 5. 컨텍스트 텍스트 생성
+            const contextText = this.extractContextText(
+                allSpeakers.map((seg) => ({
+                    speakerTag: seg.speaker_idx,
+                    text: seg.text_content,
+                    startTime: seg.start_time,
+                    endTime: seg.end_time,
+                })),
+            );
+
+            return {
+                success: true,
+                timestamp: new Date().toISOString(),
+                processingTime: Date.now() - startTime,
+                sttSessionIdx: (finalSessionIdx as unknown as { insertId: number }).insertId,
+                contextText,
+                audioUrl: finalS3Result.url || '',
+                speakers: allSpeakers.map((seg) => ({
+                    speakerTag: seg.speaker_idx,
+                    textContent: seg.text_content,
+                    startTime: seg.start_time,
+                    endTime: seg.end_time,
+                })),
+            };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`청크 병합 실패: ${message}`);
+            throw new InternalServerErrorException(`청크 병합 실패: ${message}`);
+        }
     }
 }

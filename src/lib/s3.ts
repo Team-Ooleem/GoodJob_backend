@@ -180,11 +180,15 @@ export function fileS3Key(
     if (canvasIdx && mentorIdx && menteeIdx) {
         const [first, second] = [mentorIdx, menteeIdx].sort((a, b) => a - b);
         const speakerInfo = speakerTag !== undefined ? `_S${speakerTag}` : '';
-        fileName = `${canvasIdx}_${first}-${second}${speakerInfo}_${timestamp}_${randomString}`;
+        fileName = `C${canvasIdx}_${first}-${second}${speakerInfo}_${timestamp}_${randomString}`;
+    } else if (canvasIdx) {
+        // 캔버스 ID만 있는 경우
+        fileName = `C${canvasIdx}_${timestamp}_${randomString}`;
     } else {
         fileName = `${timestamp}_${randomString}`;
     }
-    // 폴더 구조: {년도}/{월-일}/{파일타입}/{파일명}
+
+    // 기본 폴더 구조: {년도}/{월-일}/{파일타입}/{파일명}
     return `${year}/${dateFolder}/${typeFolder}/${fileName}${extension.startsWith('.') ? extension : '.' + extension}`;
 }
 
