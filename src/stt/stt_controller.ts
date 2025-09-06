@@ -223,7 +223,7 @@ export class STTController {
                 values (?, ?, ?, ?, ?, NOW())`,
                     [
                         sttSessionIdx,
-                        segment.userId,
+                        segment.userId === mentorIdx ? 0 : 1,
                         segment.text_Content,
                         segment.startTime,
                         segment.endTime,
@@ -627,7 +627,7 @@ export class STTController {
         if (!speakers) return [];
 
         return speakers.map((speaker) => ({
-            userId: speaker.speakerTag === 0 ? mentorIdx : menteeIdx,
+            userId: speaker.speakerTag === 1 ? mentorIdx : menteeIdx,
             text_Content: speaker.text_Content,
             startTime: speaker.startTime,
             endTime: speaker.endTime,
