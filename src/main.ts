@@ -1,12 +1,3 @@
-// import { NestFactory } from '@nestjs/core';
-// import { AppModule } from './app.module';
-
-// async function bootstrap() {
-//     const app = await NestFactory.create(AppModule);
-//     await app.listen(process.env.PORT ?? 3000);
-// }
-// bootstrap();
-
 // src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
@@ -26,7 +17,13 @@ async function bootstrap() {
     app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
     app.enableCors({
-        origin: ['https://example.com', 'http://localhost:3000', 'http://localhost:3001'],
+        origin: [
+            'https://example.com',
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://localhost:4000',
+            'https://localhost:3443',
+        ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
         credentials: true,
     });

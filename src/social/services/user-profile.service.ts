@@ -13,7 +13,7 @@ export interface UserProfileInfo {
     email?: string;
     desiredJobTitle?: string;
     desiredLocation?: string;
-    desiredSalary?: number;
+    desiredSalary?: string;
     followerCount: number;
     followingCount: number;
     isFollowing?: boolean; // 현재 사용자가 이 사용자를 팔로우하고 있는지 여부
@@ -101,7 +101,7 @@ export class UserProfileService {
             // 직종 정보 조회
             let desiredJobTitle = '직종 미설정';
             let desiredLocation = '거주지 미설정';
-            let desiredSalary: number | undefined;
+            let desiredSalary: string | undefined;
 
             if (profileResult && profileResult.length > 0) {
                 const profile = profileResult[0] as {
@@ -133,7 +133,16 @@ export class UserProfileService {
                     }
                 }
 
-                desiredSalary = profile.desired_salary;
+                // 희망 연봉 정보 조회 (salary_range 테이블과 JOIN)
+                if (profile.desired_salary) {
+                    const salaryResult = await this.databaseService.query(
+                        UserProfileQueries.getSalaryRange,
+                        [profile.desired_salary],
+                    );
+                    if (salaryResult && salaryResult.length > 0) {
+                        desiredSalary = (salaryResult[0] as { display_text: string }).display_text;
+                    }
+                }
             }
 
             // 팔로워/팔로잉 수 조회

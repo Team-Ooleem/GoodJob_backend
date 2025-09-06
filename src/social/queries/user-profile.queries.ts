@@ -29,6 +29,13 @@ export const UserProfileQueries = {
         WHERE s.sido_code = ? AND g.gu_code = ?
     `,
 
+    // 연봉 범위 정보 조회
+    getSalaryRange: `
+        SELECT display_text
+        FROM salary_range
+        WHERE idx = ?
+    `,
+
     // 현재 경력 정보 조회 (현재 재직 중인 회사)
     getCurrentCareer: `
         SELECT 

@@ -7,7 +7,9 @@ import {
     Body,
     HttpException,
     HttpStatus,
+    Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import {
     CommentService,
     AddCommentRequest,
@@ -16,6 +18,10 @@ import {
     DeleteCommentResponse,
     GetCommentsResponse,
 } from '../services/comment.service';
+
+interface AuthenticatedRequest extends Request {
+    user_idx: number;
+}
 
 @Controller('social')
 export class CommentController {
@@ -47,17 +53,19 @@ export class CommentController {
     /**
      * 댓글 추가
      * POST /social/posts/:postId/comments
-     * Body: { userId: number, content: string }
+     * Body: { content: string }
      */
     @Post('posts/:postId/comments')
     async addComment(
         @Param('postId', ParseIntPipe) postId: number,
-        @Body() body: { userId: number; content: string },
+        @Body() body: { content: string },
+        @Req() req: AuthenticatedRequest,
     ): Promise<AddCommentResponse> {
         try {
+            const userId = req.user_idx;
             const request: AddCommentRequest = {
                 postId,
-                userId: body.userId,
+                userId,
                 content: body.content,
             };
 
@@ -96,17 +104,17 @@ export class CommentController {
     /**
      * 댓글 삭제
      * POST /social/comments/:commentId/delete
-     * Body: { userId: number }
      */
     @Post('comments/:commentId/delete')
     async deleteComment(
         @Param('commentId', ParseIntPipe) commentId: number,
-        @Body() body: { userId: number },
+        @Req() req: AuthenticatedRequest,
     ): Promise<DeleteCommentResponse> {
         try {
+            const userId = req.user_idx;
             const request: DeleteCommentRequest = {
                 commentId,
-                userId: body.userId,
+                userId,
             };
 
             const result = await this.commentService.deleteComment(request);
