@@ -75,7 +75,7 @@ export class AuthController {
         const isProd = process.env.NODE_ENV === 'production';
         res.cookie('session', sessionJwt, {
             httpOnly: true,
-            secure: isProd, // 개발환경: false, 운영환경: true
+            secure: false, // 개발환경: false, 운영환경: true
             sameSite: 'lax', // 프론트/백이 같은 사이트면 Lax로 충분
             path: '/',
             maxAge: 7 * 24 * 60 * 60 * 1000,
