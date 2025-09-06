@@ -711,8 +711,8 @@ CREATE TABLE `job_application` (
 DROP TABLE IF EXISTS `stt_transcriptions`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `stt_transcriptions` (
-  `stt_session_idx` INT NOT NULL AUTO_INCREMENT COMMENT '세션 고유 ID',
+CREATE TABLE `stt_transcriptions` (  -- 백틱(`) 사용
+  `stt_session_idx` INT NOT NULL AUTO_INCREMENT COMMENT '세션 고유 ID',  -- AUTO_INCREMENT 추가
   `canvas_idx` INT NOT NULL COMMENT '캔버스 ID ',
   `mentor_idx` INT NOT NULL COMMENT '멘토 user_id',
   `mentee_idx` INT NOT NULL COMMENT '멘티 user_id',
@@ -722,7 +722,7 @@ CREATE TABLE `stt_transcriptions` (
   KEY `mentor_idx_idx` (`mentor_idx`),
   KEY `mentee_idx_idx` (`mentee_idx`),
   CONSTRAINT `fk_stt_transcriptions_mentor` FOREIGN KEY (`mentor_idx`) REFERENCES `users`(`idx`) ON DELETE CASCADE,
-CONSTRAINT `fk_stt_transcriptions_mentee` FOREIGN KEY (`mentee_idx`) REFERENCES `users`(`idx`) ON DELETE CASCADE
+  CONSTRAINT `fk_stt_transcriptions_mentee` FOREIGN KEY (`mentee_idx`) REFERENCES `users`(`idx`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='STT 세션 테이블';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
