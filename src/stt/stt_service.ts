@@ -2,12 +2,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SpeechClient } from '@google-cloud/speech';
 
-// 실시간 녹음 처리를 위한 새로운 인터페이스
 export interface STTResult {
     transcript: string;
     confidence: number;
     speakers?: Array<{
-        text_Content: string; // DB 컬럼명과 일치 (snake_case)
+        text_Content: string;
         startTime: number;
         endTime: number;
         speakerTag: number;
@@ -28,10 +27,10 @@ interface Duration {
 }
 
 interface GoogleSpeechWordInfo {
-    speaker: string;
+    word: string;
     startTime?: Duration;
     endTime?: Duration;
-    speakerTag?: number; // 화자 태그 추가
+    speakerTag?: number;
 }
 
 interface ConnectionTestResult {
@@ -84,126 +83,199 @@ export class STTService {
         }
     }
 
-    private processWordTimings(wordSegments?: GoogleSpeechWordInfo[]) {
-        if (!wordSegments || !Array.isArray(wordSegments)) {
-            return [];
-        }
+    // 타이밍 정규화
+    normalizeTimings(
+        speakers: Array<{
+            text_Content: string;
+            startTime: number;
+            endTime: number;
+            speakerTag: number;
+        }>,
+        actualDuration: number,
+    ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
+        if (speakers.length === 0) return speakers;
 
-        // 더 강력한 필터링
+        const maxSttTime = Math.max(...speakers.map((s) => s.endTime));
+        const scaleFactor = actualDuration / maxSttTime;
+
+        return speakers.map((speaker) => ({
+            ...speaker,
+            startTime: speaker.startTime * scaleFactor,
+            endTime: speaker.endTime * scaleFactor,
+        }));
+    }
+
+    private processWordTimings(wordSegments?: GoogleSpeechWordInfo[], sessionStartTimeOffset = 0) {
+        if (!wordSegments || !Array.isArray(wordSegments)) return [];
+
         const filteredWordSegments = wordSegments
-            .filter((wordSegment: { speaker: string }) => {
-                const textContent = wordSegment.speaker || '';
+            .filter((w) => {
+                const text = w.word || '';
                 return (
-                    textContent.trim() &&
-                    textContent.length > 1 && // 2글자 이상만
-                    !['아', '어', '음', '으'].includes(textContent) && // 감탄사 제거
-                    textContent !== '▁' &&
-                    textContent !== ' '
+                    text.trim() &&
+                    text.length > 1 &&
+                    !['아', '어', '음', '으'].includes(text) &&
+                    text !== '▁' &&
+                    text !== ' '
                 );
             })
-            .map((wordSegment) => ({
-                text_Content: (wordSegment.speaker || '').replace(/^▁/, '').trim(),
-                startTime: this.convertDurationToSeconds(wordSegment.startTime),
-                endTime: this.convertDurationToSeconds(wordSegment.endTime),
-                speakerTag: wordSegment.speakerTag || 0, // 실제 화자 태그 사용
+            .map((w) => ({
+                text_Content: (w.word || '').replace(/^▁/, '').trim(),
+                startTime: this.convertDurationToSeconds(w.startTime) + sessionStartTimeOffset,
+                endTime: this.convertDurationToSeconds(w.endTime) + sessionStartTimeOffset,
+                speakerTag: w.speakerTag || 1,
             }))
-            .filter((wordSegment) => wordSegment.text_Content.length > 0);
+            .filter((w) => w.text_Content.length > 0);
 
-        return filteredWordSegments;
+        return this.groupWordsIntoSentences(filteredWordSegments);
+    }
+
+    private groupWordsIntoSentences(
+        wordSegments: Array<{
+            text_Content: string;
+            startTime: number;
+            endTime: number;
+            speakerTag: number;
+        }>,
+    ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
+        if (wordSegments.length === 0) return [];
+
+        const sentences: Array<{
+            text_Content: string;
+            startTime: number;
+            endTime: number;
+            speakerTag: number;
+        }> = [];
+        let currentSentence = '';
+        let currentSpeaker = wordSegments[0].speakerTag;
+        let sentenceStartTime = wordSegments[0].startTime;
+        let sentenceEndTime = wordSegments[0].endTime;
+        let wordCount = 0;
+
+        const PAUSE_THRESHOLD = 1.2; // 초 단위
+        const MIN_WORDS_PER_SENTENCE = 3;
+
+        for (let i = 0; i < wordSegments.length; i++) {
+            const word = wordSegments[i];
+            const prevEndTime = i > 0 ? wordSegments[i - 1].endTime : word.startTime;
+
+            const isNewSentence =
+                word.speakerTag !== currentSpeaker ||
+                (i > 0 &&
+                    word.startTime - prevEndTime > PAUSE_THRESHOLD &&
+                    wordCount >= MIN_WORDS_PER_SENTENCE);
+
+            if (isNewSentence) {
+                if (currentSentence.trim().length > 0) {
+                    sentences.push({
+                        text_Content: currentSentence.trim(),
+                        startTime: sentenceStartTime,
+                        endTime: sentenceEndTime,
+                        speakerTag: currentSpeaker,
+                    });
+                }
+                currentSentence = word.text_Content;
+                currentSpeaker = word.speakerTag;
+                sentenceStartTime = word.startTime;
+                sentenceEndTime = word.endTime;
+                wordCount = 1;
+            } else {
+                currentSentence += ' ' + word.text_Content;
+                sentenceEndTime = word.endTime;
+                wordCount += 1;
+            }
+        }
+
+        if (currentSentence.trim().length > 0) {
+            sentences.push({
+                text_Content: currentSentence.trim(),
+                startTime: sentenceStartTime,
+                endTime: sentenceEndTime,
+                speakerTag: currentSpeaker,
+            });
+        }
+
+        return sentences;
     }
 
     private createWordsFromTranscript(
         transcript: string,
+        sessionStartTimeOffset = 0,
     ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
-        if (!transcript.trim()) {
-            return [];
-        }
-
+        if (!transcript.trim()) return [];
         const textSegments = transcript
             .replace(/[.,!?;:]/g, ' ')
             .split(/\s+/)
-            .filter((textSegment) => textSegment.trim().length > 0);
-
-        return textSegments.map((textSegment, index) => ({
-            text_Content: textSegment.trim(),
-            startTime: index * 1,
-            endTime: (index + 1) * 1,
-            speakerTag: 0, // 기본값으로 화자 0 설정
+            .filter((t) => t.trim().length > 0);
+        const wordDuration = 1; // fallback 1초 단위
+        return textSegments.map((text, idx) => ({
+            text_Content: text.trim(),
+            startTime: sessionStartTimeOffset + idx * wordDuration,
+            endTime: sessionStartTimeOffset + (idx + 1) * wordDuration,
+            speakerTag: 1,
         }));
     }
 
-    async transcribeBase64Audio(base64Data: string, mimeType = 'audio/wav'): Promise<STTResult> {
-        if (!this.speechClient) {
-            return this.createSampleResult();
-        }
+    private getAudioConfig(mimeType: string) {
+        if (mimeType.includes('mp3')) return { encoding: 'MP3', sampleRate: 44100 };
+        if (mimeType.includes('webm')) return { encoding: 'WEBM_OPUS', sampleRate: 48000 };
+        if (mimeType.includes('flac')) return { encoding: 'FLAC', sampleRate: 16000 };
+        return { encoding: 'LINEAR16', sampleRate: 16000 };
+    }
+
+    async transcribeBase64Audio(
+        base64Data: string,
+        mimeType = 'audio/wav',
+        sessionStartTimeOffset = 0,
+    ): Promise<STTResult> {
+        if (!this.speechClient) return this.createSampleResult();
 
         try {
             const { encoding, sampleRate } = this.getAudioConfig(mimeType);
-
             const request = {
                 audio: { content: base64Data },
                 config: {
-                    encoding,
+                    encoding: encoding as 'LINEAR16' | 'MP3' | 'WEBM_OPUS' | 'FLAC',
                     sampleRateHertz: sampleRate,
                     languageCode: 'ko-KR',
                     enableWordTimeOffsets: true,
                     enableAutomaticPunctuation: true,
                     model: 'latest_long',
                     useEnhanced: true,
-                    enableSpeakerDiarization: true, // 화자 분리 활성화
-                    diarizationSpeakerCount: 2, // 멘토, 멘티 2명
+                    enableSpeakerDiarization: true,
+                    diarizationSpeakerCount: 2,
                     maxAlternatives: 1,
                     profanityFilter: false,
                     enableSeparateRecognitionPerChannel: false,
                 },
             };
 
-            // longRunningRecognize 사용
             const [operation] = await this.speechClient.longRunningRecognize(request);
             const [response] = await operation.promise();
 
-            // 타입 안전한 응답 처리
             const results = response.results;
-            if (!results || results.length === 0) {
+            if (!results || results.length === 0)
                 return { transcript: '', confidence: 0, speakers: [] };
-            }
 
-            const firstResult = results[0];
-            if (!firstResult.alternatives || firstResult.alternatives.length === 0) {
-                return { transcript: '', confidence: 0, speakers: [] };
-            }
+            const alternative = results[0].alternatives?.[0];
+            if (!alternative) return { transcript: '', confidence: 0, speakers: [] };
 
-            const alternative = firstResult.alternatives[0];
             const transcript = alternative.transcript || '';
             const confidence = alternative.confidence || 0;
 
             let wordSegments = this.processWordTimings(
-                (alternative.words as GoogleSpeechWordInfo[]) || undefined,
+                alternative.words as GoogleSpeechWordInfo[],
+                sessionStartTimeOffset,
             );
-
             if (!wordSegments || wordSegments.length === 0) {
-                wordSegments = this.createWordsFromTranscript(transcript);
+                wordSegments = this.createWordsFromTranscript(transcript, sessionStartTimeOffset);
             }
 
-            return {
-                transcript,
-                confidence,
-                speakers: wordSegments,
-            };
+            return { transcript, confidence, speakers: wordSegments };
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);
             throw new Error(`STT 변환 실패: ${msg}`);
         }
-    }
-
-    private getAudioConfig(mimeType: string): {
-        encoding: 'LINEAR16' | 'MP3' | 'WEBM_OPUS' | 'FLAC';
-        sampleRate: number;
-    } {
-        if (mimeType.includes('mp3')) return { encoding: 'MP3', sampleRate: 44100 };
-        if (mimeType.includes('webm')) return { encoding: 'WEBM_OPUS', sampleRate: 48000 };
-        if (mimeType.includes('flac')) return { encoding: 'FLAC', sampleRate: 16000 };
-        return { encoding: 'LINEAR16', sampleRate: 16000 };
     }
 
     private convertDurationToSeconds(duration?: Duration) {
@@ -218,10 +290,10 @@ export class STTService {
             transcript: '안녕하세요. 구글 STT 테스트입니다.',
             confidence: 0.95,
             speakers: [
-                { text_Content: '안녕하세요', startTime: 0.5, endTime: 1.2, speakerTag: 0 },
-                { text_Content: '구글', startTime: 2.0, endTime: 2.3, speakerTag: 0 },
-                { text_Content: 'STT', startTime: 2.4, endTime: 2.7, speakerTag: 1 },
-                { text_Content: '테스트입니다', startTime: 2.8, endTime: 3.5, speakerTag: 1 },
+                { text_Content: '안녕하세요', startTime: 0.5, endTime: 1.2, speakerTag: 1 },
+                { text_Content: '구글', startTime: 2.0, endTime: 2.3, speakerTag: 1 },
+                { text_Content: 'STT', startTime: 2.4, endTime: 2.7, speakerTag: 2 },
+                { text_Content: '테스트입니다', startTime: 2.8, endTime: 3.5, speakerTag: 2 },
             ],
         };
     }

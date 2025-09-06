@@ -2,11 +2,19 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
+import * as dotenv from 'dotenv';
+import express from 'express';
 
 async function bootstrap() {
+    // .env 파일 로드
+    dotenv.config();
+
     const app = await NestFactory.create(AppModule);
 
     app.use(cookieParser());
+
+    app.use(express.json({ limit: '10mb' }));
+    app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
     app.enableCors({
         origin: [
