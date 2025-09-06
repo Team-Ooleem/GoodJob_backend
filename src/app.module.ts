@@ -14,10 +14,10 @@ import { CollabModule } from './modules/collab/collab.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { UsersModule } from './users/users.module';
 import { ChatModule } from './chat/chat.module';
-import { JobsModule } from './jobs/jobs.module';
-import { LocationsModule } from './locations/locations.module';
-import { SalariesModule } from './salaries/salaries.module';
-import { ProfileModule } from './profile/profile.module';
+import { JobsModule } from './onboarding/jobs/jobs.module';
+import { LocationsModule } from './onboarding/locations/locations.module';
+import { SalariesModule } from './onboarding/salaries/salaries.module';
+import { ProfileModule } from './onboarding/profile/profile.module';
 import { SessionGuard } from './auth/session.guard';
 // resume
 import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
