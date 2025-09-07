@@ -5,7 +5,10 @@ import { DatabaseService } from '../../database/database.service';
 export class ProfileService {
     constructor(private readonly databaseService: DatabaseService) {}
 
-    async updateProfile(userId: number, updateData: { short_bio?: string; bio?: string }) {
+    async updateProfile(
+        userId: number,
+        updateData: { short_bio?: string; bio?: string; profile_img?: string },
+    ) {
         // 사용자 존재 여부 확인
         const existingUsers = await this.databaseService.query(
             'SELECT idx FROM users WHERE idx = ?',
@@ -30,6 +33,11 @@ export class ProfileService {
             updateValues.push(updateData.bio);
         }
 
+        if (updateData.profile_img !== undefined) {
+            updateFields.push('profile_img = ?');
+            updateValues.push(updateData.profile_img);
+        }
+
         if (updateFields.length === 0) {
             throw new Error('업데이트할 필드가 없습니다.');
         }
@@ -47,7 +55,7 @@ export class ProfileService {
 
         // 업데이트된 프로필 조회
         const updatedUsers = await this.databaseService.query(
-            'SELECT idx, name, phone, email, short_bio, bio, created_at, updated_at FROM users WHERE idx = ?',
+            'SELECT idx, name, phone, email, short_bio, bio, profile_img, created_at, updated_at FROM users WHERE idx = ?',
             [userId],
         );
 
