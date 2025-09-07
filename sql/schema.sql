@@ -38,6 +38,7 @@ CREATE TABLE `users` (
   `short_bio` varchar(100) DEFAULT NULL COMMENT '짧은 소개',
   `bio` text COMMENT '소개\n',
   `profile_img` varchar(500) DEFAULT NULL COMMENT '프로필 이미지 URL',
+  `is_onboarded` tinyint(1) NOT NULL DEFAULT '0' COMMENT '온보딩 완료 여부 (0: 미완료, 1: 완료)',
   `created_at` datetime NOT NULL COMMENT '생성일',
   `updated_at` datetime DEFAULT NULL COMMENT '수정일',
   PRIMARY KEY (`idx`)
@@ -811,8 +812,6 @@ CREATE TABLE `stt_speaker_segments` (
   KEY `stt_session_idx_idx` (`stt_session_idx`),
   CONSTRAINT `fk_stt_segments_session` FOREIGN KEY (`stt_session_idx`) REFERENCES `stt_transcriptions`(`stt_session_idx`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='STT 화자 세그먼트 테이블';
-/*!40101 SET character_set_client = @saved_cs_client */;
-=======
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `canvas`;
