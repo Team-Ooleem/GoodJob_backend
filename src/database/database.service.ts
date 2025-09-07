@@ -112,6 +112,35 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+        const results = await this.query<T>(sql, params);
+        return results.length > 0 ? results[0] : null;
+    }
+
+    async queryWithSort<T = any>(
+        sql: string,
+        params?: any[],
+        sortBy?: string,
+        sortOrder: 'ASC' | 'DESC' = 'ASC',
+    ): Promise<T[]> {
+        if (!this.pool) {
+            throw new Error('데이터베이스 풀이 초기화되지 않았습니다.');
+        }
+
+        try {
+            let finalSql = sql;
+            if (sortBy) {
+                finalSql += ` ORDER BY ${sortBy} ${sortOrder}`;
+            }
+
+            const [rows] = await this.pool.execute(finalSql, params);
+            return rows as T[];
+        } catch (error) {
+            console.error('쿼리 실행 오류:', error);
+            throw error;
+        }
+    }
+
     async transaction<T>(callback: (connection: mysql.Connection) => Promise<T>): Promise<T> {
         if (!this.pool) {
             throw new Error('데이터베이스 풀이 초기화되지 않았습니다.');
@@ -130,6 +159,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         } finally {
             connection.release();
         }
+    }
+
+    // interview 쪽에서 추가
+    async execute(sql: string, params: any[] = []) {
+        if (!this.pool) {
+            throw new Error('데이터베이스 풀이 초기화되지 않았습니다.');
+        }
+        const [res] = await this.pool.execute(sql, params);
+        return res;
     }
 
     async healthCheck(): Promise<boolean> {

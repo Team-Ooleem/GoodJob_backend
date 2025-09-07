@@ -1,35 +1,38 @@
-// import { NestFactory } from '@nestjs/core';
-// import { AppModule } from './app.module';
-
-// async function bootstrap() {
-//     const app = await NestFactory.create(AppModule);
-//     await app.listen(process.env.PORT ?? 3000);
-// }
-// bootstrap();
-
-
 // src/main.ts
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import cookieParser from 'cookie-parser';
+import * as dotenv from 'dotenv';
+import express from 'express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  
-  app.use(cookieParser());
+    // .env 파일 로드
+    dotenv.config();
 
-    // CORS 설정 추가
+    const app = await NestFactory.create(AppModule);
+
+    app.use(cookieParser());
+
+    app.use(express.json({ limit: '10mb' }));
+    app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
     app.enableCors({
-        origin: ['https://example.com', 'http://localhost:3000', 'http://localhost:3001'],
+        origin: [
+            'https://good-job.duckdns.org', // 프론트엔드 도메인 요청 허용
+            'https://example.com',
+            'http://localhost:3000',
+            'http://localhost:3001',
+            'http://localhost:4000',
+            'https://localhost:3443',
+        ],
         methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
         credentials: true,
     });
- 
 
-  // 모든 요청 경로에 /api prefix 추가
-  app.setGlobalPrefix('api');
+    // 모든 요청 경로에 /api prefix 추가
+    app.setGlobalPrefix('api');
 
-  await app.listen(process.env.PORT ?? 4000);
+    await app.listen(process.env.PORT ?? 4000);
 }
 
 bootstrap();

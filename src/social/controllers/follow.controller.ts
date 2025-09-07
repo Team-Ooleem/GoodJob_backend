@@ -1,5 +1,10 @@
-import { Controller, Post, Body, HttpException, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpException, HttpStatus, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { FollowService, FollowRequest, FollowResponse } from '../services/follow.service';
+
+interface AuthenticatedRequest extends Request {
+    user_idx: number;
+}
 
 @Controller('social')
 export class FollowController {
@@ -8,15 +13,17 @@ export class FollowController {
     /**
      * 팔로우 토글 (팔로우/언팔로우)
      * POST /social/follow
-     * Body: { followerId: number, followingId: number }
+     * Body: { followingId: number }
      */
     @Post('follow')
     async toggleFollow(
-        @Body() body: { followerId: number; followingId: number },
+        @Body() body: { followingId: number },
+        @Req() req: AuthenticatedRequest,
     ): Promise<FollowResponse> {
         try {
+            const followerId = req.user_idx;
             const request: FollowRequest = {
-                followerId: body.followerId,
+                followerId,
                 followingId: body.followingId,
             };
 
