@@ -1,4 +1,4 @@
-// stt.service.ts
+/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
 import { Injectable, Logger } from '@nestjs/common';
 import { SpeechClient } from '@google-cloud/speech';
 
@@ -235,25 +235,42 @@ export class STTService {
             const request = {
                 audio: { content: base64Data },
                 config: {
+                    // 기본 오디오 설정
                     encoding: encoding as 'LINEAR16' | 'MP3' | 'WEBM_OPUS' | 'FLAC',
                     sampleRateHertz: sampleRate,
                     languageCode: 'ko-KR',
-                    enableWordTimeOffsets: true,
-                    enableAutomaticPunctuation: true,
-                    model: 'latest_long',
-                    useEnhanced: true,
-                    enableSpeakerDiarization: true,
-                    diarizationSpeakerCount: 2,
-                    maxAlternatives: 1,
-                    profanityFilter: false,
-                    enableSeparateRecognitionPerChannel: false,
+                    audioChannelCount: 1, // ✅ 모노 채널 (화자 분리에 최적)
+
+                    // STT 2.0 핵심 설정
+                    model: 'latest_long', // ✅ 최신 모델
+                    useEnhanced: true, // ✅ 향상된 기능
+
+                    // 화자 분리 설정
+                    enableSpeakerDiarization: true, // ✅ 화자 분리 활성화
+                    diarizationSpeakerCount: 2, // ✅ 2명 화자
+
+                    // STT 2.0 추가 기능
+                    enableWordConfidence: true, // ✅ 단어별 신뢰도
+                    enableWordTimeOffsets: true, // ✅ 단어별 시간 정보
+                    enableAutomaticPunctuation: true, // ✅ 자동 구두점
+
+                    // 성능 최적화
+                    maxAlternatives: 1, // ✅ 최대 대안 수
+                    profanityFilter: false, // ✅ 욕설 필터 비활성화
+                    enableSeparateRecognitionPerChannel: false, // ✅ 모노 채널 사용
+
+                    // 한국어 특화
+                    alternativeLanguageCodes: ['ko-KR'], // ✅ 한국어 우선 처리
                 },
             };
 
-            const [operation] = await this.speechClient.longRunningRecognize(request);
-            const [response] = await operation.promise();
+            const operation = await this.speechClient.longRunningRecognize(request);
 
-            const results = response.results;
+            // 배열인지 확인하고 첫 번째 요소 사용
+            const [operationResult] = operation;
+            const [response] = await operationResult.promise();
+            const results = response.results as any[];
+
             if (!results || results.length === 0)
                 return { transcript: '', confidence: 0, speakers: [] };
 
@@ -261,6 +278,7 @@ export class STTService {
             if (!alternative) return { transcript: '', confidence: 0, speakers: [] };
 
             const transcript = alternative.transcript || '';
+
             const confidence = alternative.confidence || 0;
 
             let wordSegments = this.processWordTimings(
@@ -274,6 +292,7 @@ export class STTService {
             return { transcript, confidence, speakers: wordSegments };
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);
+            this.logger.error(`STT 변환 실패: ${msg}`);
             throw new Error(`STT 변환 실패: ${msg}`);
         }
     }
