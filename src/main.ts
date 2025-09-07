@@ -18,6 +18,7 @@ async function bootstrap() {
 
     app.enableCors({
         origin: [
+            'https://good-job.duckdns.org', // 프론트엔드 도메인 요청 허용
             'https://example.com',
             'http://localhost:3000',
             'http://localhost:3001',
