@@ -81,9 +81,23 @@ export class AuthController {
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        // 6) 프론트로 리다이렉트
-        // return res.redirect('http://localhost:3000');     // 배포 전이라 일단 홈으로 리다이렉트
-        return res.redirect(process.env.FRONTEND_SUCCESS_URL ?? 'http://localhost:3000');
+        // 6) 온보딩 상태 확인 후 적절한 페이지로 리다이렉트
+        const userResult = await this.databaseService.query(
+            'SELECT is_onboarded FROM users WHERE idx = ?',
+            [userIdx],
+        );
+
+        const isOnboarded = userResult[0]?.is_onboarded === 1;
+
+        if (isOnboarded) {
+            // 온보딩 완료된 사용자 → 메인 페이지
+            return res.redirect(process.env.FRONTEND_SUCCESS_URL ?? 'http://localhost:3000');
+        } else {
+            // 온보딩 미완료 사용자 → 온보딩 페이지
+            return res.redirect(
+                process.env.FRONTEND_ONBOARDING_URL ?? 'http://localhost:3000/onboarding',
+            );
+        }
     }
 
     // 클라이언트가 로그인 여부 확인할 때 호출
