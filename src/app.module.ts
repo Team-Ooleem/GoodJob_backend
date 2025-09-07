@@ -20,6 +20,7 @@ import { SalariesModule } from './onboarding/salaries/salaries.module';
 import { ProfileModule } from './onboarding/profile/profile.module';
 import { SessionGuard } from './auth/session.guard';
 // resume
+import { ResumeModule } from './resume/resume.module';
 import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 
 /* stt 모듈 */
@@ -50,6 +51,7 @@ import { TTSModule } from './tts/tts.module';
         CanvasModule,
         SocialModule,
         TTSModule,
+        ResumeModule,
     ],
     controllers: [AppController, STTController],
     providers: [

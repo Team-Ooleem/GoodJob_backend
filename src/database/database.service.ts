@@ -112,6 +112,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         }
     }
 
+    async queryOne<T = any>(sql: string, params?: any[]): Promise<T | null> {
+        const results = await this.query<T>(sql, params);
+        return results.length > 0 ? results[0] : null;
+    }
+
     async queryWithSort<T = any>(
         sql: string,
         params?: any[],
