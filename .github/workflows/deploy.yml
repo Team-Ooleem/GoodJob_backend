@@ -1,0 +1,35 @@
+name: Deploy to EC2
+
+on:
+    push:
+        branches:
+            - main
+
+jobs:
+    deploy:
+        runs-on: ubuntu-latest
+
+        steps:
+            # 1. git hub main 코드 가져오기
+            - name: Checkout code
+              uses: actions/checkout@v3
+
+            # 2. SSH 설정
+            - name: Setup SSH
+              uses: webfactory/ssh-agent@v0.5.4
+              with:
+                  ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+            # 3. EC2 서버에 접속해서 배포
+            - name: Deploy to EC2
+              run: |
+                  ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+                      cd ~/GoodJob_backend
+                      source ~/.nvm/nvm.sh
+                      nvm use 22.19.0
+                      /usr/bin/git reset --hard
+                      /usr/bin/git pull origin main
+                      /home/ubuntu/.nvm/versions/node/v22.19.0/bin/pnpm install
+                      /home/ubuntu/.nvm/versions/node/v22.19.0/bin/pnpm run build
+                      /home/ubuntu/.nvm/versions/node/v22.19.0/bin/pm2 restart goodjob-backend || /home/ubuntu/.nvm/versions/node/v22.19.0/bin/pm2 start "dist/main.js" --name goodjob-backend
+                  EOF
