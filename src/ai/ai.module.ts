@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
 
 @Module({
+    imports: [ConfigModule],
     controllers: [AiController],
     providers: [AiService],
+    exports: [AiService],
 })
-export class AiModule {} // ← 반드시 'export class AiModule' 여야 합니다.
+export class AiModule {}

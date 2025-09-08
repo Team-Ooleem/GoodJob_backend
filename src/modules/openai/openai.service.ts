@@ -1,10 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { toFile } from 'openai/uploads';
+import { AppConfigService } from '@/config/config.service';
 
 @Injectable()
 export class OpenAIService {
-    private client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+    private client: OpenAI;
+
+    constructor(private readonly configService: AppConfigService) {
+        this.client = new OpenAI({ apiKey: this.configService.openai.apiKey });
+    }
 
     async transcribeAudio(file: Express.Multer.File) {
         // Multer의 Buffer를 OpenAI SDK가 기대하는 Web File로 변환

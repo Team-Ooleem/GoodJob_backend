@@ -2,6 +2,7 @@
 import { Injectable } from '@nestjs/common';
 import OpenAI from 'openai';
 import { z } from 'zod';
+import { AppConfigService } from '@/config/config.service';
 
 /** ===== Public DTOs (컨트롤러/다른 서비스에서 재사용 가능) ===== */
 export interface QuestionDto {
@@ -62,7 +63,11 @@ const FollowupsJsonSchema = z.object({
 /** ===== Service ===== */
 @Injectable()
 export class AiService {
-    private readonly client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    private client: OpenAI;
+
+    constructor(private readonly configService: AppConfigService) {
+        this.client = new OpenAI({ apiKey: this.configService.openai.apiKey });
+    }
 
     // 면접 질문 1개 생성
     async createQuestion(resumeSummary: string): Promise<QuestionResult> {
