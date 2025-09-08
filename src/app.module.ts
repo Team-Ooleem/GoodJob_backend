@@ -33,6 +33,9 @@ import { STTService } from './stt/stt_service';
 /* tts 모듈 */
 import { TTSModule } from './tts/tts.module';
 
+/* gcs 모듈 */
+import { GcsService } from './lib/gcs';
+
 @Module({
     imports: [
         ConfigModule.forRoot({
@@ -72,6 +75,7 @@ import { TTSModule } from './tts/tts.module';
             provide: APP_GUARD,
             useClass: SessionGuard,
         },
+        GcsService,
     ],
 })
 export class AppModule {}
