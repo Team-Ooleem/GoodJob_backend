@@ -482,11 +482,11 @@ INSERT INTO `legal_structure` (`idx`, `code`, `name`) VALUES
 -- =====================================================
 
 -- 기본 사용자 데이터 (개인회원 2명, 기업회원 2명)
--- INSERT INTO `users` (`idx`, `name`, `phone`, `email`, `short_bio`, `bio`, `created_at`, `updated_at`) VALUES
--- (1, '김개발', '010-1234-5678', 'kim.dev@example.com', '3년차 백엔드 개발자', '안녕하세요. Node.js와 Python을 주로 다루는 백엔드 개발자입니다.', NOW(), NULL),
--- (2, '이디자인', '010-2345-6789', 'lee.design@example.com', 'UI/UX 디자이너', 'Figma와 Adobe 툴을 활용한 디자인 전문가입니다.', NOW(), NULL),
--- (3, '테크스타트업', '010-3456-7890', 'contact@techstartup.com', '혁신적인 IT 솔루션 제공', NULL, NOW(), NULL),
--- (4, '글로벌기업', '010-4567-8901', 'hr@globalcorp.com', '글로벌 IT 서비스 기업', NULL, NOW(), NULL);
+INSERT INTO `users` (`idx`, `name`, `phone`, `email`, `short_bio`, `bio`, `created_at`, `updated_at`) VALUES
+(1, '김개발', '010-1234-5678', 'kim.dev@example.com', '3년차 백엔드 개발자', '안녕하세요. Node.js와 Python을 주로 다루는 백엔드 개발자입니다.', NOW(), NULL),
+(2, '이디자인', '010-2345-6789', 'lee.design@example.com', 'UI/UX 디자이너', 'Figma와 Adobe 툴을 활용한 디자인 전문가입니다.', NOW(), NULL),
+(3, '테크스타트업', '010-3456-7890', 'contact@techstartup.com', '혁신적인 IT 솔루션 제공', NULL, NOW(), NULL),
+(4, '글로벌기업', '010-4567-8901', 'hr@globalcorp.com', '글로벌 IT 서비스 기업', NULL, NOW(), NULL);
 
 -- 기업 데이터
 INSERT INTO `companies` (`idx`, `ceo_name`, `business_number`, `business_certificate_img_name`, `company_size_code`, `homepage`, `logo_img_name`, `benefits`, `is_certificated`, `is_export`, `foreign_affiliation`, `legal_structure`, `corporate_entity`, `institution_type`, `bio`, `vision`) VALUES
@@ -494,9 +494,9 @@ INSERT INTO `companies` (`idx`, `ceo_name`, `business_number`, `business_certifi
 (2, '최CEO', '9876543210', 'cert_globalcorp.jpg', 'LG', 'https://globalcorp.com', 'logo_global.png', '4대 보험, 연봉제, 성과급, 해외연수', 1, 1, 1, 1, 1, 1, '글로벌 시장을 선도하는 IT 서비스 기업입니다.', '글로벌 No.1 IT 기업이 되겠습니다.');
 
 -- 개인 회원 프로필
--- INSERT INTO `individual_profile` (`user_idx`, `desired_job`, `desired_sido`, `desired_salary`, `desired_gu`) VALUES
--- (1, 84, '11', 18, '11680'), -- 김개발: 백엔드/서버개발, 서울 강남구, 5,000만원 이상
--- (2, 1690, '11', 13, '11440'); -- 이디자인: UI/UX, 서울 마포구,  4,000만원 이상
+INSERT INTO `individual_profile` (`user_idx`, `desired_job`, `desired_sido`, `desired_salary`, `desired_gu`) VALUES
+(1, 84, '11', 18, '11680'), -- 김개발: 백엔드/서버개발, 서울 강남구, 5,000만원 이상
+(2, 1690, '11', 13, '11440'); -- 이디자인: UI/UX, 서울 마포구,  4,000만원 이상
 
 -- 기업 회원 프로필
 INSERT INTO `business_profile` (`user_idx`, `business_number`, `business_certificate_img_name`, `company_name`, `company_intro`, `id`, `password`, `ceo_name`, `address`) VALUES
