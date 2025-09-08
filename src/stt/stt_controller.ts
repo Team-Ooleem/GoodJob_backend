@@ -256,8 +256,8 @@ export class STTController {
 
                 // 세션 존재 확인 / 생성
                 const sessionRecord: any = await this.databaseService.query(
-                    'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_idx = ? AND segment_index = ?',
-                    [canvasId, cached.segmentIndex],
+                    'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_id = ?',
+                    [canvasId],
                 );
 
                 if (!sessionRecord.length) {
@@ -266,13 +266,12 @@ export class STTController {
                     );
                     // 신규 세션 생성
                     const insertResult: any = await this.databaseService.query(
-                        'INSERT INTO stt_transcriptions (canvas_idx, mentor_idx, mentee_idx, audio_url, segment_index) VALUES (?, ?, ?, ?, ?)',
+                        'INSERT INTO stt_transcriptions (canvas_id, mentor_idx, mentee_idx, audio_url) VALUES (?, ?, ?, ?)',
                         [
                             canvasId,
                             mentorIdx,
                             menteeIdx,
                             cached.chunks.map((c) => c.audioUrl).join(','),
-                            cached.segmentIndex,
                         ],
                     );
                     sttSessionIdx = insertResult.insertId as number;
@@ -354,16 +353,16 @@ export class STTController {
         try {
             // ✅ 1번의 JOIN 쿼리로 모든 데이터 조회 (segment_index 추가)
             const rows: any[] = await this.databaseService.query(
-                `SELECT st.stt_session_idx, st.audio_url, st.created_at, st.segment_index,
+                `SELECT st.stt_session_idx, st.audio_url, st.created_at,
                     st.mentor_idx, st.mentee_idx,
                     mentor.name as mentor_name, mentee.name as mentee_name,
                     seg.speaker_idx, seg.text_content, seg.start_time, seg.end_time
-             FROM stt_transcriptions st
-             JOIN users mentor ON st.mentor_idx = mentor.idx
-             JOIN users mentee ON st.mentee_idx = mentee.idx
-             LEFT JOIN stt_speaker_segments seg ON st.stt_session_idx = seg.stt_session_idx
-             WHERE st.canvas_idx = ?
-             ORDER BY st.segment_index ASC, st.created_at DESC, seg.start_time ASC`,
+                 FROM stt_transcriptions st
+                 JOIN users mentor ON st.mentor_idx = mentor.idx
+                 JOIN users mentee ON st.mentee_idx = mentee.idx
+                 LEFT JOIN stt_speaker_segments seg ON st.stt_session_idx = seg.stt_session_idx
+                 WHERE st.canvas_id = ?
+                 ORDER BY st.created_at DESC, seg.start_time ASC`,
                 [canvasId],
             );
 
@@ -379,7 +378,7 @@ export class STTController {
                         timestamp: row.created_at as string,
                         mentor_idx: row.mentor_idx as number,
                         mentee_idx: row.mentee_idx as number,
-                        segmentIndex: row.segment_index as number,
+                        segmentIndex: 0,
                         speakerInfo: {
                             mentor: row.mentor_name as string,
                             mentee: row.mentee_name as string,
