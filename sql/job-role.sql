@@ -1,4 +1,4 @@
-USE `good_job_test`;
+USE `good-job-database`;
 
 -- 직무 카테고리 데이터 (job_role 테이블 삽입 전에 필요)
 INSERT INTO `job_category` (`id`, `name`) VALUES

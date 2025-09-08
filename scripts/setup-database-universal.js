@@ -250,6 +250,7 @@ class DatabaseSetup {
 
     async importData() {
         const dataFiles = [
+            { name: 'interview.sql', path: path.join(__dirname, '..', 'sql', 'interview.sql') },
             { name: 'job-role.sql', path: path.join(__dirname, '..', 'sql', 'job-role.sql') },
             { name: 'data.sql', path: path.join(__dirname, '..', 'sql', 'data.sql') },
         ];

@@ -99,6 +99,7 @@ export class AuthController {
         } else {
             // 온보딩 미완료 사용자 → 온보딩 페이지
             return res.redirect(this.configService.frontend.onboardingUrl);
+
         }
     }
 
