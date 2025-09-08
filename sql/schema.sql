@@ -5,8 +5,8 @@
 -- Server version	8.0.43
 
 -- 데이터베이스 생성 (이미 존재하는 경우 무시)
-CREATE DATABASE IF NOT EXISTS `good_job_test` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE `good_job_test`;
+CREATE DATABASE IF NOT EXISTS `good-job-database` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `good-job-database`;
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;

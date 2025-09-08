@@ -5,7 +5,7 @@
 -- Server version	8.0.43
 
 -- 데이터베이스 선택
-USE `good_job_test`;
+USE `good-job-database`;
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 /*!40101 SET @OLD_CHARACTER_SET_RESULTS=@@CHARACTER_SET_RESULTS */;
