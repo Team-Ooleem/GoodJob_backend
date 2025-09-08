@@ -52,7 +52,7 @@ class EnvironmentVariables {
     FRONTEND_SUCCESS_URL: string;
 
     @IsString()
-    FRONTEND_atus_URL: string;
+    FRONTEND_ONBOARDING_URL: string;
 
     // 세션 설정
     @IsString()
@@ -74,12 +74,6 @@ class EnvironmentVariables {
 }
 
 export function validate(config: Record<string, unknown>) {
-    // 디버깅: 실제로 들어오는 환경 변수 값 확인
-    console.log('🔍 [ENV DEBUG] 환경 변수 검증 시작');
-    console.log('🔍 [ENV DEBUG] GOOGLE_REDIRECT_URL:', config.GOOGLE_REDIRECT_URL);
-    console.log('🔍 [ENV DEBUG] NODE_ENV:', config.NODE_ENV);
-    console.log('🔍 [ENV DEBUG] 전체 config keys:', Object.keys(config));
-
     const validatedConfig = plainToClass(EnvironmentVariables, config, {
         enableImplicitConversion: true,
     });
