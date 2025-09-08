@@ -99,6 +99,15 @@ export class AuthController {
 
         res.cookie('session', sessionJwt, cookieOptions);
 
+        // 쿠키 설정 디버깅 로그
+        console.log('🍪 [AUTH] 쿠키 설정 완료:', {
+            isProd,
+            cookieOptions,
+            domain: cookieOptions.domain,
+            secure: cookieOptions.secure,
+            sameSite: cookieOptions.sameSite,
+        });
+
         // 6) 온보딩 상태 확인 후 적절한 페이지로 리다이렉트
         const userResult = await this.databaseService.query(
             'SELECT is_onboarded FROM users WHERE idx = ?',
