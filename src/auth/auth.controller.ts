@@ -78,35 +78,32 @@ export class AuthController {
         // 5) HttpOnly 쿠키로 세션 전달
         const isProd = this.configService.isProduction;
 
-        // 환경에 따른 쿠키 설정
+        // 쿠키 설정 (rewrites를 통해 같은 도메인에서 요청)
         const cookieOptions = {
             httpOnly: true,
             path: '/',
             maxAge: 7 * 24 * 60 * 60 * 1000,
-            // 프로덕션 환경 - 크로스 도메인용 설정
+            // 프로덕션 환경
             ...(isProd && {
-                secure: true,
-                sameSite: 'none' as const, // 크로스 도메인에는 none이 필요
-                domain: '.duckdns.org',
+                secure: true, // HTTPS이므로 true
+                sameSite: 'lax' as const, // 같은 도메인이므로 lax로 충분
             }),
-            // 로컬 환경 (HTTP, 같은 도메인)
+            // 로컬 환경
             ...(!isProd && {
                 secure: false,
                 sameSite: 'lax' as const,
-                // domain 설정 없음 (기본값 사용)
             }),
         };
 
         res.cookie('session', sessionJwt, cookieOptions);
 
-        // 쿠키 설정 디버깅 로그
-        console.log('🍪 [AUTH] 쿠키 설정 완료:', {
-            isProd,
-            cookieOptions,
-            domain: cookieOptions.domain,
-            secure: cookieOptions.secure,
-            sameSite: cookieOptions.sameSite,
-        });
+        // 쿠키 설정 완료 로그
+        console.log(
+            '🍪 [AUTH] 쿠키 설정 완료 - sameSite:',
+            cookieOptions.sameSite,
+            'secure:',
+            cookieOptions.secure,
+        );
 
         // 6) 온보딩 상태 확인 후 적절한 페이지로 리다이렉트
         const userResult = await this.databaseService.query(
