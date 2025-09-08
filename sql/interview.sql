@@ -1,4 +1,4 @@
-USE `good_job_test`;
+USE `good-job-database`;
 
 CREATE TABLE IF NOT EXISTS interview_sessions (
   session_id      VARCHAR(64) PRIMARY KEY,

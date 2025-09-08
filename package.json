@@ -59,13 +59,13 @@
         "passport-jwt": "^4.0.1",
         "reflect-metadata": "^0.2.2",
         "rxjs": "^7.8.1",
+        "zod": "^4.1.5",
         "socket.io": "^4.8.1",
         "swagger-ui-express": "^5.0.1",
         "uuid": "^11.1.0",
         "ws": "^8.18.3",
         "y-websocket": "^1.4.5",
-        "yjs": "^13.6.27",
-        "zod": "^4.1.5"
+        "yjs": "^13.6.27"
     },
     "devDependencies": {
         "@eslint/eslintrc": "^3.2.0",
