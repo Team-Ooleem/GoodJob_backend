@@ -15,6 +15,7 @@ import { UsersModule } from './users/users.module';
 /* stt 모듈 */
 import { STTController } from './stt/stt_controller';
 import { STTService } from './stt/stt_service';
+import { GcsService } from './lib/gcs';
 
 @Module({
     imports: [
@@ -30,6 +31,6 @@ import { STTService } from './stt/stt_service';
         UsersModule,
     ],
     controllers: [AppController, STTController],
-    providers: [AppService, STTService, DatabaseService],
+    providers: [AppService, STTService, DatabaseService, GcsService],
 })
 export class AppModule {}

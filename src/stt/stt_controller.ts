@@ -24,6 +24,7 @@ interface TranscribeChunkRequest {
     chunkIndex: number;
     totalChunks: number;
     isFinalChunk?: boolean;
+    isNewRecordingSession?: boolean; // 새 녹화 세션 여부
 }
 
 interface STTWithContextResponse {
@@ -39,6 +40,7 @@ interface STTWithContextResponse {
         startTime: number;
         endTime: number;
     }>;
+    segmentIndex?: number; // 현재 세그먼트 인덱스
 }
 
 interface SessionUserResponse {
@@ -57,6 +59,7 @@ interface ChatMessage {
     mentee_idx: number;
     speakerInfo: { mentor: string; mentee: string };
     canvasIdx: number;
+    segmentIndex: number; // 세그먼트 인덱스 추가
     segments?: Array<{
         speakerTag: number;
         textContent: string;
@@ -77,7 +80,7 @@ export class STTController {
 
     // ========================
     // 메모리 캐시 (중간 청크 임시 저장)
-    // key: canvasIdx, value: { mentorIdx, menteeIdx, chunks: { audioUrl, speakers }[] }
+    // key: canvasIdx, value: { mentorIdx, menteeIdx, chunks: { audioUrl, speakers }[], segmentIndex, lastActivity }
     // ========================
     private chunkCache: Map<
         number,
@@ -85,8 +88,15 @@ export class STTController {
             mentorIdx: number;
             menteeIdx: number;
             chunks: Array<{ audioUrl: string; speakers: any[] }>;
+            segmentIndex: number; // 현재 세그먼트 인덱스
+            lastActivity: number; // 마지막 활동 시간
+            sessionStartTime: number; // 세션 시작 시간
         }
     > = new Map();
+
+    // 자동 청크 증가 설정
+    private readonly MAX_CHUNK_DURATION = 30000; // 30초 (밀리초)
+    private readonly INACTIVITY_THRESHOLD = 5000; // 5초 (밀리초)
 
     // ========================
     // 세션 사용자 조회
@@ -143,7 +153,12 @@ export class STTController {
             menteeIdx,
             duration,
             isFinalChunk = false,
+            isNewRecordingSession = false,
         } = body;
+
+        this.logger.log(
+            `STT 요청 받음 - canvasIdx: ${canvasIdx}, isFinalChunk: ${isFinalChunk}, chunkIndex: ${body.chunkIndex}, isNewSession: ${isNewRecordingSession}`,
+        );
 
         if (!audioData) throw new BadRequestException('오디오 데이터 없음');
         if (!this.isValidBase64(audioData)) throw new BadRequestException('유효하지 않은 Base64');
@@ -152,17 +167,56 @@ export class STTController {
 
         try {
             const audioBuffer = Buffer.from(audioData, 'base64');
-            const sttResult = await this.sttService.transcribeAudioBuffer(audioBuffer, mimeType);
 
-            // 시간 정규화
-            let normalizedSpeakers = sttResult.speakers || [];
-            if (duration) {
-                normalizedSpeakers = this.sttService.normalizeTimings(normalizedSpeakers, duration);
+            // 캐시에서 기존 데이터 가져오기 또는 새로 생성
+            let cached = this.chunkCache.get(canvasIdx);
+
+            // 새 녹화 세션이거나 캐시가 없는 경우
+            if (isNewRecordingSession || !cached) {
+                const existingSegmentIndex = cached?.segmentIndex || 0;
+                cached = {
+                    mentorIdx,
+                    menteeIdx,
+                    chunks: [],
+                    segmentIndex: isNewRecordingSession
+                        ? existingSegmentIndex + 1
+                        : existingSegmentIndex,
+                    lastActivity: Date.now(),
+                    sessionStartTime: Date.now(),
+                };
+                this.logger.log(
+                    `�� 새 세그먼트 시작 - canvasIdx: ${canvasIdx}, segmentIndex: ${cached.segmentIndex}`,
+                );
             }
 
-            // GCS 업로드
+            // 자동 청크 증가 체크
+            const currentChunkDuration = Date.now() - cached.sessionStartTime;
+            if (currentChunkDuration > this.MAX_CHUNK_DURATION && !isFinalChunk) {
+                // 자동으로 새 청크 생성
+                cached.sessionStartTime = Date.now();
+                this.logger.log(
+                    `🔄 자동 청크 증가 - canvasIdx: ${canvasIdx}, chunkIndex: ${body.chunkIndex}`,
+                );
+            }
+
+            // 활동 시간 업데이트
+            cached.lastActivity = Date.now();
+
+            //이전 청크시간 계산
+            const previousChunksDuration = cached.chunks.reduce(
+                (total: number, chunk: { speakers: { endTime: number }[] }) => {
+                    const chunkDuration = chunk.speakers.reduce(
+                        (max: number, speaker: { endTime: number }) =>
+                            Math.max(max, speaker.endTime),
+                        0,
+                    );
+                    return total + chunkDuration;
+                },
+                0,
+            );
+
             const gcsKey = this.gcsService.generateGcsKey(
-                `voice_chunk_${body.chunkIndex}.webm`,
+                `voice_chunk_${cached.segmentIndex}_${body.chunkIndex}.webm`,
                 canvasIdx,
                 mentorIdx,
                 menteeIdx,
@@ -170,10 +224,22 @@ export class STTController {
             const gcsResult = await this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType);
             if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
 
+            const sttResult = await this.sttService.transcribeAudioBuffer(
+                audioBuffer,
+                mimeType,
+                previousChunksDuration,
+                gcsResult?.url,
+            );
+
+            // 시간 정규화
+            let normalizedSpeakers = sttResult.speakers || [];
+            if (duration) {
+                normalizedSpeakers = this.sttService.normalizeTimings(normalizedSpeakers, duration);
+            }
+
             // ========================
             // 캐시에 임시 저장
             // ========================
-            const cached = this.chunkCache.get(canvasIdx) || { mentorIdx, menteeIdx, chunks: [] };
             cached.chunks.push({ audioUrl: gcsResult.url || '', speakers: normalizedSpeakers });
             this.chunkCache.set(canvasIdx, cached);
 
@@ -184,26 +250,36 @@ export class STTController {
             let contextText = '';
 
             if (isFinalChunk) {
+                this.logger.log(
+                    `✅ 최종 청크 처리 시작 - canvasIdx: ${canvasIdx}, segmentIndex: ${cached.segmentIndex}`,
+                );
+
                 // 세션 존재 확인 / 생성
                 const sessionRecord: any = await this.databaseService.query(
-                    'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_idx = ?',
-                    [canvasIdx],
+                    'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_idx = ? AND segment_index = ?',
+                    [canvasIdx, cached.segmentIndex],
                 );
 
                 if (!sessionRecord.length) {
+                    this.logger.log(
+                        `🆕 신규 세션 생성 - canvasIdx: ${canvasIdx}, segmentIndex: ${cached.segmentIndex}`,
+                    );
                     // 신규 세션 생성
                     const insertResult: any = await this.databaseService.query(
-                        'INSERT INTO stt_transcriptions (canvas_idx, mentor_idx, mentee_idx, audio_url) VALUES (?, ?, ?, ?)',
+                        'INSERT INTO stt_transcriptions (canvas_idx, mentor_idx, mentee_idx, audio_url, segment_index) VALUES (?, ?, ?, ?, ?)',
                         [
                             canvasIdx,
                             mentorIdx,
                             menteeIdx,
-                            cached.chunks.map((c) => c.audioUrl).join(',' /* 또는 다른 구분 */),
+                            cached.chunks.map((c) => c.audioUrl).join(','),
+                            cached.segmentIndex,
                         ],
                     );
                     sttSessionIdx = insertResult.insertId as number;
+                    this.logger.log(`✅ 세션 생성 완료 - sttSessionIdx: ${sttSessionIdx}`);
                 } else {
                     sttSessionIdx = sessionRecord[0].stt_session_idx as number;
+                    this.logger.log(`🔄 기존 세션 업데이트 - sttSessionIdx: ${sttSessionIdx}`);
                     await this.databaseService.query(
                         'UPDATE stt_transcriptions SET audio_url = ? WHERE stt_session_idx = ?',
                         [cached.chunks.map((c) => c.audioUrl).join(','), sttSessionIdx],
@@ -233,30 +309,17 @@ export class STTController {
                     }
                 }
 
-                // 컨텍스트 생성
-                const allSegments = await this.databaseService.query(
-                    `SELECT speaker_idx, text_content, start_time, end_time
-                     FROM stt_speaker_segments
-                     WHERE stt_session_idx = ?
-                     ORDER BY start_time`,
-                    [sttSessionIdx],
+                // DB에서 조회한 세그먼트 대신 현재 STT 결과 사용
+                const currentSegments = cached.chunks.flatMap((chunk) =>
+                    chunk.speakers.map((speaker) => ({
+                        speakerTag: speaker.speakerTag as number,
+                        textContent: speaker.text_Content as string,
+                        startTime: speaker.startTime as number,
+                        endTime: speaker.endTime as number,
+                    })),
                 );
 
-                contextText = this.extractContextText(
-                    allSegments.map(
-                        (s: {
-                            speaker_idx: number;
-                            text_content: string;
-                            start_time: number;
-                            end_time: number;
-                        }) => ({
-                            speakerTag: s.speaker_idx,
-                            text: s.text_content,
-                            startTime: s.start_time,
-                            endTime: s.end_time,
-                        }),
-                    ),
-                );
+                contextText = this.extractContextText(currentSegments);
 
                 // 캐시 제거
                 this.chunkCache.delete(canvasIdx);
@@ -269,11 +332,12 @@ export class STTController {
                 sttSessionIdx: sttSessionIdx,
                 contextText,
                 audioUrl: gcsResult.url || '',
-                speakers: normalizedSpeakers.map((s) => ({
-                    speakerTag: s.speakerTag,
-                    textContent: s.text_Content,
-                    startTime: s.startTime,
-                    endTime: s.endTime,
+                segmentIndex: cached.segmentIndex,
+                speakers: normalizedSpeakers.map((segment) => ({
+                    speakerTag: segment.speakerTag,
+                    textContent: segment.text_Content,
+                    startTime: segment.startTime,
+                    endTime: segment.endTime,
                 })),
             };
         } catch (error) {
@@ -288,9 +352,9 @@ export class STTController {
     @Get('session-messages/:canvasIdx')
     async getSessionMessages(@Param('canvasIdx') canvasIdx: string) {
         try {
-            // ✅ 1번의 JOIN 쿼리로 모든 데이터 조회
+            // ✅ 1번의 JOIN 쿼리로 모든 데이터 조회 (segment_index 추가)
             const rows: any[] = await this.databaseService.query(
-                `SELECT st.stt_session_idx, st.audio_url, st.created_at,
+                `SELECT st.stt_session_idx, st.audio_url, st.created_at, st.segment_index,
                     st.mentor_idx, st.mentee_idx,
                     mentor.name as mentor_name, mentee.name as mentee_name,
                     seg.speaker_idx, seg.text_content, seg.start_time, seg.end_time
@@ -299,7 +363,7 @@ export class STTController {
              JOIN users mentee ON st.mentee_idx = mentee.idx
              LEFT JOIN stt_speaker_segments seg ON st.stt_session_idx = seg.stt_session_idx
              WHERE st.canvas_idx = ?
-             ORDER BY st.created_at DESC, seg.start_time ASC`,
+             ORDER BY st.segment_index ASC, st.created_at DESC, seg.start_time ASC`,
                 [canvasIdx],
             );
 
@@ -315,6 +379,7 @@ export class STTController {
                         timestamp: row.created_at as string,
                         mentor_idx: row.mentor_idx as number,
                         mentee_idx: row.mentee_idx as number,
+                        segmentIndex: row.segment_index as number,
                         speakerInfo: {
                             mentor: row.mentor_name as string,
                             mentee: row.mentee_name as string,
@@ -347,6 +412,25 @@ export class STTController {
     }
 
     // ========================
+    // 비활성 세션 정리 (주기적 호출)
+    // ========================
+    @Post('cleanup-inactive-sessions')
+    cleanupInactiveSessions() {
+        const now = Date.now();
+        let cleanedCount = 0;
+
+        for (const [canvasIdx, cached] of this.chunkCache.entries()) {
+            if (now - cached.lastActivity > this.INACTIVITY_THRESHOLD) {
+                this.chunkCache.delete(canvasIdx);
+                cleanedCount++;
+                this.logger.log(`�� 비활성 세션 정리 - canvasIdx: ${canvasIdx}`);
+            }
+        }
+
+        return { success: true, cleanedCount };
+    }
+
+    // ========================
     // 유틸 함수
     // ========================
     private isValidBase64(str: string): boolean {
@@ -360,12 +444,17 @@ export class STTController {
     }
 
     private extractContextText(
-        speakers: Array<{ speakerTag: number; text: string; startTime: number; endTime: number }>,
+        speakers: Array<{
+            speakerTag: number;
+            textContent: string;
+            startTime: number;
+            endTime: number;
+        }>,
     ): string {
         if (!speakers?.length) return '';
         return speakers
             .sort((a, b) => a.startTime - b.startTime)
-            .map((seg) => seg.text.trim())
+            .map((seg) => seg.textContent?.trim() || '')
             .filter(
                 (text) =>
                     text.length > 2 &&

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Storage } from '@google-cloud/storage';
 import * as path from 'path';
 
@@ -8,21 +8,22 @@ import * as path from 'path';
  */
 @Injectable()
 export class GcsService {
+    private readonly logger = new Logger(GcsService.name);
     private storage: Storage;
     private bucketName: string;
 
     constructor() {
-        if (!process.env.GCP_SERVICE_ACCOUNT_JSON) {
-            throw new Error('GCP_SERVICE_ACCOUNT_JSON 환경변수가 없습니다.');
+        if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+            throw new Error('GOOGLE_APPLICATION_CREDENTIALS 환경변수가 없습니다.');
         }
         if (!process.env.GCP_BUCKET_NAME) {
             throw new Error('GCP_BUCKET_NAME 환경변수가 없습니다.');
         }
 
-        this.storage = new Storage({
-            keyFilename: process.env.GCP_SERVICE_ACCOUNT_JSON,
-        });
+        // GOOGLE_APPLICATION_CREDENTIALS를 사용하면 자동으로 인증됨
+        this.storage = new Storage();
         this.bucketName = process.env.GCP_BUCKET_NAME;
+        this.logger.log('Google Cloud Storage Client 초기화 완료');
     }
 
     /** -------------------------------
@@ -89,6 +90,14 @@ export class GcsService {
         contentType: string,
     ): Promise<{ success: boolean; url?: string; error?: string }> {
         try {
+            console.log(`[GCS] 업로드 시작: ${gcsKey}`);
+            console.log(`[GCS] 버킷명: ${this.bucketName}`);
+            console.log(`[GCS] 파일 크기: ${buffer.length} bytes`);
+            console.log(`[GCS] Content-Type: ${contentType}`);
+            console.log(
+                `[GCS] GOOGLE_APPLICATION_CREDENTIALS: ${process.env.GOOGLE_APPLICATION_CREDENTIALS}`,
+            );
+
             const bucket = this.storage.bucket(this.bucketName);
             const file = bucket.file(gcsKey);
 
@@ -96,8 +105,15 @@ export class GcsService {
             await file.save(buffer, { metadata: { contentType }, resumable: false });
 
             const publicUrl = `https://storage.googleapis.com/${this.bucketName}/${gcsKey}`;
+            console.log(`[GCS] 업로드 성공: ${publicUrl}`);
             return { success: true, url: publicUrl };
         } catch (error: unknown) {
+            console.error(`[GCS] 업로드 실패: ${gcsKey}`);
+            console.error(`[GCS] 오류 상세:`, error);
+            if (error instanceof Error) {
+                console.error(`[GCS] 오류 메시지: ${error.message}`);
+                console.error(`[GCS] 오류 스택: ${error.stack}`);
+            }
             return {
                 success: false,
                 error: error instanceof Error ? error.message : 'Unknown error',
