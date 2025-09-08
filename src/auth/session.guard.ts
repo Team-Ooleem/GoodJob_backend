@@ -1,8 +1,11 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import * as jwt from 'jsonwebtoken';
+import { AppConfigService } from '@/config/config.service';
 
 @Injectable()
 export class SessionGuard implements CanActivate {
+    constructor(private readonly configService: AppConfigService) {}
+
     canActivate(ctx: ExecutionContext): boolean {
         const req = ctx.switchToHttp().getRequest();
 
@@ -31,15 +34,15 @@ export class SessionGuard implements CanActivate {
         }
 
         try {
-            const payload = jwt.verify(token, process.env.SESSION_SECRET!) as any;
+            const payload = jwt.verify(token, this.configService.session.secret) as any;
             console.log('✅ [SessionGuard] 토큰 검증 성공:', {
                 idx: payload.idx,
                 email: payload.email,
                 name: payload.name,
             });
 
-            (req as any).user = payload; // 컨트롤러에서 req.user 사용 가능
-            (req as any).user_idx = payload.idx; // DB 저장용 user_idx 추가
+            req.user = payload; // 컨트롤러에서 req.user 사용 가능
+            req.user_idx = payload.idx; // DB 저장용 user_idx 추가
             return true;
         } catch (error) {
             console.log('❌ [SessionGuard] 토큰 검증 실패:', error.message);

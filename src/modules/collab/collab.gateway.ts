@@ -10,7 +10,10 @@ import { Server, Socket } from 'socket.io';
 import * as Y from 'yjs';
 
 @WebSocketGateway({
-    cors: { origin: 'http://localhost:3001', credentials: true },
+    cors: {
+        origin: process.env.FRONTEND_SUCCESS_URL || 'http://localhost:3001',
+        credentials: true,
+    },
 })
 export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;

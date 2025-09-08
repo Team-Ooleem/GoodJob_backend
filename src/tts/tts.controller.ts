@@ -35,7 +35,11 @@ export class TTSController {
         try {
             this.logger.log(`TTS 요청 수신: ${dto.text.substring(0, 100)}...`);
 
-            const allowedOrigins = ['http://localhost:3000', 'https://localhost:3443'];
+            const allowedOrigins = [
+                'http://localhost:3000',
+                'https://localhost:3443',
+                process.env.FRONTEND_SUCCESS_URL || 'http://localhost:3001',
+            ].filter(Boolean); // undefined 값 제거
 
             const origin = req.headers.origin;
             const allowedOrigin = allowedOrigins.includes(origin || '')

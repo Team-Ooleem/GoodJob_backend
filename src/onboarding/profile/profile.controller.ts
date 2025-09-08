@@ -14,11 +14,17 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import * as jwt from 'jsonwebtoken';
 import { ProfileService } from './profile.service';
-import { uploadFileToS3, validateImageFile, generateS3Key } from '../../lib/s3';
+import { uploadFileToS3, validateImageFile, generateS3Key } from '@/lib/s3';
+import { DatabaseService } from '@/database/database.service';
+import { AppConfigService } from '@/config/config.service';
 
 @Controller('profile')
 export class ProfileController {
-    constructor(private readonly profileService: ProfileService) {}
+    constructor(
+        private readonly profileService: ProfileService,
+        private readonly databaseService: DatabaseService,
+        private readonly configService: AppConfigService,
+    ) {}
 
     @Get('me')
     async getProfile(@Req() req: Request) {
@@ -51,7 +57,12 @@ export class ProfileController {
             const s3Key = generateS3Key(file.originalname, 'profile-images');
 
             // S3에 이미지 업로드
-            const uploadResult = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
+            const uploadResult = await uploadFileToS3(
+                file.buffer,
+                s3Key,
+                file.mimetype,
+                this.configService.aws,
+            );
 
             if (!uploadResult.success) {
                 throw new BadRequestException(`이미지 업로드 실패: ${uploadResult.error}`);
@@ -82,7 +93,7 @@ export class ProfileController {
         }
 
         try {
-            const payload = jwt.verify(token, process.env.SESSION_SECRET!) as any;
+            const payload = jwt.verify(token, this.configService.session.secret) as any;
             return payload.idx;
         } catch {
             throw new UnauthorizedException('유효하지 않은 토큰입니다.');

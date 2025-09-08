@@ -3,17 +3,21 @@ import { Controller, Get, Query, Res, Req } from '@nestjs/common';
 import type { Response, Request } from 'express';
 import axios from 'axios';
 import * as jwt from 'jsonwebtoken';
-import { DatabaseService } from '../database/database.service';
+import { DatabaseService } from '@/database/database.service';
+import { AppConfigService } from '@/config/config.service';
 
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly databaseService: DatabaseService) {}
+    constructor(
+        private readonly databaseService: DatabaseService,
+        private readonly configService: AppConfigService,
+    ) {}
     // 프론트에서 구글로 로그인 버튼 누르면 이동하는 엔드포인트
     @Get('google')
     async redirectToGoogle(@Res() res: Response, @Req() req: Request) {
         const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-        url.searchParams.set('client_id', process.env.GOOGLE_CLIENT_ID!);
-        url.searchParams.set('redirect_uri', process.env.GOOGLE_REDIRECT_URI!);
+        url.searchParams.set('client_id', this.configService.google.clientId);
+        url.searchParams.set('redirect_uri', this.configService.google.redirectUri);
         url.searchParams.set('response_type', 'code');
         url.searchParams.set('scope', 'openid email profile');
 
@@ -36,10 +40,10 @@ export class AuthController {
         // 2) code → 토큰 교환
         const tokenRes = await axios.post('https://oauth2.googleapis.com/token', null, {
             params: {
-                client_id: process.env.GOOGLE_CLIENT_ID,
-                client_secret: process.env.GOOGLE_CLIENT_SECRET,
+                client_id: this.configService.google.clientId,
+                client_secret: this.configService.google.clientSecret,
                 code,
-                redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+                redirect_uri: this.configService.google.redirectUri,
                 grant_type: 'authorization_code',
             },
         });
@@ -67,12 +71,12 @@ export class AuthController {
                 picture: decoded.picture,
                 iss: 'goodjob-api',
             },
-            process.env.SESSION_SECRET!,
+            this.configService.session.secret,
             { expiresIn: '7d' },
         );
 
         // 5) HttpOnly 쿠키로 세션 전달
-        const isProd = process.env.NODE_ENV === 'production';
+        const isProd = this.configService.isProduction;
         res.cookie('session', sessionJwt, {
             httpOnly: true,
             secure: false, // 개발환경: false, 운영환경: true
@@ -81,9 +85,21 @@ export class AuthController {
             maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
-        // 6) 프론트로 리다이렉트
-        // return res.redirect('http://localhost:3000');     // 배포 전이라 일단 홈으로 리다이렉트
-        return res.redirect(process.env.FRONTEND_SUCCESS_URL ?? 'http://localhost:3000');
+        // 6) 온보딩 상태 확인 후 적절한 페이지로 리다이렉트
+        const userResult = await this.databaseService.query(
+            'SELECT is_onboarded FROM users WHERE idx = ?',
+            [userIdx],
+        );
+
+        const isOnboarded = userResult[0]?.is_onboarded === 1;
+
+        if (isOnboarded) {
+            // 온보딩 완료된 사용자 → 메인 페이지
+            return res.redirect(this.configService.frontend.successUrl);
+        } else {
+            // 온보딩 미완료 사용자 → 온보딩 페이지
+            return res.redirect(this.configService.frontend.onboardingUrl);
+        }
     }
 
     // 클라이언트가 로그인 여부 확인할 때 호출
@@ -94,7 +110,7 @@ export class AuthController {
         if (!token) return { authenticated: false };
 
         try {
-            const payload = jwt.verify(token, process.env.SESSION_SECRET!) as any;
+            const payload = jwt.verify(token, this.configService.session.secret) as any;
             return {
                 authenticated: true,
                 user: {

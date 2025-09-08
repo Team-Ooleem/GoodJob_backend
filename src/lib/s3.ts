@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import type { AwsConfig } from '@/config/config.service';
 
 export const s3 = new S3Client({
     region: 'ap-northeast-2',
@@ -11,14 +12,20 @@ export const s3 = new S3Client({
  * @param buffer 파일 버퍼 데이터
  * @param s3Key S3에 저장될 키 (파일명)
  * @param contentType 파일의 MIME 타입
+ * @param awsConfig AWS 설정 객체
  * @returns 업로드 결과
  */
-export async function uploadFileToS3(buffer: Buffer, s3Key: string, contentType: string) {
+export async function uploadFileToS3(
+    buffer: Buffer,
+    s3Key: string,
+    contentType: string,
+    awsConfig: AwsConfig,
+) {
     try {
         console.log('🔍 AWS 환경 변수 확인:');
-        console.log('AWS_ACCESS_KEY_ID:', process.env.AWS_ACCESS_KEY_ID);
-        console.log('AWS_SECRET_ACCESS_KEY:', process.env.AWS_SECRET_ACCESS_KEY);
-        console.log('AWS_BUCKET_NAME:', process.env.AWS_BUCKET_NAME);
+        console.log('AWS_ACCESS_KEY_ID:', awsConfig.accessKeyId);
+        console.log('AWS_SECRET_ACCESS_KEY:', awsConfig.secretAccessKey);
+        console.log('AWS_BUCKET_NAME:', awsConfig.bucketName);
         console.log('S3 리전:', 'ap-northeast-2');
         console.log('📦 버퍼 크기:', buffer.length);
         console.log('🔑 S3 키:', s3Key);
@@ -26,14 +33,14 @@ export async function uploadFileToS3(buffer: Buffer, s3Key: string, contentType:
 
         // S3 업로드 명령 생성
         const command = new PutObjectCommand({
-            Bucket: process.env.AWS_BUCKET_NAME!,
+            Bucket: awsConfig.bucketName,
             Key: s3Key,
             Body: buffer,
             ContentType: contentType,
             // ACL 제거 - 버킷 정책에서 public-read 설정
         });
         console.log('📤 S3 업로드 명령 생성 완료:', {
-            bucket: process.env.AWS_BUCKET_NAME,
+            bucket: awsConfig.bucketName,
             key: s3Key,
         });
 
@@ -42,7 +49,7 @@ export async function uploadFileToS3(buffer: Buffer, s3Key: string, contentType:
         const result = await s3.send(command);
 
         // S3 URL 생성
-        const s3Url = `https://${process.env.AWS_BUCKET_NAME}.s3.ap-northeast-2.amazonaws.com/${s3Key}`;
+        const s3Url = `https://${awsConfig.bucketName}.s3.ap-northeast-2.amazonaws.com/${s3Key}`;
 
         return {
             success: true,

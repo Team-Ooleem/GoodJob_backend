@@ -2,6 +2,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import envConfig from './config/env.config';
+import { validate } from './config/env.validation';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './database/database.module';
@@ -22,6 +24,7 @@ import { SessionGuard } from './auth/session.guard';
 // resume
 import { ResumeModule } from './resume/resume.module';
 import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
+import { AppConfigModule } from './config/config.module';
 
 /* stt 모듈 */
 import { STTController } from './stt/stt_controller';
@@ -34,8 +37,15 @@ import { TTSModule } from './tts/tts.module';
     imports: [
         ConfigModule.forRoot({
             isGlobal: true,
-            envFilePath: '.env',
+            envFilePath: [`.env.${process.env.NODE_ENV || 'development'}`, '.env'],
+            load: [envConfig],
+            validate,
+            validationOptions: {
+                allowUnknown: true,
+                abortEarly: true,
+            },
         }),
+        AppConfigModule,
         DatabaseModule,
         AuthModule,
         AiModule,

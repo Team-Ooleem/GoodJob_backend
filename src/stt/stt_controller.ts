@@ -17,6 +17,7 @@ import { STTService, STTResult } from './stt_service';
 import { uploadFileToS3, fileS3Key } from '../lib/s3';
 import { DatabaseService } from '../database/database.service';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { AppConfigService } from '../config/config.service';
 
 interface TranscribeBase64Request {
     audioData: string;
@@ -105,6 +106,7 @@ export class STTController {
     constructor(
         private readonly sttService: STTService,
         private readonly databaseService: DatabaseService,
+        private readonly configService: AppConfigService,
     ) {}
 
     @Get('session-users/:canvasIdx')
@@ -196,7 +198,12 @@ export class STTController {
 
             // 3. 오디오 파일 S3 업로드
             const s3Key = fileS3Key('voice_recording', mimeType);
-            const s3Result = await uploadFileToS3(audioBuffer, s3Key, mimeType);
+            const s3Result = await uploadFileToS3(
+                audioBuffer,
+                s3Key,
+                mimeType,
+                this.configService.aws,
+            );
 
             if (!s3Result?.success) throw new Error('오디오 파일 업로드 실패');
 
