@@ -1,10 +1,17 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 
 @Injectable()
 export class AiService {
-    // OpenAI SDK 인스턴스 생성 (환경변수 키로 인증)
-    private client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    private client: OpenAI;
+
+    constructor(private readonly configService: ConfigService) {
+        // OpenAI SDK 인스턴스 생성 (환경변수 키로 인증)
+        this.client = new OpenAI({
+            apiKey: this.configService.get<string>('app.openai.apiKey'),
+        });
+    }
 
     // 프론트에서 받은 이력서 요약 텍스트를 인자로 받음
     async createQuestion(resumeSummary: string) {

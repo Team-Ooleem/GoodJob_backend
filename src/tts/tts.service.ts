@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import type { protos } from '@google-cloud/text-to-speech';
 import { SynthesizeSpeechDto } from './dto/tts.dto';
+import { AppConfigService } from '../config/config.service';
 
 // Google Cloud Text-to-Speech 타입 사용
 type ISynthesizeSpeechRequest = protos.google.cloud.texttospeech.v1.ISynthesizeSpeechRequest;
@@ -12,7 +13,7 @@ export class TTSService {
     private readonly logger = new Logger(TTSService.name);
     private textToSpeechClient: TextToSpeechClient | null = null;
 
-    constructor() {
+    constructor(private readonly configService: AppConfigService) {
         try {
             if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
                 this.logger.warn(

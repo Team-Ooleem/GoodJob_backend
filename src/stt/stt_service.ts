@@ -1,6 +1,7 @@
 // stt.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { SpeechClient } from '@google-cloud/speech';
+import { AppConfigService } from '../config/config.service';
 
 export interface STTResult {
     transcript: string;
@@ -43,7 +44,7 @@ export class STTService {
     private readonly logger = new Logger(STTService.name);
     private speechClient: SpeechClient | null = null;
 
-    constructor() {
+    constructor(private readonly configService: AppConfigService) {
         try {
             if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
                 this.logger.warn('Google Cloud 인증 정보가 설정되지 않았습니다. 샘플 모드 실행.');

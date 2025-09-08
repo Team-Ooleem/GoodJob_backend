@@ -2,6 +2,7 @@
 import { Injectable } from '@nestjs/common';
 import axios from 'axios';
 import type { AudioFeatures } from '../audio-metrics/audio-metrics.service';
+import { AppConfigService } from '@/config/config.service';
 
 type AnalyzeResponse = {
     features: Partial<AudioFeatures>;
@@ -9,6 +10,8 @@ type AnalyzeResponse = {
 
 @Injectable()
 export class AnalysisClient {
+    constructor(private readonly configService: AppConfigService) {}
+
     private readonly base = process.env.AUDIO_API_BASE ?? 'http://localhost:8081';
 
     async analyzeAudio(file: Express.Multer.File): Promise<Partial<AudioFeatures>> {

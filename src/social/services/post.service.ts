@@ -3,6 +3,7 @@ import { DatabaseService } from '../../database/database.service';
 import { PostQueries } from '../queries/post.queries';
 import { LikeQueries } from '../queries/like.queries';
 import { uploadFileToS3, generateS3Key } from '../../lib/s3';
+import { AppConfigService } from '@/config/config.service';
 
 export interface Post {
     postIdx: number;
@@ -79,7 +80,10 @@ interface PostRow {
 
 @Injectable()
 export class PostService {
-    constructor(private readonly databaseService: DatabaseService) {}
+    constructor(
+        private readonly databaseService: DatabaseService,
+        private readonly configService: AppConfigService,
+    ) {}
 
     /**
      * 포스트 목록 조회 (cursor 기반 페이지네이션)
@@ -172,6 +176,7 @@ export class PostService {
                     s3Key,
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument
                     imageFile.mimetype || 'image/jpeg',
+                    this.configService.aws,
                 );
 
                 if (!uploadResult.success) {
