@@ -77,13 +77,27 @@ export class AuthController {
 
         // 5) HttpOnly 쿠키로 세션 전달
         const isProd = this.configService.isProduction;
-        res.cookie('session', sessionJwt, {
+
+        // 환경에 따른 쿠키 설정
+        const cookieOptions = {
             httpOnly: true,
-            secure: false, // 개발환경: false, 운영환경: true
-            sameSite: 'lax', // 프론트/백이 같은 사이트면 Lax로 충분
             path: '/',
             maxAge: 7 * 24 * 60 * 60 * 1000,
-        });
+            // 프로덕션 환경 (HTTPS, 크로스 도메인)
+            ...(isProd && {
+                secure: true,
+                sameSite: 'none' as const,
+                domain: '.duckdns.org',
+            }),
+            // 로컬 환경 (HTTP, 같은 도메인)
+            ...(!isProd && {
+                secure: false,
+                sameSite: 'lax' as const,
+                // domain 설정 없음 (기본값 사용)
+            }),
+        };
+
+        res.cookie('session', sessionJwt, cookieOptions);
 
         // 6) 온보딩 상태 확인 후 적절한 페이지로 리다이렉트
         const userResult = await this.databaseService.query(
@@ -99,7 +113,6 @@ export class AuthController {
         } else {
             // 온보딩 미완료 사용자 → 온보딩 페이지
             return res.redirect(this.configService.frontend.onboardingUrl);
-
         }
     }
 
