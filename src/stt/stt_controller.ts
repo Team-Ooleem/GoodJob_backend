@@ -17,7 +17,7 @@ import { DatabaseService } from '../database/database.service';
 interface TranscribeChunkRequest {
     audioData: string;
     mimeType?: string;
-    canvasIdx: number;
+    canvasId: string;
     mentorIdx: number;
     menteeIdx: number;
     duration?: number;
@@ -45,7 +45,7 @@ interface STTWithContextResponse {
 
 interface SessionUserResponse {
     success: boolean;
-    canvasIdx: number;
+    canvasId: string;
     mentor: { idx: number; name: string };
     mentee: { idx: number; name: string };
 }
@@ -58,7 +58,7 @@ interface ChatMessage {
     mentor_idx: number;
     mentee_idx: number;
     speakerInfo: { mentor: string; mentee: string };
-    canvasIdx: number;
+    canvasId: string;
     segmentIndex: number; // 세그먼트 인덱스 추가
     segments?: Array<{
         speakerTag: number;
@@ -83,7 +83,7 @@ export class STTController {
     // key: canvasIdx, value: { mentorIdx, menteeIdx, chunks: { audioUrl, speakers }[], segmentIndex, lastActivity }
     // ========================
     private chunkCache: Map<
-        number,
+        string,
         {
             mentorIdx: number;
             menteeIdx: number;
@@ -101,8 +101,8 @@ export class STTController {
     // ========================
     // 세션 사용자 조회
     // ========================
-    @Get('session-users/:canvasIdx')
-    async getSessionUsers(@Param('canvasIdx') canvasIdx: string): Promise<SessionUserResponse> {
+    @Get('session-users/:canvasId')
+    async getSessionUsers(@Param('canvasId') canvasId: string): Promise<SessionUserResponse> {
         try {
             const result = await this.databaseService.query(
                 `SELECT 
@@ -115,7 +115,7 @@ export class STTController {
                  JOIN users mentee ON st.mentee_idx = mentee.idx
                  WHERE st.canvas_idx = ?
                  LIMIT 1`,
-                [parseInt(canvasIdx, 10)],
+                [canvasId],
             );
 
             if (!result.length) throw new BadRequestException('해당 캔버스 세션 없음');
@@ -128,7 +128,7 @@ export class STTController {
             };
             return {
                 success: true,
-                canvasIdx: parseInt(canvasIdx, 10),
+                canvasId: canvasId,
                 mentor: { idx: session.mentor_idx, name: session.mentor_name },
                 mentee: { idx: session.mentee_idx, name: session.mentee_name },
             };
@@ -148,7 +148,7 @@ export class STTController {
         const {
             audioData,
             mimeType = 'audio/webm',
-            canvasIdx,
+            canvasId,
             mentorIdx,
             menteeIdx,
             duration,
@@ -157,7 +157,7 @@ export class STTController {
         } = body;
 
         this.logger.log(
-            `STT 요청 받음 - canvasIdx: ${canvasIdx}, isFinalChunk: ${isFinalChunk}, chunkIndex: ${body.chunkIndex}, isNewSession: ${isNewRecordingSession}`,
+            `STT 요청 받음 - canvasIdx: ${canvasId}, isFinalChunk: ${isFinalChunk}, chunkIndex: ${body.chunkIndex}, isNewSession: ${isNewRecordingSession}`,
         );
 
         if (!audioData) throw new BadRequestException('오디오 데이터 없음');
@@ -169,7 +169,7 @@ export class STTController {
             const audioBuffer = Buffer.from(audioData, 'base64');
 
             // 캐시에서 기존 데이터 가져오기 또는 새로 생성
-            let cached = this.chunkCache.get(canvasIdx);
+            let cached = this.chunkCache.get(canvasId);
 
             // 새 녹화 세션이거나 캐시가 없는 경우
             if (isNewRecordingSession || !cached) {
@@ -185,7 +185,7 @@ export class STTController {
                     sessionStartTime: Date.now(),
                 };
                 this.logger.log(
-                    `�� 새 세그먼트 시작 - canvasIdx: ${canvasIdx}, segmentIndex: ${cached.segmentIndex}`,
+                    `�� 새 세그먼트 시작 - canvasId: ${canvasId}, segmentIndex: ${cached.segmentIndex}`,
                 );
             }
 
@@ -195,7 +195,7 @@ export class STTController {
                 // 자동으로 새 청크 생성
                 cached.sessionStartTime = Date.now();
                 this.logger.log(
-                    `🔄 자동 청크 증가 - canvasIdx: ${canvasIdx}, chunkIndex: ${body.chunkIndex}`,
+                    `🔄 자동 청크 증가 - canvasId: ${canvasId}, chunkIndex: ${body.chunkIndex}`,
                 );
             }
 
@@ -217,7 +217,7 @@ export class STTController {
 
             const gcsKey = this.gcsService.generateGcsKey(
                 `voice_chunk_${cached.segmentIndex}_${body.chunkIndex}.webm`,
-                canvasIdx,
+                canvasId,
                 mentorIdx,
                 menteeIdx,
             );
@@ -241,7 +241,7 @@ export class STTController {
             // 캐시에 임시 저장
             // ========================
             cached.chunks.push({ audioUrl: gcsResult.url || '', speakers: normalizedSpeakers });
-            this.chunkCache.set(canvasIdx, cached);
+            this.chunkCache.set(canvasId, cached);
 
             // ========================
             // 최종 청크일 경우만 DB 저장
@@ -251,24 +251,24 @@ export class STTController {
 
             if (isFinalChunk) {
                 this.logger.log(
-                    `✅ 최종 청크 처리 시작 - canvasIdx: ${canvasIdx}, segmentIndex: ${cached.segmentIndex}`,
+                    `✅ 최종 청크 처리 시작 - canvasIdx: ${canvasId}, segmentIndex: ${cached.segmentIndex}`,
                 );
 
                 // 세션 존재 확인 / 생성
                 const sessionRecord: any = await this.databaseService.query(
                     'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_idx = ? AND segment_index = ?',
-                    [canvasIdx, cached.segmentIndex],
+                    [canvasId, cached.segmentIndex],
                 );
 
                 if (!sessionRecord.length) {
                     this.logger.log(
-                        `🆕 신규 세션 생성 - canvasIdx: ${canvasIdx}, segmentIndex: ${cached.segmentIndex}`,
+                        `🆕 신규 세션 생성 - canvasId: ${canvasId}, segmentIndex: ${cached.segmentIndex}`,
                     );
                     // 신규 세션 생성
                     const insertResult: any = await this.databaseService.query(
                         'INSERT INTO stt_transcriptions (canvas_idx, mentor_idx, mentee_idx, audio_url, segment_index) VALUES (?, ?, ?, ?, ?)',
                         [
-                            canvasIdx,
+                            canvasId,
                             mentorIdx,
                             menteeIdx,
                             cached.chunks.map((c) => c.audioUrl).join(','),
@@ -322,7 +322,7 @@ export class STTController {
                 contextText = this.extractContextText(currentSegments);
 
                 // 캐시 제거
-                this.chunkCache.delete(canvasIdx);
+                this.chunkCache.delete(canvasId);
             }
 
             return {
@@ -349,8 +349,8 @@ export class STTController {
     // ========================
     // 세션 메시지 조회
     // ========================
-    @Get('session-messages/:canvasIdx')
-    async getSessionMessages(@Param('canvasIdx') canvasIdx: string) {
+    @Get('session-messages/:canvasId')
+    async getSessionMessages(@Param('canvasId') canvasId: string) {
         try {
             // ✅ 1번의 JOIN 쿼리로 모든 데이터 조회 (segment_index 추가)
             const rows: any[] = await this.databaseService.query(
@@ -364,7 +364,7 @@ export class STTController {
              LEFT JOIN stt_speaker_segments seg ON st.stt_session_idx = seg.stt_session_idx
              WHERE st.canvas_idx = ?
              ORDER BY st.segment_index ASC, st.created_at DESC, seg.start_time ASC`,
-                [canvasIdx],
+                [canvasId],
             );
 
             // 세션별 그룹핑
@@ -384,7 +384,7 @@ export class STTController {
                             mentor: row.mentor_name as string,
                             mentee: row.mentee_name as string,
                         },
-                        canvasIdx: parseInt(canvasIdx, 10),
+                        canvasId: canvasId,
                         segments: [],
                     };
                 }
@@ -419,11 +419,11 @@ export class STTController {
         const now = Date.now();
         let cleanedCount = 0;
 
-        for (const [canvasIdx, cached] of this.chunkCache.entries()) {
+        for (const [canvasId, cached] of this.chunkCache.entries()) {
             if (now - cached.lastActivity > this.INACTIVITY_THRESHOLD) {
-                this.chunkCache.delete(canvasIdx);
+                this.chunkCache.delete(canvasId);
                 cleanedCount++;
-                this.logger.log(`�� 비활성 세션 정리 - canvasIdx: ${canvasIdx}`);
+                this.logger.log(`�� 비활성 세션 정리 - canvasId: ${canvasId}`);
             }
         }
 

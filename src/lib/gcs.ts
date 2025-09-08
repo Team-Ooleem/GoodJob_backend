@@ -53,7 +53,7 @@ export class GcsService {
      * -------------------------------- */
     generateGcsKey(
         originalName: string,
-        canvasIdx?: number,
+        canvasId?: string,
         mentorIdx?: number,
         menteeIdx?: number,
         speakerTag?: number,
@@ -63,12 +63,12 @@ export class GcsService {
         const extension = path.extname(originalName) || '.webm';
 
         let fileName = '';
-        if (canvasIdx !== undefined && mentorIdx !== undefined && menteeIdx !== undefined) {
+        if (canvasId !== undefined && mentorIdx !== undefined && menteeIdx !== undefined) {
             const [first, second] = [mentorIdx, menteeIdx].sort((a, b) => a - b);
             const speakerInfo = speakerTag !== undefined ? `_S${speakerTag}` : '';
-            fileName = `C${canvasIdx}_${first}-${second}${speakerInfo}_${timestamp}_${randomString}${extension}`;
-        } else if (canvasIdx !== undefined) {
-            fileName = `C${canvasIdx}_${timestamp}_${randomString}${extension}`;
+            fileName = `C${canvasId}_${first}-${second}${speakerInfo}_${timestamp}_${randomString}${extension}`;
+        } else if (canvasId !== undefined) {
+            fileName = `C${canvasId}_${timestamp}_${randomString}${extension}`;
         } else {
             fileName = `${timestamp}_${randomString}${extension}`;
         }

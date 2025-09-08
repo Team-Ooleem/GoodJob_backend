@@ -778,13 +778,11 @@ CREATE TABLE `job_application` (
 -- Dump completed on 2025-09-01 11:12:08
 
 
-/* STT 데이터 */
+-- stt_transcriptions 테이블 수정
 DROP TABLE IF EXISTS `stt_transcriptions`;
-/*!40101 SET @saved_cs_client     = @@character_set_client */;
-/*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `stt_transcriptions` (  -- 백틱(`) 사용
-  `stt_session_idx` INT NOT NULL AUTO_INCREMENT COMMENT '세션 고유 ID',  -- AUTO_INCREMENT 추가
-  `canvas_idx` INT NOT NULL COMMENT '캔버스 ID ',
+CREATE TABLE `stt_transcriptions` (
+  `stt_session_idx` INT NOT NULL AUTO_INCREMENT COMMENT '세션 고유 ID',
+  `canvas_id` CHAR(36) NOT NULL COMMENT '캔버스 ID (UUID)', -- INT에서 CHAR(36)로 변경
   `mentor_idx` INT NOT NULL COMMENT '멘토 user_id',
   `mentee_idx` INT NOT NULL COMMENT '멘티 user_id',
   `audio_url` TEXT NOT NULL COMMENT '오디오 파일 URL',
@@ -792,10 +790,11 @@ CREATE TABLE `stt_transcriptions` (  -- 백틱(`) 사용
   PRIMARY KEY (`stt_session_idx`),
   KEY `mentor_idx_idx` (`mentor_idx`),
   KEY `mentee_idx_idx` (`mentee_idx`),
+  KEY `canvas_idx_idx` (`canvas_id`), -- canvas_idx 인덱스 추가
   CONSTRAINT `fk_stt_transcriptions_mentor` FOREIGN KEY (`mentor_idx`) REFERENCES `users`(`idx`) ON DELETE CASCADE,
-  CONSTRAINT `fk_stt_transcriptions_mentee` FOREIGN KEY (`mentee_idx`) REFERENCES `users`(`idx`) ON DELETE CASCADE
+  CONSTRAINT `fk_stt_transcriptions_mentee` FOREIGN KEY (`mentee_idx`) REFERENCES `users`(`idx`) ON DELETE CASCADE,
+  CONSTRAINT `fk_stt_transcriptions_canvas` FOREIGN KEY (`canvas_id`) REFERENCES `canvas`(`id`) ON DELETE CASCADE -- 외래키 추가
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='STT 세션 테이블';
-/*!40101 SET character_set_client = @saved_cs_client */;
 
 DROP TABLE IF EXISTS `stt_speaker_segments`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
