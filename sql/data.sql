@@ -490,8 +490,8 @@ INSERT INTO `users` (`idx`, `name`, `phone`, `email`, `short_bio`, `bio`, `creat
 
 -- 기업 데이터
 INSERT INTO `companies` (`idx`, `ceo_name`, `business_number`, `business_certificate_img_name`, `company_size_code`, `homepage`, `logo_img_name`, `benefits`, `is_certificated`, `is_export`, `foreign_affiliation`, `legal_structure`, `corporate_entity`, `institution_type`, `bio`, `vision`) VALUES
-(1, '박대표', '1234567890', 'cert_techstartup.jpg', 'ST', 'https://techstartup.com', 'logo_tech.png', '4대 보험, 유연근무제, 교육비 지원', 0, 0, 1, 1, 1, 1, '혁신적인 IT 솔루션을 개발하는 스타트업입니다.', '기술로 세상을 바꾸겠습니다.'),
-(2, '최CEO', '9876543210', 'cert_globalcorp.jpg', 'LG', 'https://globalcorp.com', 'logo_global.png', '4대 보험, 연봉제, 성과급, 해외연수', 1, 1, 1, 1, 1, 1, '글로벌 시장을 선도하는 IT 서비스 기업입니다.', '글로벌 No.1 IT 기업이 되겠습니다.');
+(1, '박대표', '1234567890', '/cert_techstartup.jpg', 'ST', 'https://techstartup.com', 'logo_tech.png', '4대 보험, 유연근무제, 교육비 지원', 0, 0, 1, 1, 1, 1, '혁신적인 IT 솔루션을 개발하는 스타트업입니다.', '기술로 세상을 바꾸겠습니다.'),
+(2, '최CEO', '9876543210', '/cert_globalcorp.jpg', 'LG', 'https://globalcorp.com', 'logo_global.png', '4대 보험, 연봉제, 성과급, 해외연수', 1, 1, 1, 1, 1, 1, '글로벌 시장을 선도하는 IT 서비스 기업입니다.', '글로벌 No.1 IT 기업이 되겠습니다.');
 
 -- 개인 회원 프로필
 INSERT INTO `individual_profile` (`user_idx`, `desired_job`, `desired_sido`, `desired_salary`, `desired_gu`) VALUES
@@ -500,8 +500,8 @@ INSERT INTO `individual_profile` (`user_idx`, `desired_job`, `desired_sido`, `de
 
 -- 기업 회원 프로필
 INSERT INTO `business_profile` (`user_idx`, `business_number`, `business_certificate_img_name`, `company_name`, `company_intro`, `id`, `password`, `ceo_name`, `address`) VALUES
-(3, '1234567890', 'cert_techstartup.jpg', '테크스타트업', '혁신적인 IT 솔루션 개발', 'techstartup', 'password123', '박대표', '서울시 강남구 테헤란로 123'),
-(4, '9876543210', 'cert_globalcorp.jpg', '글로벌기업', '글로벌 IT 서비스 제공', 'globalcorp', 'password456', '최CEO', '서울시 서초구 서초대로 456');
+(3, '1234567890', '/cert_techstartup.jpg', '테크스타트업', '혁신적인 IT 솔루션 개발', 'techstartup', 'password123', '박대표', '서울시 강남구 테헤란로 123'),
+(4, '9876543210', '/cert_globalcorp.jpg', '글로벌기업', '글로벌 IT 서비스 제공', 'globalcorp', 'password456', '최CEO', '서울시 서초구 서초대로 456');
 
 -- 이력서 데이터
 INSERT INTO `resume` (`resume_id`, `user_id`, `title`, `created_at`, `updated_at`) VALUES
@@ -521,7 +521,7 @@ INSERT INTO `job_post` (`idx`, `business_number`, `title`, `employment_type`, `c
 -- 게시글 데이터
 INSERT INTO `posts` (`post_idx`, `user_id`, `content`, `media_url`, `created_at`, `updated_at`) VALUES
 (1, 1, '백엔드 개발 공부 중입니다. 좋은 자료 추천해주세요!', NULL, NOW(), NOW()),
-(2, 2, '새로운 디자인 프로젝트 완료했습니다 🎨', 'design_project.jpg', NOW(), NOW());
+(2, 2, '새로운 디자인 프로젝트 완료했습니다 🎨', '/design_project.jpg', NOW(), NOW());
 
 -- 지원 내역
 INSERT INTO `job_application` (`idx`, `user_idx`, `job_post_idx`, `is_viewed`, `created_at`) VALUES
