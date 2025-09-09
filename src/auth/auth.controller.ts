@@ -86,8 +86,8 @@ export class AuthController {
             // 프로덕션 환경 (HTTPS, 크로스 도메인)
             ...(isProd && {
                 secure: true,
-                sameSite: 'none' as const,
-                domain: '.duckdns.org',
+                sameSite: 'none' as const, // 크로스 도메인에는 none이 필요
+                domain: '.good-job.shop',
             }),
             // 로컬 환경 (HTTP, 같은 도메인)
             ...(!isProd && {
@@ -99,6 +99,15 @@ export class AuthController {
 
         res.cookie('session', sessionJwt, cookieOptions);
 
+        // 쿠키 설정 디버깅 로그
+        console.log('🍪 [AUTH] 쿠키 설정 완료:', {
+            isProd,
+            cookieOptions,
+            domain: cookieOptions.domain,
+            secure: cookieOptions.secure,
+            sameSite: cookieOptions.sameSite,
+        });
+
         // 6) 온보딩 상태 확인 후 적절한 페이지로 리다이렉트
         const userResult = await this.databaseService.query(
             'SELECT is_onboarded FROM users WHERE idx = ?',
@@ -107,17 +116,24 @@ export class AuthController {
 
         const isOnboarded = userResult[0]?.is_onboarded === 1;
 
-        if (isOnboarded) {
-            // 온보딩 완료된 사용자 → 메인 페이지
-            return res.redirect(this.configService.frontend.successUrl);
-        } else {
-            // 온보딩 미완료 사용자 → 온보딩 페이지
-            return res.redirect(this.configService.frontend.onboardingUrl);
-        }
+        // 쿠키 설정 후 중간 로딩 페이지로 리다이렉트 (쿠키 저장 시간 확보)
+        // 프론트엔드에서 /api/auth/me를 통해 온보딩 상태 확인 후 적절한 페이지로 이동
+        return res.redirect(`${this.configService.frontend.successUrl}/auth/loading`);
+    }
+
+    // 쿠키 설정 상태 확인 (인증 불필요)
+    @Get('cookie-check')
+    async checkCookie(@Req() req: Request) {
+        const token = req.cookies?.session;
+        return {
+            hasCookie: !!token,
+            cookieExists: !!token,
+            timestamp: new Date().toISOString(),
+        };
     }
 
     // 클라이언트가 로그인 여부 확인할 때 호출
-    // 쿠키(session) 안의 jwt 검증해서 로그인 상태와 유저 정보 반환
+    // 쿠키(session) 안의 jwt 검증해서 로그인 상태와 유저 정보, 온보딩 상태 반환
     @Get('me')
     async me(@Req() req: Request) {
         const token = req.cookies?.session;
@@ -125,6 +141,15 @@ export class AuthController {
 
         try {
             const payload = jwt.verify(token, this.configService.session.secret) as any;
+
+            // 온보딩 상태 확인
+            const userResult = await this.databaseService.query(
+                'SELECT is_onboarded FROM users WHERE idx = ?',
+                [payload.idx],
+            );
+
+            const isOnboarded = userResult[0]?.is_onboarded === 1;
+
             return {
                 authenticated: true,
                 user: {
@@ -133,6 +158,12 @@ export class AuthController {
                     email: payload.email,
                     name: payload.name,
                     picture: payload.picture,
+                },
+                onboarding: {
+                    isOnboarded,
+                    redirectUrl: isOnboarded
+                        ? this.configService.frontend.successUrl
+                        : this.configService.frontend.onboardingUrl,
                 },
             };
         } catch {
