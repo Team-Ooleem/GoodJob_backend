@@ -41,7 +41,7 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
         const doc = this.getDoc(room);
         const init = Y.encodeStateAsUpdate(doc);
-        client.emit('init', Array.from(init))
+        client.emit('init', Array.from(init));
 
         console.log(`📌 ${clientUUID} joined ${room}`);
     }
@@ -108,7 +108,7 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
             from: client.id,
         });
 
-        client.to(room).emit('update', Array.from(u8));
+        // client.to(room).emit('update', Array.from(u8));
     }
 
     @SubscribeMessage('cursor')
