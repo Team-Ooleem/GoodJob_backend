@@ -32,6 +32,7 @@ import { STTService } from './stt/stt_service';
 
 /* tts 모듈 */
 import { TTSModule } from './tts/tts.module';
+import { AvatarModule } from './modules/avatar/avatar.module';
 
 @Module({
     imports: [
@@ -61,6 +62,7 @@ import { TTSModule } from './tts/tts.module';
         CanvasModule,
         SocialModule,
         TTSModule,
+        AvatarModule,
         ResumeModule,
     ],
     controllers: [AppController, STTController],
