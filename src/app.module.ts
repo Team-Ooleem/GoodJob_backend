@@ -34,6 +34,9 @@ import { STTService } from './stt/stt_service';
 import { TTSModule } from './tts/tts.module';
 import { AvatarModule } from './modules/avatar/avatar.module';
 
+/* gcs 모듈 */
+import { GcsService } from './lib/gcs';
+
 @Module({
     imports: [
         ConfigModule.forRoot({
@@ -74,6 +77,7 @@ import { AvatarModule } from './modules/avatar/avatar.module';
             provide: APP_GUARD,
             useClass: SessionGuard,
         },
+        GcsService,
     ],
 })
 export class AppModule {}

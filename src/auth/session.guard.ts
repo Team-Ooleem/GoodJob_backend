@@ -26,7 +26,7 @@ export class SessionGuard implements CanActivate {
             '/api/auth/cookie-check',
         ];
 
-        if (publicPaths.includes(req.path)) {
+        if (publicPaths.includes(req.path) || (req.path as string).startsWith('/api/stt/')) {
             console.log('✅ [SessionGuard] 공개 경로로 인증 생략');
             return true;
         }

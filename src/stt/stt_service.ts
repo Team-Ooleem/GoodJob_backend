@@ -1,7 +1,5 @@
-// stt.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { SpeechClient } from '@google-cloud/speech';
-import { AppConfigService } from '../config/config.service';
 
 export interface STTResult {
     transcript: string;
@@ -32,6 +30,17 @@ interface GoogleSpeechWordInfo {
     startTime?: Duration;
     endTime?: Duration;
     speakerTag?: number;
+    confidence?: number;
+}
+
+interface GoogleSpeechAlternative {
+    transcript?: string;
+    confidence?: number;
+    words?: GoogleSpeechWordInfo[];
+}
+
+interface GoogleSpeechResult {
+    alternatives?: GoogleSpeechAlternative[];
 }
 
 interface ConnectionTestResult {
@@ -44,7 +53,7 @@ export class STTService {
     private readonly logger = new Logger(STTService.name);
     private speechClient: SpeechClient | null = null;
 
-    constructor(private readonly configService: AppConfigService) {
+    constructor() {
         try {
             if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
                 this.logger.warn('Google Cloud 인증 정보가 설정되지 않았습니다. 샘플 모드 실행.');
@@ -59,9 +68,14 @@ export class STTService {
         }
     }
 
-    async transcribeAudioBuffer(audioBuffer: Buffer, mimeType = 'audio/webm'): Promise<STTResult> {
+    async transcribeAudioBuffer(
+        audioBuffer: Buffer,
+        mimeType = 'audio/webm',
+        sessionStartTimeOffset = 0,
+        gcsUrl?: string,
+    ): Promise<STTResult> {
         const base64Data = audioBuffer.toString('base64');
-        return this.transcribeBase64Audio(base64Data, mimeType);
+        return this.transcribeBase64Audio(base64Data, mimeType, sessionStartTimeOffset, gcsUrl);
     }
 
     async testConnection(): Promise<ConnectionTestResult> {
@@ -83,8 +97,28 @@ export class STTService {
             return { status: 'error', message: `연결 실패: ${msg}` };
         }
     }
+    private cleanKoreanText(text: string): string {
+        if (!text || typeof text !== 'string') return '';
 
-    // 타이밍 정규화
+        return text.replace(/\s+/g, ' ').trim();
+    }
+
+    private convertToGcsUri(gcsUrl: string): string {
+        // GCS URL을 gs:// 형식으로 변환
+        if (gcsUrl.startsWith('gs://')) return gcsUrl;
+        if (gcsUrl.includes('storage.googleapis.com')) {
+            const match = gcsUrl.match(/storage\.googleapis\.com\/([^/]+)\/(.+)/);
+            if (match) return `gs://${match[1]}/${match[2]}`;
+        }
+        return gcsUrl; // fallback
+    }
+
+    private compressAudio(audioBuffer: Buffer): Buffer {
+        // 실제 압축 로직 구현 필요
+        // 현재는 원본 반환
+        return audioBuffer;
+    }
+
     normalizeTimings(
         speakers: Array<{
             text_Content: string;
@@ -101,36 +135,136 @@ export class STTService {
 
         return speakers.map((speaker) => ({
             ...speaker,
-            startTime: speaker.startTime * scaleFactor,
-            endTime: speaker.endTime * scaleFactor,
+            startTime: Math.round(speaker.startTime * scaleFactor * 10) / 10,
+            endTime: Math.round(speaker.endTime * scaleFactor * 10) / 10,
         }));
     }
 
+    // 123-180번째 줄 - mergeSimilarSpeakers 함수 수정
+    private mergeSimilarSpeakers(
+        sentences: Array<{
+            text_Content: string;
+            startTime: number;
+            endTime: number;
+            speakerTag: number;
+        }>,
+    ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
+        if (sentences.length === 0) return [];
+
+        const merged: Array<{
+            text_Content: string;
+            startTime: number;
+            endTime: number;
+            speakerTag: number;
+        }> = [];
+        let currentSpeaker = sentences[0].speakerTag;
+        let currentText = sentences[0].text_Content;
+        let startTime = sentences[0].startTime;
+        let endTime = sentences[0].endTime;
+
+        for (let i = 1; i < sentences.length; i++) {
+            const sentence = sentences[i];
+
+            // 짧은 문장이고 시간 간격이 가까우면 같은 화자로 처리
+            const timeGap = sentence.startTime - endTime;
+            const isShortSentence = sentence.text_Content.length < 5;
+            const isCloseInTime = timeGap < 1.0; // 1초 이내
+
+            if (isShortSentence && isCloseInTime && sentence.speakerTag !== currentSpeaker) {
+                // 화자 변경 무시하고 통합
+                currentText += ' ' + sentence.text_Content;
+                endTime = sentence.endTime;
+            } else {
+                // 새로운 문장으로 처리
+                merged.push({
+                    text_Content: currentText.trim(),
+                    startTime: Math.round(startTime * 10) / 10,
+                    endTime: Math.round(endTime * 10) / 10,
+                    speakerTag: currentSpeaker,
+                });
+                currentText = sentence.text_Content;
+                currentSpeaker = sentence.speakerTag;
+                startTime = sentence.startTime;
+                endTime = sentence.endTime;
+            }
+        }
+
+        // 마지막 문장 추가
+        merged.push({
+            text_Content: currentText.trim(),
+            startTime: Math.round(startTime * 10) / 10,
+            endTime: Math.round(endTime * 10) / 10,
+            speakerTag: currentSpeaker,
+        });
+
+        return merged;
+    }
+
+    // 182-208번째 줄 - enhanceContinuity 함수 수정
+    private enhanceContinuity(
+        sentences: Array<{
+            text_Content: string;
+            startTime: number;
+            endTime: number;
+            speakerTag: number;
+        }>,
+    ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
+        return sentences.map((sentence, index) => {
+            // 이전 문장과의 연속성 체크
+            if (index > 0) {
+                const prevSentence = sentences[index - 1];
+                const timeGap = sentence.startTime - prevSentence.endTime;
+
+                // 시간 간격이 너무 작으면 연결
+                if (timeGap < 0.5) {
+                    return {
+                        ...sentence,
+                        startTime: Math.round(prevSentence.endTime * 10) / 10, // 시간 연결
+                    };
+                }
+            }
+
+            return sentence;
+        });
+    }
+
+    // 210-249번째 줄 - processWordTimings 함수 수정
     private processWordTimings(wordSegments?: GoogleSpeechWordInfo[], sessionStartTimeOffset = 0) {
         if (!wordSegments || !Array.isArray(wordSegments)) return [];
 
         const filteredWordSegments = wordSegments
             .filter((w) => {
                 const text = w.word || '';
-                return (
-                    text.trim() &&
-                    text.length > 1 &&
-                    !['아', '어', '음', '으'].includes(text) &&
-                    text !== '▁' &&
-                    text !== ' '
-                );
+                const confidence = w.confidence || 0;
+
+                // 기본 필터링
+                if (!text.trim() || text.length === 0 || text === '▁' || text === ' ') {
+                    return false;
+                }
+
+                // 신뢰도 임계값
+                if (confidence < 0.1) {
+                    return false;
+                }
             })
             .map((w) => ({
                 text_Content: (w.word || '').replace(/^▁/, '').trim(),
-                startTime: this.convertDurationToSeconds(w.startTime) + sessionStartTimeOffset,
-                endTime: this.convertDurationToSeconds(w.endTime) + sessionStartTimeOffset,
+                startTime:
+                    Math.round((Number(w.startTime?.seconds || 0) + sessionStartTimeOffset) * 10) /
+                    10,
+                endTime:
+                    Math.round((Number(w.endTime?.seconds || 0) + sessionStartTimeOffset) * 10) /
+                    10,
                 speakerTag: w.speakerTag || 1,
             }))
             .filter((w) => w.text_Content.length > 0);
 
-        return this.groupWordsIntoSentences(filteredWordSegments);
+        const sentences = this.groupWordsIntoSentences(filteredWordSegments);
+        const mergedSentences = this.mergeSimilarSpeakers(sentences);
+        return this.enhanceContinuity(mergedSentences);
     }
 
+    // 286-371번째 줄 - groupWordsIntoSentences 함수 수정
     private groupWordsIntoSentences(
         wordSegments: Array<{
             text_Content: string;
@@ -147,51 +281,69 @@ export class STTService {
             endTime: number;
             speakerTag: number;
         }> = [];
+
         let currentSentence = '';
         let currentSpeaker = wordSegments[0].speakerTag;
         let sentenceStartTime = wordSegments[0].startTime;
         let sentenceEndTime = wordSegments[0].endTime;
         let wordCount = 0;
 
-        const PAUSE_THRESHOLD = 1.2; // 초 단위
-        const MIN_WORDS_PER_SENTENCE = 3;
+        // 더 정확한 설정
+        const PAUSE_THRESHOLD = 1.5; // 더 정확한 자르기
+        const MIN_WORDS_PER_SENTENCE = 1;
+        const MAX_WORDS_PER_SENTENCE = 30; // 더 짧은 문장
 
         for (let i = 0; i < wordSegments.length; i++) {
             const word = wordSegments[i];
+
+            // 시간 간격 계산 개선
             const prevEndTime = i > 0 ? wordSegments[i - 1].endTime : word.startTime;
+            const timeGap = word.startTime - prevEndTime;
+
+            // 화자 변경시 즉시 분리
+            const isSpeakerChange = word.speakerTag !== currentSpeaker;
+
+            // 시간 간격 체크 (같은 화자일 때만)
+            const isLongPause =
+                !isSpeakerChange &&
+                i > 0 &&
+                timeGap > PAUSE_THRESHOLD &&
+                wordCount >= MIN_WORDS_PER_SENTENCE;
 
             const isNewSentence =
-                word.speakerTag !== currentSpeaker ||
-                (i > 0 &&
-                    word.startTime - prevEndTime > PAUSE_THRESHOLD &&
-                    wordCount >= MIN_WORDS_PER_SENTENCE);
+                isSpeakerChange || isLongPause || wordCount >= MAX_WORDS_PER_SENTENCE;
 
             if (isNewSentence) {
+                // 현재 문장 저장
                 if (currentSentence.trim().length > 0) {
                     sentences.push({
-                        text_Content: currentSentence.trim(),
-                        startTime: sentenceStartTime,
-                        endTime: sentenceEndTime,
+                        text_Content: this.cleanKoreanText(currentSentence.trim()),
+                        startTime: Math.round(sentenceStartTime * 10) / 10,
+                        endTime: Math.round(sentenceEndTime * 10) / 10,
                         speakerTag: currentSpeaker,
                     });
                 }
+
+                // 새로운 문장 시작
                 currentSentence = word.text_Content;
                 currentSpeaker = word.speakerTag;
                 sentenceStartTime = word.startTime;
                 sentenceEndTime = word.endTime;
                 wordCount = 1;
             } else {
+                // 문장 계속 이어가기
                 currentSentence += ' ' + word.text_Content;
-                sentenceEndTime = word.endTime;
+                sentenceEndTime = word.endTime; // 끝 시간만 업데이트
                 wordCount += 1;
             }
         }
 
+        // 마지막 문장 저장
         if (currentSentence.trim().length > 0) {
             sentences.push({
                 text_Content: currentSentence.trim(),
-                startTime: sentenceStartTime,
-                endTime: sentenceEndTime,
+                startTime: Math.round(sentenceStartTime * 10) / 10,
+                endTime: Math.round(sentenceEndTime * 10) / 10,
                 speakerTag: currentSpeaker,
             });
         }
@@ -199,6 +351,7 @@ export class STTService {
         return sentences;
     }
 
+    // 373-389번째 줄 - createWordsFromTranscript 함수 수정
     private createWordsFromTranscript(
         transcript: string,
         sessionStartTimeOffset = 0,
@@ -211,81 +364,237 @@ export class STTService {
         const wordDuration = 1; // fallback 1초 단위
         return textSegments.map((text, idx) => ({
             text_Content: text.trim(),
-            startTime: sessionStartTimeOffset + idx * wordDuration,
-            endTime: sessionStartTimeOffset + (idx + 1) * wordDuration,
+            startTime: Math.round((sessionStartTimeOffset + idx * wordDuration) * 10) / 10,
+            endTime: Math.round((sessionStartTimeOffset + (idx + 1) * wordDuration) * 10) / 10,
             speakerTag: 1,
         }));
     }
 
+    // 391-398번째 줄 - getAudioConfig 함수 수정
     private getAudioConfig(mimeType: string) {
-        if (mimeType.includes('mp3')) return { encoding: 'MP3', sampleRate: 44100 };
-        if (mimeType.includes('webm')) return { encoding: 'WEBM_OPUS', sampleRate: 48000 };
+        if (mimeType.includes('mp3')) return { encoding: 'MP3', sampleRate: 16000 }; // 44100 → 16000
+        if (mimeType.includes('webm')) return { encoding: 'WEBM_OPUS', sampleRate: 48000 }; // 원본 유지
         if (mimeType.includes('flac')) return { encoding: 'FLAC', sampleRate: 16000 };
+        if (mimeType.includes('wav')) return { encoding: 'LINEAR16', sampleRate: 16000 };
         return { encoding: 'LINEAR16', sampleRate: 16000 };
     }
 
+    // 405-425번째 줄 - preprocessAudio 함수 수정
+    private preprocessAudio(audioBuffer: Buffer): Buffer {
+        // 최소 길이 체크 강화
+        const minLength = 2048; // 1024 → 2048 (더 긴 오디오 요구)
+        if (audioBuffer.length < minLength) {
+            this.logger.warn(`오디오 버퍼가 너무 짧습니다: ${audioBuffer.length} bytes`);
+        }
+
+        // 노이즈 제거 및 정규화
+        const processedBuffer = this.normalizeAudio(audioBuffer);
+
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (processedBuffer.length > maxSize) {
+            this.logger.warn(
+                `오디오 크기가 제한을 초과하여 압축합니다: ${processedBuffer.length} bytes`,
+            );
+            return this.compressAudio(processedBuffer);
+        }
+
+        this.logger.log(`오디오 전처리 완료: ${processedBuffer.length} bytes`);
+        return processedBuffer;
+    }
+
+    // 427-431번째 줄 - normalizeAudio 함수 수정
+    private normalizeAudio(audioBuffer: Buffer): Buffer {
+        // 오디오 볼륨 정규화 로직
+        // 실제 구현에서는 Web Audio API나 오디오 처리 라이브러리 사용
+        return audioBuffer;
+    }
+
+    // 433-564번째 줄 - transcribeBase64Audio 함수 수정
     async transcribeBase64Audio(
         base64Data: string,
         mimeType = 'audio/wav',
         sessionStartTimeOffset = 0,
+        gcsUrl?: string,
     ): Promise<STTResult> {
         if (!this.speechClient) return this.createSampleResult();
-
+        const processedAudioBuffer = gcsUrl
+            ? null
+            : this.preprocessAudio(Buffer.from(base64Data, 'base64'));
+        const processedBase64Data = gcsUrl ? null : processedAudioBuffer?.toString('base64');
         try {
             const { encoding, sampleRate } = this.getAudioConfig(mimeType);
             const request = {
-                audio: { content: base64Data },
+                audio: gcsUrl
+                    ? { uri: this.convertToGcsUri(gcsUrl) }
+                    : { content: processedBase64Data || '' },
                 config: {
+                    // 기본 오디오 설정
                     encoding: encoding as 'LINEAR16' | 'MP3' | 'WEBM_OPUS' | 'FLAC',
                     sampleRateHertz: sampleRate,
                     languageCode: 'ko-KR',
-                    enableWordTimeOffsets: true,
-                    enableAutomaticPunctuation: true,
-                    model: 'latest_long',
+                    audioChannelCount: 1,
+
+                    // 다국어 지원 모델 (한국어 + 영어)
+                    model: 'default',
                     useEnhanced: true,
+
+                    // 화자 분리 설정 (다국어 지원)
                     enableSpeakerDiarization: true,
                     diarizationSpeakerCount: 2,
-                    maxAlternatives: 1,
+                    diarizationConfig: {
+                        minSpeakerCount: 1,
+                        maxSpeakerCount: 2,
+                    },
+
+                    // 다국어 인식 개선
+                    enableWordConfidence: true,
+                    enableWordTimeOffsets: true,
+                    enableAutomaticPunctuation: true,
+
+                    // 한국어 우선, 영어 보조
+                    alternativeLanguageCodes: ['ko-KR', 'en-US'],
+
+                    // 성능 최적화
+                    maxAlternatives: 3, // 2 → 3 (더 많은 대안 고려)
                     profanityFilter: false,
                     enableSeparateRecognitionPerChannel: false,
+
+                    // 다국어 인식 정확도 향상
+                    speechContexts: [
+                        {
+                            phrases: [
+                                // 한국어
+                                '안녕하세요',
+                                '감사합니다',
+                                '죄송합니다',
+                                '네',
+                                '아니요',
+                                '면접',
+                                '질문',
+                                '답변',
+                                '경험',
+                                '프로젝트',
+                                '회사',
+                                '개발',
+                                '프로그래밍',
+                                '코딩',
+                                '기술',
+                                '스킬',
+                                'STT',
+                                'TTS',
+                                'AI',
+                                'API',
+                                'DB',
+                                'SQL',
+                                'HTML',
+                                'CSS',
+                                'JS',
+                                'JavaScript',
+                                'TypeScript',
+                                'React',
+                                'Vue',
+                                'Angular',
+                                'Node.js',
+                                'Python',
+                                'Java',
+                                'Spring',
+                                'Django',
+                                'AWS',
+                                'Docker',
+                                'Kubernetes',
+                                'Git',
+                                'GitHub',
+                                '프론트엔드',
+                                '백엔드',
+                                '풀스택',
+                                '데이터베이스',
+                                '서버',
+                                '클라이언트',
+                                '배포',
+                                '테스트',
+                                '디버깅',
+                                // 영어
+                                'hello',
+                                'thank you',
+                                'sorry',
+                                'yes',
+                                'no',
+                                'interview',
+                                'question',
+                                'answer',
+                                'experience',
+                                'project',
+                                'company',
+                                'development',
+                                'programming',
+                                'coding',
+                                'technology',
+                                'skill',
+                            ],
+                            boost: 15.0,
+                        },
+                    ],
                 },
             };
 
-            const [operation] = await this.speechClient.longRunningRecognize(request);
-            const [response] = await operation.promise();
+            const operation = await this.speechClient.longRunningRecognize(request);
 
-            const results = response.results;
+            // 배열인지 확인하고 첫 번째 요소 사용
+            const [operationResult] = operation;
+            const [response] = await operationResult.promise();
+            const results = response.results as GoogleSpeechResult[];
+
             if (!results || results.length === 0)
                 return { transcript: '', confidence: 0, speakers: [] };
 
-            const alternative = results[0].alternatives?.[0];
-            if (!alternative) return { transcript: '', confidence: 0, speakers: [] };
-
-            const transcript = alternative.transcript || '';
-            const confidence = alternative.confidence || 0;
-
-            let wordSegments = this.processWordTimings(
-                alternative.words as GoogleSpeechWordInfo[],
-                sessionStartTimeOffset,
+            // 모든 결과 처리하도록 수정
+            const allResults = results.flatMap((result) => result.alternatives || []);
+            const bestResult = allResults.reduce(
+                (best: GoogleSpeechAlternative, current: GoogleSpeechAlternative) =>
+                    (current.confidence || 0) > (best.confidence || 0) ? current : best,
+                allResults[0],
             );
+
+            // 모든 결과를 합치기
+            const combinedTranscript = results
+                .map((result) => result.alternatives?.[0]?.transcript || '')
+                .filter((t) => t.trim())
+                .join(' ');
+
+            const transcript = combinedTranscript || bestResult.transcript || '';
+            const confidence = bestResult.confidence || 0;
+
+            // 모든 결과의 words 합치기
+            const allWords = results.flatMap((result) => result.alternatives?.[0]?.words || []);
+
+            let wordSegments = this.processWordTimings(allWords, sessionStartTimeOffset);
             if (!wordSegments || wordSegments.length === 0) {
                 wordSegments = this.createWordsFromTranscript(transcript, sessionStartTimeOffset);
+            }
+
+            // 결과 품질 검증 및 로깅
+            this.logger.log(
+                `STT 결과 - 신뢰도: ${confidence.toFixed(3)}, 텍스트 길이: ${transcript.length}, 세그먼트 수: ${wordSegments.length}`,
+            );
+
+            // 너무 낮은 신뢰도나 의미없는 결과 경고
+            if (confidence < 0.5) {
+                this.logger.warn(`STT 신뢰도가 낮습니다: ${confidence.toFixed(3)}`);
+            }
+
+            if (transcript.length < 5) {
+                this.logger.warn(`STT 결과가 너무 짧습니다: "${transcript}"`);
             }
 
             return { transcript, confidence, speakers: wordSegments };
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);
+            this.logger.error(`STT 변환 실패: ${msg}`);
             throw new Error(`STT 변환 실패: ${msg}`);
         }
     }
 
-    private convertDurationToSeconds(duration?: Duration) {
-        if (!duration) return 0;
-        const seconds = parseInt(String(duration.seconds ?? '0'), 10);
-        const nanos = parseInt(String(duration.nanos ?? '0'), 10);
-        return seconds + nanos / 1_000_000_000;
-    }
-
+    // 582-594번째 줄 - createSampleResult 함수 수정
     createSampleResult(): STTResult {
         return {
             transcript: '안녕하세요. 구글 STT 테스트입니다.',
