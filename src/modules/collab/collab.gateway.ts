@@ -3,18 +3,23 @@ import {
     WebSocketServer,
     OnGatewayConnection,
     OnGatewayDisconnect,
+    OnGatewayInit,
     SubscribeMessage,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import * as Y from 'yjs';
 
 @WebSocketGateway({
-    namespace: '/',
     cors: { origin: '*', credentials: true },
 })
-export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;
     private docs = new Map<string, Y.Doc>();
+
+    // --- 초기화 확인 ---
+    afterInit() {
+        console.log('🚀 WebSocket server initialized', !!this.server);
+    }
 
     handleConnection(client: Socket) {
         console.log('✅ connected', client.id);
@@ -33,19 +38,38 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
         return doc;
     }
 
-    // --- Yjs 협업용 ---
-    @SubscribeMessage('join')
-    handleJoin(client: Socket, payload: { room: string; clientUUID: string }) {
-        const { room, clientUUID } = payload;
+    // --- Yjs 협업용 join ---
+    @SubscribeMessage('joinCanvas')
+    handleJoinCanvas(client: Socket, room: string) {
+        if (!room) {
+            console.error('❌ joinCanvas called without room');
+            return;
+        }
+
         client.join(room);
 
         const doc = this.getDoc(room);
         const init = Y.encodeStateAsUpdate(doc);
         client.emit('init', Array.from(init));
 
-        console.log(`📌 ${clientUUID} joined ${room}`);
+        console.log(`📌 (Canvas) ${client.id} joined ${room}`);
     }
 
+    // --- Cursor 전용 join ---
+    @SubscribeMessage('joinCursor')
+    handleJoinCursor(client: Socket, payload: { room: string; clientUUID: string }) {
+        const { room, clientUUID } = payload;
+        if (!room || !clientUUID) {
+            console.error('❌ joinCursor called without room/clientUUID');
+            return;
+        }
+
+        client.join(room);
+
+        console.log(`🖱️ (Cursor) ${clientUUID} joined ${room}`);
+    }
+
+    // --- Yjs 업데이트 동기화 ---
     @SubscribeMessage('sync')
     handleSync(
         client: Socket,
@@ -66,7 +90,7 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // --- WebRTC 전용 join ---
     @SubscribeMessage('joinRtc')
-    handleJoinRtc(client: Socket, room: string, callback: (size: number) => void) {
+    handleJoinRtc(client: Socket, { room }: { room: string }, callback: (size: number) => void) {
         client.join(room);
 
         const size = this.server.sockets.adapter.rooms.get(room)?.size || 0;
@@ -107,10 +131,9 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
             candidate: payload.candidate,
             from: client.id,
         });
-
-        // client.to(room).emit('update', Array.from(u8));
     }
 
+    // --- Cursor 이벤트 ---
     @SubscribeMessage('cursor')
     handleCursor(
         client: Socket,
