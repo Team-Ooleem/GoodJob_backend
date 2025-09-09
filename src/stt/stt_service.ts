@@ -435,7 +435,7 @@ export class STTService {
                     audioChannelCount: 1,
 
                     // 다국어 지원 모델 (한국어 + 영어)
-                    model: 'latest_long',
+                    model: 'default',
                     useEnhanced: true,
 
                     // 화자 분리 설정 (다국어 지원)

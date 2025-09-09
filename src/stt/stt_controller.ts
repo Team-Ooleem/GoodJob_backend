@@ -24,7 +24,8 @@ interface TranscribeChunkRequest {
     chunkIndex: number;
     totalChunks: number;
     isFinalChunk?: boolean;
-    isNewRecordingSession?: boolean; // 새 녹화 세션 여부
+    isNewRecordingSession?: boolean;
+    url?: string;
 }
 
 interface STTWithContextResponse {
@@ -168,8 +169,9 @@ export class STTController {
         try {
             const audioBuffer = Buffer.from(audioData, 'base64');
 
-            // 캐시에서 기존 데이터 가져오기 또는 새로 생성
-            let cached = this.chunkCache.get(canvasId);
+            // 173번째 줄 - URL 기반 세션 키 생성
+            const sessionKey = body.url ? `${canvasId}_${body.url}` : canvasId;
+            let cached = this.chunkCache.get(sessionKey);
 
             // 새 녹화 세션이거나 캐시가 없는 경우
             if (isNewRecordingSession || !cached) {
@@ -215,12 +217,14 @@ export class STTController {
                 0,
             );
 
+            //GCS 키에 URL 포함
             const gcsKey = this.gcsService.generateGcsKey(
-                `voice_chunk_${cached.segmentIndex}_${body.chunkIndex}.webm`,
+                `voice_chunk_${cached.segmentIndex}_${body.chunkIndex}${body.url ? `_${body.url.replace(/[^a-zA-Z0-9]/g, '_')}` : ''}.webm`,
                 canvasId,
                 mentorIdx,
                 menteeIdx,
             );
+
             const gcsResult = await this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType);
             if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
 
@@ -241,7 +245,7 @@ export class STTController {
             // 캐시에 임시 저장
             // ========================
             cached.chunks.push({ audioUrl: gcsResult.url || '', speakers: normalizedSpeakers });
-            this.chunkCache.set(canvasId, cached);
+            this.chunkCache.set(sessionKey, cached);
 
             // ========================
             // 최종 청크일 경우만 DB 저장
@@ -254,10 +258,12 @@ export class STTController {
                     `✅ 최종 청크 처리 시작 - canvasIdx: ${canvasId}, segmentIndex: ${cached.segmentIndex}`,
                 );
 
-                // 세션 존재 확인 / 생성
+                // 260번째 줄 - URL 기반 세션 확인
                 const sessionRecord: any = await this.databaseService.query(
-                    'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_id = ?',
-                    [canvasId],
+                    body.url
+                        ? 'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_id = ? AND audio_url LIKE ?'
+                        : 'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_id = ?',
+                    body.url ? [canvasId, `%${body.url}%`] : [canvasId],
                 );
 
                 if (!sessionRecord.length) {
@@ -321,7 +327,7 @@ export class STTController {
                 contextText = this.extractContextText(currentSegments);
 
                 // 캐시 제거
-                this.chunkCache.delete(canvasId);
+                this.chunkCache.delete(sessionKey);
             }
 
             return {
@@ -418,14 +424,14 @@ export class STTController {
         const now = Date.now();
         let cleanedCount = 0;
 
-        for (const [canvasId, cached] of this.chunkCache.entries()) {
+        // 수정 (올바름)
+        for (const [sessionKey, cached] of this.chunkCache.entries()) {
             if (now - cached.lastActivity > this.INACTIVITY_THRESHOLD) {
-                this.chunkCache.delete(canvasId);
+                this.chunkCache.delete(sessionKey);
                 cleanedCount++;
-                this.logger.log(`�� 비활성 세션 정리 - canvasId: ${canvasId}`);
+                this.logger.log(` 비활성 세션 정리 - sessionKey: ${sessionKey}`);
             }
         }
-
         return { success: true, cleanedCount };
     }
 

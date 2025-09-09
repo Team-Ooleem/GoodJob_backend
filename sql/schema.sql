@@ -823,8 +823,8 @@ CREATE TABLE `stt_speaker_segments` (
   `stt_session_idx` INT NOT NULL COMMENT '세션 ID (FK)',
   `speaker_idx` INT NOT NULL COMMENT '화자 번호 (0=멘토, 1=멘티)',
   `text_content` TEXT NOT NULL COMMENT '인식된 텍스트',
-  `start_time` DECIMAL(10,3) NOT NULL COMMENT '시작 시각 (초)',
-  `end_time` DECIMAL(10,3) NOT NULL COMMENT '종료 시각 (초)',
+  `start_time` DECIMAL(10,1) NOT NULL COMMENT '시작 시각 (초)',
+  `end_time` DECIMAL(10,1) NOT NULL COMMENT '종료 시각 (초)',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시간',
   PRIMARY KEY (`segment_idx`),
   KEY `stt_session_idx_idx` (`stt_session_idx`)
