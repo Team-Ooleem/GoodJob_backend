@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
     Controller,
     Get,
@@ -9,11 +8,14 @@ import {
     BadRequestException,
     InternalServerErrorException,
     Logger,
+    UploadedFile,
+    UseInterceptors,
 } from '@nestjs/common';
 
 import { STTService } from './stt_service';
 import { GcsService } from '../lib/gcs';
 import { DatabaseService } from '../database/database.service';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 interface TranscribeChunkRequest {
     audioData: string;
@@ -324,6 +326,33 @@ export class STTController {
         } catch (error) {
             this.logger.error(`STT 실패: ${error}`);
             throw new InternalServerErrorException('STT 처리 실패');
+        }
+    }
+
+    @Post('transcribe-file')
+    @UseInterceptors(
+        FileInterceptor('file', {
+            limits: { fileSize: 10 * 1024 * 1024 }, // 10MB 제한 (필요시 조정)
+        }),
+    )
+    async transcribeFile(@UploadedFile() file: Express.Multer.File) {
+        if (!file) throw new BadRequestException('파일이 없습니다.');
+        // (선택) 파일 검증 재활용
+        // this.validateAudioFile(file);
+
+        try {
+            const start = Date.now();
+            const result = await this.sttService.transcribeAudioBuffer(file.buffer, file.mimetype);
+            const processingTime = Date.now() - start;
+            return {
+                success: true,
+                timestamp: new Date().toISOString(),
+                processingTime,
+                result,
+            };
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            throw new InternalServerErrorException(`STT 변환 실패: ${msg}`);
         }
     }
 
