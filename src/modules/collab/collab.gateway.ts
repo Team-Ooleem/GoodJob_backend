@@ -10,10 +10,8 @@ import { Server, Socket } from 'socket.io';
 import * as Y from 'yjs';
 
 @WebSocketGateway({
-    cors: {
-        origin: process.env.FRONTEND_SUCCESS_URL || 'http://localhost:3001',
-        credentials: true,
-    },
+    namespace: '/',
+    cors: { origin: '*', credentials: true },
 })
 export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;
@@ -36,13 +34,15 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     @SubscribeMessage('join')
-    handleJoin(client: Socket, room: string) {
+    handleJoin(client: Socket, payload: { room: string; clientUUID: string }) {
+        const { room, clientUUID } = payload;
         client.join(room);
+
         const doc = this.getDoc(room);
         const init = Y.encodeStateAsUpdate(doc);
-        // 반드시 number[]로 보내면 클라에서 toU8로 복원
         client.emit('init', Array.from(init));
-        console.log(`📌 ${client.id} joined ${room}`);
+
+        console.log(`📌 ${clientUUID} joined ${room}`);
     }
 
     @SubscribeMessage('sync')
@@ -53,7 +53,6 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
         const { room, update } = payload;
         const doc = this.getDoc(room);
 
-        // update → Uint8Array 변환
         let u8: Uint8Array;
         if (update instanceof Uint8Array) u8 = update;
         else if (update instanceof ArrayBuffer) u8 = new Uint8Array(update);
@@ -62,7 +61,22 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
         Y.applyUpdate(doc, u8);
 
-        // 같은 방의 "다른" 클라에게만 브로드캐스트
         client.to(room).emit('update', Array.from(u8));
+    }
+
+    @SubscribeMessage('cursor')
+    handleCursor(
+        client: Socket,
+        payload: { room: string; clientUUID: string; x: number; y: number },
+    ) {
+        const { room, clientUUID, x, y } = payload;
+        client.to(room).emit('cursor', { clientUUID, x, y });
+    }
+
+    @SubscribeMessage('cursor-leave')
+    handleCursorLeave(client: Socket, payload: { room: string; clientUUID: string }) {
+        const { room, clientUUID } = payload;
+        client.to(room).emit('cursor-leave', clientUUID);
+        console.log(`👋 cursor hidden: ${clientUUID} in ${room}`);
     }
 }
