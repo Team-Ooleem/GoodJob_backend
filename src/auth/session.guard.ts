@@ -18,14 +18,9 @@ export class SessionGuard implements CanActivate {
         console.log('  - Raw Headers:', req.rawHeaders);
 
         // 인증이 필요하지 않은 경로들
-        const publicPaths = [
-            '/api/auth/google',
-            '/api/auth/google/callback',
-            '/api/auth/logout',
-            '/api/stt/transcribe-with-context',
-        ];
+        const publicPaths = ['/api/auth/google', '/api/auth/google/callback', '/api/auth/logout'];
 
-        if (publicPaths.includes(req.path)) {
+        if (publicPaths.includes(req.path) || (req.path as string).startsWith('/api/stt/')) {
             console.log('✅ [SessionGuard] 공개 경로로 인증 생략');
             return true;
         }

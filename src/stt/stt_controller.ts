@@ -5,6 +5,7 @@ import {
     Post,
     Body,
     Param,
+    Query,
     BadRequestException,
     InternalServerErrorException,
     Logger,
@@ -24,7 +25,7 @@ interface TranscribeChunkRequest {
     chunkIndex: number;
     totalChunks: number;
     isFinalChunk?: boolean;
-    isNewRecordingSession?: boolean;
+    isNewRecordingSession?: boolean; // 새 녹화 세션 여부
     url?: string;
 }
 
@@ -114,7 +115,7 @@ export class STTController {
                  FROM stt_transcriptions st
                  JOIN users mentor ON st.mentor_idx = mentor.idx
                  JOIN users mentee ON st.mentee_idx = mentee.idx
-                 WHERE st.canvas_idx = ?
+                 WHERE st.canvas_id = ?
                  LIMIT 1`,
                 [canvasId],
             );
@@ -169,8 +170,8 @@ export class STTController {
         try {
             const audioBuffer = Buffer.from(audioData, 'base64');
 
-            // 173번째 줄 - URL 기반 세션 키 생성
             const sessionKey = body.url ? `${canvasId}_${body.url}` : canvasId;
+            // 캐시에서 기존 데이터 가져오기 또는 새로 생성
             let cached = this.chunkCache.get(sessionKey);
 
             // 새 녹화 세션이거나 캐시가 없는 경우
@@ -194,44 +195,32 @@ export class STTController {
             // 자동 청크 증가 체크
             const currentChunkDuration = Date.now() - cached.sessionStartTime;
             if (currentChunkDuration > this.MAX_CHUNK_DURATION && !isFinalChunk) {
-                // 자동으로 새 청크 생성
-                cached.sessionStartTime = Date.now();
+                // 자동으로 새 청크 생성 (시간 리셋하지 않음)
                 this.logger.log(
                     `🔄 자동 청크 증가 - canvasId: ${canvasId}, chunkIndex: ${body.chunkIndex}`,
                 );
+                // cached.sessionStartTime = Date.now(); // 이 줄을 제거
             }
 
             // 활동 시간 업데이트
             cached.lastActivity = Date.now();
 
             //이전 청크시간 계산
-            const previousChunksDuration = cached.chunks.reduce(
-                (total: number, chunk: { speakers: { endTime: number }[] }) => {
-                    const chunkDuration = chunk.speakers.reduce(
-                        (max: number, speaker: { endTime: number }) =>
-                            Math.max(max, speaker.endTime),
-                        0,
-                    );
-                    return total + chunkDuration;
-                },
-                0,
-            );
+            const actualRecordingTime = Date.now() - cached.sessionStartTime;
 
-            //GCS 키에 URL 포함
             const gcsKey = this.gcsService.generateGcsKey(
-                `voice_chunk_${cached.segmentIndex}_${body.chunkIndex}${body.url ? `_${body.url.replace(/[^a-zA-Z0-9]/g, '_')}` : ''}.webm`,
+                `voice_chunk_${cached.segmentIndex}_${body.chunkIndex}.webm`,
                 canvasId,
                 mentorIdx,
                 menteeIdx,
             );
-
             const gcsResult = await this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType);
             if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
 
             const sttResult = await this.sttService.transcribeAudioBuffer(
                 audioBuffer,
                 mimeType,
-                previousChunksDuration,
+                actualRecordingTime,
                 gcsResult?.url,
             );
 
@@ -258,38 +247,23 @@ export class STTController {
                     `✅ 최종 청크 처리 시작 - canvasIdx: ${canvasId}, segmentIndex: ${cached.segmentIndex}`,
                 );
 
-                // 260번째 줄 - URL 기반 세션 확인
-                const sessionRecord: any = await this.databaseService.query(
-                    body.url
-                        ? 'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_id = ? AND audio_url LIKE ?'
-                        : 'SELECT stt_session_idx FROM stt_transcriptions WHERE canvas_id = ?',
-                    body.url ? [canvasId, `%${body.url}%`] : [canvasId],
+                // 매번 새로운 세션 생성 (기존 세션 업데이트 로직 제거)
+                this.logger.log(
+                    `�� 새 세션 생성 - canvasId: ${canvasId}, segmentIndex: ${cached.segmentIndex}, isNewSession: ${isNewRecordingSession}`,
                 );
 
-                if (!sessionRecord.length) {
-                    this.logger.log(
-                        `🆕 신규 세션 생성 - canvasId: ${canvasId}, segmentIndex: ${cached.segmentIndex}`,
-                    );
-                    // 신규 세션 생성
-                    const insertResult: any = await this.databaseService.query(
-                        'INSERT INTO stt_transcriptions (canvas_id, mentor_idx, mentee_idx, audio_url) VALUES (?, ?, ?, ?)',
-                        [
-                            canvasId,
-                            mentorIdx,
-                            menteeIdx,
-                            cached.chunks.map((c) => c.audioUrl).join(','),
-                        ],
-                    );
-                    sttSessionIdx = insertResult.insertId as number;
-                    this.logger.log(`✅ 세션 생성 완료 - sttSessionIdx: ${sttSessionIdx}`);
-                } else {
-                    sttSessionIdx = sessionRecord[0].stt_session_idx as number;
-                    this.logger.log(`🔄 기존 세션 업데이트 - sttSessionIdx: ${sttSessionIdx}`);
-                    await this.databaseService.query(
-                        'UPDATE stt_transcriptions SET audio_url = ? WHERE stt_session_idx = ?',
-                        [cached.chunks.map((c) => c.audioUrl).join(','), sttSessionIdx],
-                    );
-                }
+                const insertResult: any = await this.databaseService.query(
+                    'INSERT INTO stt_transcriptions (canvas_id, mentor_idx, mentee_idx, audio_url) VALUES (?, ?, ?, ?)',
+                    [
+                        canvasId,
+                        mentorIdx,
+                        menteeIdx,
+                        cached.chunks.map((c) => c.audioUrl).join(','),
+                    ],
+                );
+
+                sttSessionIdx = insertResult.insertId as number;
+                this.logger.log(`✅ 새 세션 생성 완료 - sttSessionIdx: ${sttSessionIdx}`);
 
                 // 세그먼트 저장
                 for (const chunk of cached.chunks) {
@@ -313,6 +287,8 @@ export class STTController {
                         );
                     }
                 }
+
+                //
 
                 // DB에서 조회한 세그먼트 대신 현재 STT 결과 사용
                 const currentSegments = cached.chunks.flatMap((chunk) =>
@@ -355,22 +331,45 @@ export class STTController {
     // 세션 메시지 조회
     // ========================
     @Get('session-messages/:canvasId')
-    async getSessionMessages(@Param('canvasId') canvasId: string) {
+    async getSessionMessages(
+        @Param('canvasId') canvasId: string,
+        @Query('page') page: string = '1',
+        @Query('limit') limit: string = '20',
+    ) {
         try {
-            // ✅ 1번의 JOIN 쿼리로 모든 데이터 조회 (segment_index 추가)
+            const pageNum = parseInt(page, 10) || 1;
+            const limitNum = parseInt(limit, 10) || 20;
+            const offset = (pageNum - 1) * limitNum;
+
+            // ✅ 1번의 JOIN 쿼리로 모든 데이터 조회 (페이지네이션 추가)
             const rows: any[] = await this.databaseService.query(
                 `SELECT st.stt_session_idx, st.audio_url, st.created_at,
-                    st.mentor_idx, st.mentee_idx,
-                    mentor.name as mentor_name, mentee.name as mentee_name,
-                    seg.speaker_idx, seg.text_content, seg.start_time, seg.end_time
+                st.mentor_idx, st.mentee_idx,
+                mentor.name as mentor_name, mentee.name as mentee_name,
+                seg.speaker_idx, seg.text_content, seg.start_time, seg.end_time
+         FROM stt_transcriptions st
+         JOIN users mentor ON st.mentor_idx = mentor.idx
+         JOIN users mentee ON st.mentee_idx = mentee.idx
+         LEFT JOIN stt_speaker_segments seg ON st.stt_session_idx = seg.stt_session_idx
+         WHERE st.canvas_id = ?
+         ORDER BY st.created_at DESC, seg.start_time ASC
+         LIMIT ? OFFSET ?`,
+                [canvasId, limitNum, offset],
+            );
+
+            console.log(' 쿼리 결과:', rows); // ← 25번째 줄에 추가
+            console.log('🔍 쿼리 결과 개수:', rows.length); // ← 26번째
+
+            // 전체 개수 조회 (페이지네이션을 위한 총 개수)
+            const countResult: any = await this.databaseService.query(
+                `SELECT COUNT(DISTINCT st.stt_session_idx) as total
                  FROM stt_transcriptions st
-                 JOIN users mentor ON st.mentor_idx = mentor.idx
-                 JOIN users mentee ON st.mentee_idx = mentee.idx
-                 LEFT JOIN stt_speaker_segments seg ON st.stt_session_idx = seg.stt_session_idx
-                 WHERE st.canvas_id = ?
-                 ORDER BY st.created_at DESC, seg.start_time ASC`,
+                 WHERE st.canvas_id = ?`,
                 [canvasId],
             );
+            const totalCount = Array.isArray(countResult)
+                ? (countResult[0].total as number)
+                : (countResult.total as number);
 
             // 세션별 그룹핑
             const grouped: { [sessionId: number]: ChatMessage & { segments: any[] } } = {};
@@ -409,7 +408,14 @@ export class STTController {
                 return msg;
             });
 
-            return { success: true, messages, totalCount: messages.length };
+            return {
+                success: true,
+                messages,
+                totalCount,
+                page: pageNum,
+                limit: limitNum,
+                hasMore: offset + limitNum < totalCount,
+            };
         } catch (error) {
             this.logger.error(`세션 메시지 조회 실패: ${error}`);
             throw new InternalServerErrorException('메시지 조회 실패');
@@ -424,14 +430,19 @@ export class STTController {
         const now = Date.now();
         let cleanedCount = 0;
 
-        // 수정 (올바름)
         for (const [sessionKey, cached] of this.chunkCache.entries()) {
             if (now - cached.lastActivity > this.INACTIVITY_THRESHOLD) {
                 this.chunkCache.delete(sessionKey);
                 cleanedCount++;
-                this.logger.log(` 비활성 세션 정리 - sessionKey: ${sessionKey}`);
+
+                // sessionKey에서 canvasId 추출하여 로그
+                const canvasId = sessionKey.includes('_') ? sessionKey.split('_')[0] : sessionKey;
+                this.logger.log(
+                    `🧹 비활성 세션 정리 - sessionKey: ${sessionKey}, canvasId: ${canvasId}`,
+                );
             }
         }
+
         return { success: true, cleanedCount };
     }
 
