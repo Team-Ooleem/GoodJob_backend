@@ -20,8 +20,9 @@ export class SynthesizeSpeechDto {
         'ko-KR-Wavenet-B',
         'ko-KR-Wavenet-C',
         'ko-KR-Wavenet-D',
+        'ko-KR-Chirp3-HD-Charon',
     ])
-    voiceName?: string = 'ko-KR-Standard-A';
+    voiceName?: string = 'ko-KR-Chirp3-HD-Charon';
 
     @IsOptional()
     @IsString()
