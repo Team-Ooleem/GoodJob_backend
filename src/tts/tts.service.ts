@@ -64,7 +64,7 @@ export class TTSService {
             },
             voice: {
                 languageCode: dto.languageCode || 'ko-KR',
-                name: dto.voiceName || 'ko-KR-Standard-A',
+                name: dto.voiceName || 'ko-KR-Chirp3-HD-Charon',
             },
             audioConfig: {
                 audioEncoding: this.getAudioEncoding(dto.audioEncoding || 'MP3'),
@@ -126,7 +126,7 @@ export class TTSService {
             await this.synthesizeSpeech({
                 text: '테스트',
                 languageCode: 'ko-KR',
-                voiceName: 'ko-KR-Standard-A',
+                voiceName: 'ko-KR-Chirp3-HD-Charon',
                 audioEncoding: 'MP3',
             });
             return true;
@@ -147,7 +147,7 @@ export class TTSService {
                 input: { text: '테스트' },
                 voice: {
                     languageCode: 'ko-KR',
-                    name: 'ko-KR-Standard-A',
+                    name: 'ko-KR-Chirp3-HD-Charon',
                 },
                 audioConfig: {
                     audioEncoding: this.getAudioEncoding('MP3'),

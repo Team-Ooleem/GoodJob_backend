@@ -123,7 +123,7 @@ export class TTSController {
             const testDto: SynthesizeSpeechDto = {
                 text: '안녕하세요. TTS 테스트입니다.',
                 languageCode: 'ko-KR',
-                voiceName: 'ko-KR-Standard-A',
+                voiceName: 'ko-KR-Chirp3-HD-Charon',
                 audioEncoding: 'MP3',
             };
 
