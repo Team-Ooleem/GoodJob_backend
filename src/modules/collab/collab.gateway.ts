@@ -9,10 +9,8 @@ import { Server, Socket } from 'socket.io';
 import * as Y from 'yjs';
 
 @WebSocketGateway({
-    cors: {
-        origin: process.env.FRONTEND_SUCCESS_URL || 'http://localhost:3001',
-        credentials: true,
-    },
+    namespace: '/',
+    cors: { origin: '*', credentials: true },
 })
 export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer() server: Server;
@@ -37,12 +35,15 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // --- Yjs 협업용 ---
     @SubscribeMessage('join')
-    handleJoin(client: Socket, room: string) {
+    handleJoin(client: Socket, payload: { room: string; clientUUID: string }) {
+        const { room, clientUUID } = payload;
         client.join(room);
+
         const doc = this.getDoc(room);
         const init = Y.encodeStateAsUpdate(doc);
-        client.emit('init', Array.from(init));
-        console.log(`📌 (Yjs) ${client.id} joined ${room}`);
+        client.emit('init', Array.from(init))
+
+        console.log(`📌 ${clientUUID} joined ${room}`);
     }
 
     @SubscribeMessage('sync')
@@ -106,5 +107,23 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
             candidate: payload.candidate,
             from: client.id,
         });
+
+        client.to(room).emit('update', Array.from(u8));
+    }
+
+    @SubscribeMessage('cursor')
+    handleCursor(
+        client: Socket,
+        payload: { room: string; clientUUID: string; x: number; y: number },
+    ) {
+        const { room, clientUUID, x, y } = payload;
+        client.to(room).emit('cursor', { clientUUID, x, y });
+    }
+
+    @SubscribeMessage('cursor-leave')
+    handleCursorLeave(client: Socket, payload: { room: string; clientUUID: string }) {
+        const { room, clientUUID } = payload;
+        client.to(room).emit('cursor-leave', clientUUID);
+        console.log(`👋 cursor hidden: ${clientUUID} in ${room}`);
     }
 }

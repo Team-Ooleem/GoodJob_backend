@@ -12,7 +12,7 @@ type AnalyzeResponse = {
 export class AnalysisClient {
     constructor(private readonly configService: AppConfigService) {}
 
-    private readonly base = process.env.AUDIO_API_BASE ?? 'http://localhost:8081';
+    private readonly base = process.env.AI_API_BASE ?? 'http://localhost:8081';
 
     async analyzeAudio(file: Express.Multer.File): Promise<Partial<AudioFeatures>> {
         const form = new FormData();
