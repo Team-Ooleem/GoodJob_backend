@@ -27,15 +27,11 @@ import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 import { AppConfigModule } from './config/config.module';
 
 /* stt 모듈 */
-import { STTController } from './stt/stt_controller';
-import { STTService } from './stt/stt_service';
+import { STTModule } from './stt/stt.module';
 
 /* tts 모듈 */
 import { TTSModule } from './tts/tts.module';
 import { AvatarModule } from './modules/avatar/avatar.module';
-
-/* gcs 모듈 */
-import { GcsService } from './lib/gcs';
 
 @Module({
     imports: [
@@ -65,19 +61,18 @@ import { GcsService } from './lib/gcs';
         CanvasModule,
         SocialModule,
         TTSModule,
+        STTModule,
         AvatarModule,
         ResumeModule,
     ],
-    controllers: [AppController, STTController],
+    controllers: [AppController],
     providers: [
         AppService,
-        STTService,
         DatabaseService,
         {
             provide: APP_GUARD,
             useClass: SessionGuard,
         },
-        GcsService,
     ],
 })
 export class AppModule {}
