@@ -66,27 +66,27 @@ export class CollabGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     // --- WebRTC 전용 join ---
     @SubscribeMessage('joinRtc')
-    handleJoinRtc(client: Socket, room: string, callback: (size: number) => void) {
+    handleJoinRtc(client: Socket, payload: { room: string }, callback?: (size: number) => void) {
+        const { room } = payload;
+        if (!room) {
+            console.error('❌ joinRtc called without room');
+            return;
+        }
+
         client.join(room);
 
-        const size = this.server.sockets.adapter.rooms.get(room)?.size || 0;
+        const roomSet = this.server.sockets.adapter.rooms.get(room);
+        const size = roomSet?.size || 0;
         console.log(`📌 (RTC) ${client.id} joined ${room} (현재 인원 ${size})`);
 
-        // 두 번째 참가자가 들어왔을 때 → 첫 번째 참가자에게만 ready 전송
-        if (size === 2) {
-            const roomSet = this.server.sockets.adapter.rooms.get(room);
-            if (roomSet) {
-                const [firstClientId] = Array.from(roomSet);
-                console.log(`🎯 sending ready to initiator: ${firstClientId}`);
-                this.server.to(firstClientId).emit('ready');
-            }
+        if (size === 2 && roomSet) {
+            const [firstClientId] = Array.from(roomSet);
+            console.log(`🎯 sending ready to initiator: ${firstClientId}`);
+            this.server.to(firstClientId).emit('ready');
         }
 
-        if (callback) {
-            callback(size);
-        }
+        if (callback) callback(size);
     }
-
     // --- WebRTC 시그널링 ---
     @SubscribeMessage('offer')
     handleOffer(client: Socket, payload: { room: string; sdp: RTCSessionDescriptionInit }) {
