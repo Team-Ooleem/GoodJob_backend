@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import {
     Controller,
     Get,
@@ -9,67 +8,36 @@ import {
     BadRequestException,
     InternalServerErrorException,
     Logger,
+    UploadedFile,
+    UseInterceptors,
 } from '@nestjs/common';
-
+import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { STTService } from './stt_service';
+import {
+    STTResponseDto,
+    SampleResponseDto,
+    ConnectionTestResponseDto,
+    STTResultDto,
+} from './dto/transcribe-response';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { TranscribeBase64RequestDto } from './dto/transcribe-request';
 import { GcsService } from '../lib/gcs';
 import { DatabaseService } from '../database/database.service';
+import {
+    SpeakerSegment,
+    MappedSpeakerSegment,
+    SessionDetailData,
+    SegmentData,
+} from './entities/speaker-segment';
+import type {
+    TranscribeChunkRequest,
+    STTWithContextResponse,
+    SessionUserResponse,
+    ChatMessage,
+    ChunkCacheData,
+} from './entities/transcription';
 
-interface TranscribeChunkRequest {
-    audioData: string;
-    mimeType?: string;
-    canvasId: string;
-    mentorIdx: number;
-    menteeIdx: number;
-    duration?: number;
-    chunkIndex: number;
-    totalChunks: number;
-    isFinalChunk?: boolean;
-    isNewRecordingSession?: boolean; // 새 녹화 세션 여부
-    url?: string;
-}
-
-interface STTWithContextResponse {
-    success: boolean;
-    timestamp: string;
-    processingTime: number;
-    sttSessionIdx: number;
-    contextText: string;
-    audioUrl: string;
-    speakers: Array<{
-        speakerTag: number;
-        textContent: string;
-        startTime: number;
-        endTime: number;
-    }>;
-    segmentIndex?: number; // 현재 세그먼트 인덱스
-}
-
-interface SessionUserResponse {
-    success: boolean;
-    canvasId: string;
-    mentor: { idx: number; name: string };
-    mentee: { idx: number; name: string };
-}
-
-interface ChatMessage {
-    messageId: number;
-    contextText: string;
-    audioUrl: string;
-    timestamp: string;
-    mentor_idx: number;
-    mentee_idx: number;
-    speakerInfo: { mentor: string; mentee: string };
-    canvasId: string;
-    segmentIndex: number; // 세그먼트 인덱스 추가
-    segments?: Array<{
-        speakerTag: number;
-        textContent: string;
-        startTime: number;
-        endTime: number;
-    }>;
-}
-
+@ApiTags('Speech-to-Text')
 @Controller('stt')
 export class STTController {
     private readonly logger = new Logger(STTController.name);
@@ -82,19 +50,8 @@ export class STTController {
 
     // ========================
     // 메모리 캐시 (중간 청크 임시 저장)
-    // key: canvasIdx, value: { mentorIdx, menteeIdx, chunks: { audioUrl, speakers }[], segmentIndex, lastActivity }
     // ========================
-    private chunkCache: Map<
-        string,
-        {
-            mentorIdx: number;
-            menteeIdx: number;
-            chunks: Array<{ audioUrl: string; speakers: any[] }>;
-            segmentIndex: number; // 현재 세그먼트 인덱스
-            lastActivity: number; // 마지막 활동 시간
-            sessionStartTime: number; // 세션 시작 시간
-        }
-    > = new Map();
+    private chunkCache: Map<string, ChunkCacheData> = new Map();
 
     // 자동 청크 증가 설정
     private readonly MAX_CHUNK_DURATION = 30000; // 30초 (밀리초)
@@ -104,6 +61,7 @@ export class STTController {
     // 세션 사용자 조회
     // ========================
     @Get('session-users/:canvasId')
+    @ApiOperation({ summary: '세션 사용자 조회' })
     async getSessionUsers(@Param('canvasId') canvasId: string): Promise<SessionUserResponse> {
         try {
             const result = await this.databaseService.query(
@@ -144,6 +102,7 @@ export class STTController {
     // STT 변환 + 컨텍스트 생성 (청크 지원, DB 최종 청크에서만 저장)
     // ========================
     @Post('transcribe-with-context')
+    @ApiOperation({ summary: '화자 분리 + 컨텍스트 추출 + DB 저장 (청크 지원)' })
     async transcribeWithContext(
         @Body() body: TranscribeChunkRequest,
     ): Promise<STTWithContextResponse> {
@@ -199,7 +158,6 @@ export class STTController {
                 this.logger.log(
                     `🔄 자동 청크 증가 - canvasId: ${canvasId}, chunkIndex: ${body.chunkIndex}`,
                 );
-                // cached.sessionStartTime = Date.now(); // 이 줄을 제거
             }
 
             // 활동 시간 업데이트
@@ -252,7 +210,7 @@ export class STTController {
                     `�� 새 세션 생성 - canvasId: ${canvasId}, segmentIndex: ${cached.segmentIndex}, isNewSession: ${isNewRecordingSession}`,
                 );
 
-                const insertResult: any = await this.databaseService.query(
+                const insertResult = await this.databaseService.query(
                     'INSERT INTO stt_transcriptions (canvas_id, mentor_idx, mentee_idx, audio_url) VALUES (?, ?, ?, ?)',
                     [
                         canvasId,
@@ -262,7 +220,8 @@ export class STTController {
                     ],
                 );
 
-                sttSessionIdx = insertResult.insertId as number;
+                sttSessionIdx = (insertResult as { insertId: number }[])[0].insertId;
+
                 this.logger.log(`✅ 새 세션 생성 완료 - sttSessionIdx: ${sttSessionIdx}`);
 
                 // 세그먼트 저장
@@ -288,15 +247,13 @@ export class STTController {
                     }
                 }
 
-                //
-
                 // DB에서 조회한 세그먼트 대신 현재 STT 결과 사용
                 const currentSegments = cached.chunks.flatMap((chunk) =>
                     chunk.speakers.map((speaker) => ({
-                        speakerTag: speaker.speakerTag as number,
-                        textContent: speaker.text_Content as string,
-                        startTime: speaker.startTime as number,
-                        endTime: speaker.endTime as number,
+                        speakerTag: speaker.speakerTag,
+                        textContent: speaker.text_Content,
+                        startTime: speaker.startTime,
+                        endTime: speaker.endTime,
                     })),
                 );
 
@@ -327,10 +284,36 @@ export class STTController {
         }
     }
 
+    @Post('transcribe-file')
+    @UseInterceptors(
+        FileInterceptor('file', {
+            limits: { fileSize: 10 * 1024 * 1024 }, // 10MB 제한 (필요시 조정)
+        }),
+    )
+    @ApiOperation({ summary: '파일 업로드 변환' })
+    async transcribeFile(@UploadedFile() file: Express.Multer.File) {
+        if (!file) throw new BadRequestException('파일이 없습니다.');
+
+        try {
+            const start = Date.now();
+            const result = await this.sttService.transcribeAudioBuffer(file.buffer, file.mimetype);
+            const processingTime = Date.now() - start;
+            return {
+                success: true,
+                timestamp: new Date().toISOString(),
+                processingTime,
+                result,
+            };
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            throw new InternalServerErrorException(`STT 변환 실패: ${msg}`);
+        }
+    }
     // ========================
     // 세션 메시지 조회
     // ========================
     @Get('session-messages/:canvasId')
+    @ApiOperation({ summary: '세션별 채팅 메시지 목록 조회' })
     async getSessionMessages(
         @Param('canvasId') canvasId: string,
         @Query('page') page: string = '1',
@@ -342,63 +325,65 @@ export class STTController {
             const offset = (pageNum - 1) * limitNum;
 
             // ✅ 1번의 JOIN 쿼리로 모든 데이터 조회 (페이지네이션 추가)
-            const rows: any[] = await this.databaseService.query(
+            const rows = await this.databaseService.query(
                 `SELECT st.stt_session_idx, st.audio_url, st.created_at,
                 st.mentor_idx, st.mentee_idx,
                 mentor.name as mentor_name, mentee.name as mentee_name,
                 seg.speaker_idx, seg.text_content, seg.start_time, seg.end_time
-         FROM stt_transcriptions st
-         JOIN users mentor ON st.mentor_idx = mentor.idx
-         JOIN users mentee ON st.mentee_idx = mentee.idx
-         LEFT JOIN stt_speaker_segments seg ON st.stt_session_idx = seg.stt_session_idx
-         WHERE st.canvas_id = ?
-         ORDER BY st.created_at DESC, seg.start_time ASC
-         LIMIT ? OFFSET ?`,
+             FROM stt_transcriptions st
+             JOIN users mentor ON st.mentor_idx = mentor.idx
+             JOIN users mentee ON st.mentee_idx = mentee.idx
+             LEFT JOIN stt_speaker_segments seg ON st.stt_session_idx = seg.stt_session_idx
+             WHERE st.canvas_id = ?
+             ORDER BY st.created_at DESC, seg.start_time ASC
+             LIMIT ? OFFSET ?`,
                 [canvasId, limitNum, offset],
             );
 
-            console.log(' 쿼리 결과:', rows); // ← 25번째 줄에 추가
-            console.log('🔍 쿼리 결과 개수:', rows.length); // ← 26번째
+            console.log('🔍 쿼리 결과:', rows);
+            console.log('🔍 쿼리 결과 개수:', rows.length);
 
             // 전체 개수 조회 (페이지네이션을 위한 총 개수)
-            const countResult: any = await this.databaseService.query(
+            const countResult = await this.databaseService.query(
                 `SELECT COUNT(DISTINCT st.stt_session_idx) as total
                  FROM stt_transcriptions st
                  WHERE st.canvas_id = ?`,
                 [canvasId],
             );
-            const totalCount = Array.isArray(countResult)
-                ? (countResult[0].total as number)
-                : (countResult.total as number);
+
+            const totalCount: number = Array.isArray(countResult)
+                ? (countResult[0] as { total: number })?.total || 0
+                : (countResult as { total: number })?.total || 0;
 
             // 세션별 그룹핑
             const grouped: { [sessionId: number]: ChatMessage & { segments: any[] } } = {};
 
             for (const row of rows) {
-                if (!grouped[row.stt_session_idx]) {
-                    grouped[row.stt_session_idx] = {
-                        messageId: row.stt_session_idx as number,
+                const sessionIdx = (row as { stt_session_idx: number }).stt_session_idx;
+                if (!grouped[sessionIdx]) {
+                    grouped[sessionIdx] = {
+                        messageId: sessionIdx,
                         contextText: '',
-                        audioUrl: row.audio_url as string,
-                        timestamp: row.created_at as string,
-                        mentor_idx: row.mentor_idx as number,
-                        mentee_idx: row.mentee_idx as number,
+                        audioUrl: (row as { audio_url: string }).audio_url,
+                        timestamp: (row as { created_at: string }).created_at,
+                        mentor_idx: (row as { mentor_idx: number }).mentor_idx,
+                        mentee_idx: (row as { mentee_idx: number }).mentee_idx,
                         segmentIndex: 0,
                         speakerInfo: {
-                            mentor: row.mentor_name as string,
-                            mentee: row.mentee_name as string,
+                            mentor: (row as { mentor_name: string }).mentor_name,
+                            mentee: (row as { mentee_name: string }).mentee_name,
                         },
                         canvasId: canvasId,
                         segments: [],
                     };
                 }
 
-                if (row.speaker_idx !== null) {
-                    grouped[row.stt_session_idx].segments.push({
-                        speakerTag: row.speaker_idx as number,
-                        textContent: row.text_content as string,
-                        startTime: row.start_time as number,
-                        endTime: row.end_time as number,
+                if ((row as { speaker_idx: number }).speaker_idx !== null) {
+                    grouped[sessionIdx].segments.push({
+                        speakerTag: (row as { speaker_idx: number }).speaker_idx,
+                        textContent: (row as { text_content: string }).text_content,
+                        startTime: (row as { start_time: number }).start_time,
+                        endTime: (row as { end_time: number }).end_time,
                     });
                 }
             }
@@ -422,10 +407,154 @@ export class STTController {
         }
     }
 
+    @Get('message-detail/:sessionIdx')
+    @ApiOperation({ summary: '특정 세션의 상세 정보 조회' })
+    async getMessageDetail(@Param('sessionIdx') sessionIdx: string) {
+        try {
+            const sessionInfo = await this.databaseService.query(
+                `
+                SELECT 
+                    st.*,
+                    mentor.name as mentor_name,
+                    mentee.name as mentee_name
+                FROM stt_transcriptions st
+                JOIN users mentor ON st.mentor_idx = mentor.idx
+                JOIN users mentee ON st.mentee_idx = mentee.idx
+                WHERE st.stt_session_idx = ?
+            `,
+                [sessionIdx],
+            );
+
+            if (sessionInfo.length === 0) {
+                throw new BadRequestException('세션을 찾을 수 없습니다.');
+            }
+
+            const segments = await this.databaseService.query(
+                `
+                SELECT 
+                    speaker_idx,
+                    text_content,
+                    start_time,
+                    end_time
+                FROM stt_speaker_segments
+                WHERE stt_session_idx = ?
+                ORDER BY start_time
+            `,
+                [sessionIdx],
+            );
+
+            const contextText = this.extractContextText(
+                segments.map((segment: SegmentData) => ({
+                    speakerTag: segment.speaker_idx,
+                    text: segment.text_content,
+                    startTime: segment.start_time,
+                    endTime: segment.end_time,
+                })),
+            );
+
+            return {
+                success: true,
+                session: sessionInfo[0] as SessionDetailData,
+                contextText,
+                segments: segments.map((segment: SegmentData) => ({
+                    speakerTag: segment.speaker_idx,
+                    textContent: segment.text_content,
+                    startTime: segment.start_time,
+                    endTime: segment.end_time,
+                })),
+            };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`메시지 상세 조회 실패: ${message}`);
+            throw new InternalServerErrorException(`메시지 상세 조회 실패: ${message}`);
+        }
+    }
+
+    @Get('context/:sessionIdx')
+    @ApiOperation({ summary: '컨텍스트 텍스트만 조회' })
+    async getContextText(@Param('sessionIdx') sessionIdx: number) {
+        try {
+            const segments = await this.databaseService.query(
+                'SELECT speaker_idx, text_content, start_time, end_time FROM stt_speaker_segments WHERE stt_session_idx = ? ORDER BY start_time',
+                [sessionIdx],
+            );
+
+            const speakers = segments.map((segment: SegmentData) => ({
+                speakerTag: segment.speaker_idx,
+                text: segment.text_content,
+                startTime: segment.start_time,
+                endTime: segment.end_time,
+            }));
+
+            const contextText = this.extractContextText(speakers);
+            return { contextText, speakers };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`컨텍스트 조회 실패: ${message}`);
+            throw new InternalServerErrorException(`컨텍스트 조회 실패: ${message}`);
+        }
+    }
+
+    @Get('test')
+    @ApiOperation({ summary: 'STT API 연결 테스트' })
+    async testConnection(): Promise<ConnectionTestResponseDto> {
+        this.logger.log('STT API 연결 상태 확인 요청');
+        const result = await this.sttService.testConnection();
+        this.logger.log(`STT API 상태: ${result.status} - ${result.message}`);
+        return result;
+    }
+
+    @Post('transcribe-base64')
+    @ApiOperation({ summary: 'Base64 오디오 변환' })
+    async transcribeBase64(@Body() body: TranscribeBase64RequestDto): Promise<STTResponseDto> {
+        const { audioData, mimeType = 'audio/webm' } = body;
+        if (!audioData) throw new BadRequestException('오디오 데이터가 없습니다.');
+        if (!this.isValidBase64(audioData))
+            throw new BadRequestException('유효하지 않은 Base64 데이터입니다.');
+
+        this.logger.log(`Base64 음성 데이터 수신: ${mimeType}, 길이: ${audioData.length} bytes`);
+
+        try {
+            const startTime = Date.now();
+            const result = await this.sttService.transcribeBase64Audio(audioData, mimeType);
+            const processingTime = Date.now() - startTime;
+
+            this.logger.log(
+                `STT 변환 완료: ${result.transcript} (신뢰도: ${(result.confidence * 100).toFixed(1)}%)`,
+            );
+            return {
+                success: true,
+                timestamp: new Date().toISOString(),
+                processingTime,
+                result: result as STTResultDto,
+            };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.error(`STT 변환 실패: ${message}`);
+            throw new InternalServerErrorException(`STT 변환 실패: ${message}`);
+        }
+    }
+
+    @Get('sample')
+    @ApiOperation({ summary: '샘플 STT 결과' })
+    getSample(): SampleResponseDto {
+        const sample = this.sttService.createSampleResult();
+        this.logger.log(
+            `샘플 STT 결과 테스트: ${sample.transcript} (신뢰도: ${(sample.confidence * 100).toFixed(1)}%)`,
+        );
+        sample.speakers?.forEach((wordSegment, i) =>
+            this.logger.log(
+                `단어 ${i + 1}: "${wordSegment.text_Content}" (${wordSegment.startTime}s - ${wordSegment.endTime}s)`,
+            ),
+        );
+        return { success: true, message: '샘플 STT 결과', result: sample as STTResultDto };
+    }
+
     // ========================
     // 비활성 세션 정리 (주기적 호출)
     // ========================
     @Post('cleanup-inactive-sessions')
+    @ApiOperation({ summary: '비활성 세션 정리' })
     cleanupInactiveSessions() {
         const now = Date.now();
         let cleanedCount = 0;
@@ -462,7 +591,8 @@ export class STTController {
     private extractContextText(
         speakers: Array<{
             speakerTag: number;
-            textContent: string;
+            textContent?: string;
+            text?: string;
             startTime: number;
             endTime: number;
         }>,
@@ -470,7 +600,7 @@ export class STTController {
         if (!speakers?.length) return '';
         return speakers
             .sort((a, b) => a.startTime - b.startTime)
-            .map((seg) => seg.textContent?.trim() || '')
+            .map((seg) => (seg.textContent || seg.text || '').trim())
             .filter(
                 (text) =>
                     text.length > 2 &&
@@ -493,17 +623,10 @@ export class STTController {
     }
 
     private mapSpeakersToUsers(
-        speakers:
-            | Array<{
-                  speakerTag: number;
-                  text_Content: string;
-                  startTime: number;
-                  endTime: number;
-              }>
-            | undefined,
+        speakers: SpeakerSegment[] | undefined,
         mentorIdx: number,
         menteeIdx: number,
-    ): Array<{ userId: number; text_Content: string; startTime: number; endTime: number }> {
+    ): MappedSpeakerSegment[] {
         if (!speakers) return [];
         return speakers.map((seg) => ({
             userId: seg.speakerTag === 1 ? mentorIdx : menteeIdx,

@@ -27,8 +27,7 @@ import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 import { AppConfigModule } from './config/config.module';
 
 /* stt 모듈 */
-import { STTController } from './stt/stt_controller';
-import { STTService } from './stt/stt_service';
+import { STTModule } from './stt/stt_module';
 
 /* tts 모듈 */
 import { TTSModule } from './tts/tts.module';
@@ -67,11 +66,11 @@ import { GcsService } from './lib/gcs';
         TTSModule,
         AvatarModule,
         ResumeModule,
+        STTModule,
     ],
-    controllers: [AppController, STTController],
+    controllers: [AppController],
     providers: [
         AppService,
-        STTService,
         DatabaseService,
         {
             provide: APP_GUARD,
