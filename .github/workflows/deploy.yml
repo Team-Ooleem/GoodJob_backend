@@ -31,6 +31,10 @@ jobs:
                       -o ConnectTimeout=30 \
                       -o ServerAliveInterval=60 \
                       ${{ secrets.WAS_EC2_USER }}@${{ secrets.WAS_EC2_HOST }} << 'EOF'
+                  # 환경변수 설정 (NVM 및 PATH 로드)
+                  export PATH="/home/ubuntu/.local/share/pnpm:/home/ubuntu/.nvm/versions/node/v22.19.0/bin:$PATH"
+                  export NVM_DIR="/home/ubuntu/.nvm"
+
                   # 백엔드 프로젝트 디렉토리로 이동
                   cd ~/GoodJob_backend
 
