@@ -1,10 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GoogleSpeechProvider } from './providers/google-speech';
 import { AudioProcessorUtil } from './utils/audio-processer';
-import { TextProcessorUtil } from './utils/text_processor';
 import { SpeechPatternsUtil } from './utils/speech-patterms';
-import { TranscriptionResult } from './entities/transcription';
-import { SpeakerSegment } from './entities/speaker-segment';
+import { TranscriptionResult, ConnectionTestResult, STTResult } from './entities/transcription';
 
 @Injectable()
 export class STTService {
@@ -17,7 +15,7 @@ export class STTService {
         mimeType = 'audio/webm',
         sessionStartTimeOffset = 0,
         gcsUrl?: string,
-    ): Promise<TranscriptionResult> {
+    ): Promise<STTResult> {
         const base64Data = audioBuffer.toString('base64');
         return this.transcribeBase64Audio(base64Data, mimeType, sessionStartTimeOffset, gcsUrl);
     }
@@ -27,7 +25,7 @@ export class STTService {
         mimeType = 'audio/wav',
         sessionStartTimeOffset = 0,
         gcsUrl?: string,
-    ): Promise<TranscriptionResult> {
+    ): Promise<STTResult> {
         try {
             const audioData = this.prepareAudioData(base64Data, gcsUrl);
             const config = this.createAudioConfig(mimeType);
@@ -41,16 +39,43 @@ export class STTService {
         }
     }
 
-    normalizeTimings(speakers: SpeakerSegment[], actualDuration: number): SpeakerSegment[] {
-        return TextProcessorUtil.normalizeTimings(speakers, actualDuration);
+    // 원본 코드와 호환되는 normalizeTimings
+    normalizeTimings(
+        speakers: Array<{
+            text_Content: string;
+            startTime: number;
+            endTime: number;
+            speakerTag: number;
+        }>,
+        actualDuration: number,
+    ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
+        if (speakers.length === 0) return speakers;
+
+        const maxSttTime = Math.max(...speakers.map((s) => s.endTime));
+        const scaleFactor = actualDuration / maxSttTime;
+
+        return speakers.map((speaker) => ({
+            ...speaker,
+            startTime: Math.round(speaker.startTime * scaleFactor * 10) / 10,
+            endTime: Math.round(speaker.endTime * scaleFactor * 10) / 10,
+        }));
     }
 
-    async testConnection() {
+    async testConnection(): Promise<ConnectionTestResult> {
         return this.googleSpeechProvider.testConnection();
     }
 
-    createSampleResult() {
-        return this.googleSpeechProvider.createSampleResult();
+    createSampleResult(): STTResult {
+        return {
+            transcript: '안녕하세요. 구글 STT 테스트입니다.',
+            confidence: 0.95,
+            speakers: [
+                { text_Content: '안녕하세요', startTime: 0.5, endTime: 1.2, speakerTag: 1 },
+                { text_Content: '구글', startTime: 2.0, endTime: 2.3, speakerTag: 1 },
+                { text_Content: 'STT', startTime: 2.4, endTime: 2.7, speakerTag: 2 },
+                { text_Content: '테스트입니다', startTime: 2.8, endTime: 3.5, speakerTag: 2 },
+            ],
+        };
     }
 
     private prepareAudioData(base64Data: string, gcsUrl?: string): string {
@@ -74,22 +99,24 @@ export class STTService {
             enableSpeakerDiarization: true,
             diarizationSpeakerCount: 2,
             enableAutomaticPunctuation: true,
-            maxAlternatives: 3, // 1 → 3 (더 많은 대안 고려)
+            maxAlternatives: 3,
             speechContexts: SpeechPatternsUtil.SPEECH_CONTEXTS,
         };
     }
 
-    private adjustTimings(
-        result: TranscriptionResult,
-        sessionStartTimeOffset: number,
-    ): TranscriptionResult {
-        if (sessionStartTimeOffset > 0 && result.speakers) {
-            result.speakers = result.speakers.map((speaker) => ({
-                ...speaker,
+    private adjustTimings(result: TranscriptionResult, sessionStartTimeOffset: number): STTResult {
+        // TranscriptionResult를 STTResult로 변환
+        const sttResult: STTResult = {
+            transcript: result.transcript,
+            confidence: result.confidence,
+            speakers: result.speakers?.map((speaker) => ({
+                text_Content: speaker.text_Content,
                 startTime: speaker.startTime + sessionStartTimeOffset,
                 endTime: speaker.endTime + sessionStartTimeOffset,
-            }));
-        }
-        return result;
+                speakerTag: speaker.speakerTag,
+            })),
+        };
+
+        return sttResult;
     }
 }

@@ -6,6 +6,17 @@ export interface TranscriptionResult {
     speakers?: SpeakerSegment[];
 }
 
+export interface STTResult {
+    transcript: string;
+    confidence: number;
+    speakers?: Array<{
+        text_Content: string;
+        startTime: number;
+        endTime: number;
+        speakerTag: number;
+    }>;
+}
+
 export interface ConnectionTestResult {
     status: 'success' | 'error';
     message: string;
@@ -69,8 +80,16 @@ export interface ChatMessage {
 export interface ChunkCacheData {
     mentorIdx: number;
     menteeIdx: number;
-    chunks: Array<{ audioUrl: string; speakers: SpeakerSegment[] }>;
-    segmentIndex: number; // 현재 세그먼트 인덱스
-    lastActivity: number; // 마지막 활동 시간
-    sessionStartTime: number; // 세션 시작 시간
+    chunks: Array<{
+        audioUrl: string;
+        speakers: Array<{
+            text_Content: string;
+            startTime: number;
+            endTime: number;
+            speakerTag: number;
+        }>;
+    }>; // SpeakerSegment[] 대신 STTResult의 speakers 타입 사용
+    segmentIndex: number;
+    lastActivity: number;
+    sessionStartTime: number;
 }
