@@ -172,15 +172,24 @@ export class STTController {
                 mentorIdx,
                 menteeIdx,
             );
-            const gcsResult = await this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType);
-            if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
+            /* 병렬처리 부분 개선 */
+            // const gcsResult = await this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType);
+            // if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
 
-            const sttResult = await this.sttService.transcribeAudioBuffer(
-                audioBuffer,
-                mimeType,
-                actualRecordingTime,
-                gcsResult?.url,
-            );
+            // const sttResult = await this.sttService.transcribeAudioBuffer(
+            //     audioBuffer,
+            //     mimeType,
+            //     actualRecordingTime,
+            //     gcsResult?.url,
+            // );
+
+            /* 병렬 처리로 성능향상 효과 */
+            const [gcsResult, sttResult] = await Promise.all([
+                this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType),
+                this.sttService.transcribeAudioBuffer(audioBuffer, mimeType, actualRecordingTime),
+            ]);
+
+            if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
 
             // 시간 정규화
             let normalizedSpeakers = sttResult.speakers || [];
@@ -224,7 +233,8 @@ export class STTController {
 
                 this.logger.log(`✅ 새 세션 생성 완료 - sttSessionIdx: ${sttSessionIdx}`);
 
-                // 세그먼트 저장
+                const allSegments: Array<[number, number, string, number, number]> = [];
+
                 for (const chunk of cached.chunks) {
                     const mappedSpeakers = this.mapSpeakersToUsers(
                         chunk.speakers,
@@ -232,19 +242,22 @@ export class STTController {
                         menteeIdx,
                     );
                     for (const segment of mappedSpeakers) {
-                        await this.databaseService.query(
-                            `INSERT INTO stt_speaker_segments
-                             (stt_session_idx, speaker_idx, text_content, start_time, end_time)
-                             VALUES (?, ?, ?, ?, ?)`,
-                            [
-                                sttSessionIdx,
-                                segment.userId === mentorIdx ? 0 : 1,
-                                segment.text_Content,
-                                segment.startTime,
-                                segment.endTime,
-                            ],
-                        );
+                        allSegments.push([
+                            sttSessionIdx,
+                            segment.userId === mentorIdx ? 0 : 1,
+                            segment.text_Content,
+                            segment.startTime,
+                            segment.endTime,
+                        ]);
                     }
+                }
+
+                // 배치 INSERT 실행 (1000개씩 처리)
+                if (allSegments.length > 0) {
+                    await this.batchInsertSegments(allSegments);
+                    this.logger.log(
+                        `✅ 배치 세그먼트 저장 완료 - 총 ${allSegments.length}개 세그먼트`,
+                    );
                 }
 
                 // DB에서 조회한 세그먼트 대신 현재 STT 결과 사용
@@ -620,6 +633,25 @@ export class STTController {
                     ].includes(text),
             )
             .join(' ');
+    }
+
+    // 57번째 줄 근처에 BATCH_SIZE 추가
+    private readonly BATCH_SIZE = 1000;
+
+    // 650번째 줄 근처 (mapSpeakersToUsers 메서드 다음)에 batchInsertSegments 메서드 추가
+    private async batchInsertSegments(segments: Array<[number, number, string, number, number]>) {
+        for (let i = 0; i < segments.length; i += this.BATCH_SIZE) {
+            const batch = segments.slice(i, i + this.BATCH_SIZE);
+            const placeholders = batch.map(() => '(?, ?, ?, ?, ?)').join(', ');
+            const flatValues = batch.flat();
+
+            await this.databaseService.query(
+                `INSERT INTO stt_speaker_segments
+             (stt_session_idx, speaker_idx, text_content, start_time, end_time)
+             VALUES ${placeholders}`,
+                flatValues,
+            );
+        }
     }
 
     private mapSpeakersToUsers(
