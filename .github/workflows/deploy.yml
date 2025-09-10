@@ -14,37 +14,41 @@ jobs:
             - name: Checkout code
               uses: actions/checkout@v3
 
-            # 2. SSH 설정 (web-server용 - 거쳐가는 지점)
-            - name: Setup SSH for Web Server
+            # 2. SSH 설정 (web-server용과 WAS-server용 키 모두 로드)
+            - name: Setup SSH for Web Server and WAS Server
               uses: webfactory/ssh-agent@v0.5.4
               with:
-                  ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+                  ssh-private-key: |
+                      ${{ secrets.SSH_PRIVATE_KEY }}
+                      ${{ secrets.WAS_SSH_PRIVATE_KEY }}
 
             # 3. Web Server을 거쳐서 WAS Server에 접속해서 백엔드 배포
             - name: Deploy Backend via Web Server
               run: |
-                  ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << "EOF"
-                      # Web Server에서 WAS Server로 SSH 접속
-                      ssh -o StrictHostKeyChecking=no ${{ secrets.WAS_EC2_USER }}@${{ secrets.WAS_EC2_HOST }} << "WAS_EOF"
-                          # 백엔드 프로젝트 디렉토리로 이동
-                          cd ~/GoodJob_backend
-                          
-                          # Git 리셋 및 최신 코드 가져오기
-                          /usr/bin/git reset --hard
-                          /usr/bin/git pull origin main
-                          
-                          # 의존성 설치 (pnpm 사용)
-                          /home/ubuntu/.nvm/versions/node/v22.19.0/bin/pnpm install
-                          
-                          # TypeScript 빌드
-                          /home/ubuntu/.nvm/versions/node/v22.19.0/bin/pnpm run build
-                          
-                          # PM2로 백엔드 서버 재시작
-                          /home/ubuntu/.local/share/pnpm/pm2 restart good-job-backend || /home/ubuntu/.local/share/pnpm/pm2 start "/home/ubuntu/.nvm/versions/node/v22.19.0/bin/pnpm run start:prod" --name good-job-backend
-                          
-                          # 데이터베이스 마이그레이션 (필요한 경우)
-                          # /home/ubuntu/.nvm/versions/node/v22.19.0/bin/pnpm run db:setup
-                          
-                          echo "Backend deployment completed successfully!"
-                      WAS_EOF
+                  # SSH ProxyCommand를 사용한 직접 연결 (두 SSH 키 모두 ssh-agent에 로드됨)
+                  ssh -o StrictHostKeyChecking=no \
+                      -o ProxyCommand="ssh -o StrictHostKeyChecking=no -W %h:%p ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}" \
+                      -o ConnectTimeout=30 \
+                      -o ServerAliveInterval=60 \
+                      ${{ secrets.WAS_EC2_USER }}@${{ secrets.WAS_EC2_HOST }} << 'EOF'
+                  # 백엔드 프로젝트 디렉토리로 이동
+                  cd ~/GoodJob_backend
+
+                  # Git 리셋 및 최신 코드 가져오기
+                  /usr/bin/git reset --hard
+                  /usr/bin/git pull origin main
+
+                  # 의존성 설치 (pnpm 사용)
+                  /home/ubuntu/.nvm/versions/node/v22.19.0/bin/pnpm install
+
+                  # TypeScript 빌드
+                  /home/ubuntu/.nvm/versions/node/v22.19.0/bin/pnpm run build
+
+                  # PM2로 백엔드 서버 재시작
+                  /home/ubuntu/.local/share/pnpm/pm2 restart good-job-backend || /home/ubuntu/.local/share/pnpm/pm2 start "/home/ubuntu/.nvm/versions/node/v22.19.0/bin/pnpm run start:prod" --name good-job-backend
+
+                  # 데이터베이스 마이그레이션 (필요한 경우)
+                  # /home/ubuntu/.nvm/versions/node/v22.19.0/bin/pnpm run db:setup
+
+                  echo "Backend deployment completed successfully!"
                   EOF
