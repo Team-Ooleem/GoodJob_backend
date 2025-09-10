@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GoogleSpeechProvider } from './providers/google-speech';
 import { AudioProcessorUtil } from './utils/audio-processer';
 import { SpeechPatternsUtil } from './utils/speech-patterms';
+import { TextProcessorUtil } from './utils/text_processor';
 import { TranscriptionResult, ConnectionTestResult, STTResult } from './entities/transcription';
 
 @Injectable()
@@ -98,23 +99,32 @@ export class STTService {
             languageCode: 'ko-KR',
             enableSpeakerDiarization: true,
             diarizationSpeakerCount: 2,
-            enableAutomaticPunctuation: true,
-            maxAlternatives: 3,
+            enableAutomaticPunctuation: false,
+            maxAlternatives: 1,
             speechContexts: SpeechPatternsUtil.SPEECH_CONTEXTS,
         };
     }
 
     private adjustTimings(result: TranscriptionResult, sessionStartTimeOffset: number): STTResult {
         // TranscriptionResult를 STTResult로 변환
-        const sttResult: STTResult = {
-            transcript: result.transcript,
-            confidence: result.confidence,
-            speakers: result.speakers?.map((speaker) => ({
+        let speakers =
+            result.speakers?.map((speaker) => ({
                 text_Content: speaker.text_Content,
                 startTime: speaker.startTime + sessionStartTimeOffset,
                 endTime: speaker.endTime + sessionStartTimeOffset,
                 speakerTag: speaker.speakerTag,
-            })),
+            })) || [];
+
+        // 엉뚱한 단어 교정 및 문장 개선 적용
+        speakers = TextProcessorUtil.processAndCorrectText(speakers);
+
+        // 문장 연결성 개선
+        speakers = TextProcessorUtil.improveConversationFlow(speakers);
+
+        const sttResult: STTResult = {
+            transcript: result.transcript,
+            confidence: result.confidence,
+            speakers: speakers,
         };
 
         return sttResult;

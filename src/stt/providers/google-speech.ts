@@ -3,6 +3,8 @@ import { SpeechClient } from '@google-cloud/speech';
 import { SpeechProvider, AudioConfig, GoogleSpeechWord, Duration } from './speech-provider';
 import { TranscriptionResult, ConnectionTestResult } from '../entities/transcription';
 import { SpeakerSegment } from '../entities/speaker-segment';
+import { SpeechPatternsUtil } from '../utils/speech-patterms';
+import { TextProcessorUtil } from '../utils/text_processor';
 
 @Injectable()
 export class GoogleSpeechProvider implements SpeechProvider {
@@ -22,7 +24,7 @@ export class GoogleSpeechProvider implements SpeechProvider {
             this.speechClient = new SpeechClient();
             this.logger.log('Google Speech Client 초기화 완료');
         } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : String(error);
+            const msg = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다';
             this.logger.error(`Speech Client 초기화 실패: ${msg}`);
             this.speechClient = null;
         }
@@ -42,14 +44,14 @@ export class GoogleSpeechProvider implements SpeechProvider {
                     // 기본 오디오 설정
                     encoding: config.encoding as 'LINEAR16' | 'MP3' | 'WEBM_OPUS' | 'FLAC',
                     sampleRateHertz: config.sampleRate,
-                    languageCode: config.languageCode,
+                    languageCode: 'ko-KR', // 한국어 고정
                     audioChannelCount: 1,
 
-                    // 다국어 지원 모델 (한국어 + 영어)
-                    model: 'default',
+                    // 2시간 연결을 위한 긴 오디오 모델
+                    model: 'latest_long',
                     useEnhanced: true,
 
-                    // 화자 분리 설정 (다국어 지원)
+                    // 화자 분리 설정 (한국어 대화용)
                     enableSpeakerDiarization: config.enableSpeakerDiarization,
                     diarizationSpeakerCount: config.diarizationSpeakerCount,
                     diarizationConfig: {
@@ -57,21 +59,24 @@ export class GoogleSpeechProvider implements SpeechProvider {
                         maxSpeakerCount: 2,
                     },
 
-                    // 다국어 인식 개선
+                    // 한국어 인식 개선
                     enableWordConfidence: true,
                     enableWordTimeOffsets: true,
-                    enableAutomaticPunctuation: config.enableAutomaticPunctuation,
+                    enableAutomaticPunctuation: false, // 자동 구두점 끄기 - 자연스러운 문장을 위해
 
                     // 한국어 우선, 영어 보조
-                    alternativeLanguageCodes: ['ko-KR', 'en-US'],
+                    alternativeLanguageCodes: ['en-US'],
 
-                    // 성능 최적화
-                    maxAlternatives: 3,
+                    // 대화용 성능 최적화
+                    maxAlternatives: 1, // 안정적인 결과를 위해 1개로 제한
                     profanityFilter: false,
                     enableSeparateRecognitionPerChannel: false,
 
-                    // 다국어 인식 정확도 향상
-                    speechContexts: config.speechContexts,
+                    // speech-patterms.ts의 사전 사용
+                    speechContexts: [
+                        ...SpeechPatternsUtil.SPEECH_CONTEXTS,
+                        ...(config.speechContexts || []),
+                    ],
                 },
             };
 
@@ -110,6 +115,12 @@ export class GoogleSpeechProvider implements SpeechProvider {
                 wordSegments = this.createWordsFromTranscript(transcript);
             }
 
+            // text_processor.ts의 교정 로직 적용
+            wordSegments = TextProcessorUtil.processAndCorrectText(wordSegments);
+
+            // speech-patterms.ts의 문장 연결성 개선 적용
+            wordSegments = SpeechPatternsUtil.improveSentenceFlow(wordSegments);
+
             // 결과 품질 검증 및 로깅
             this.logger.log(
                 `STT 결과 - 신뢰도: ${confidence.toFixed(3)}, 텍스트 길이: ${transcript.length}, 세그먼트 수: ${wordSegments.length}`,
@@ -126,7 +137,7 @@ export class GoogleSpeechProvider implements SpeechProvider {
 
             return { transcript, confidence, speakers: wordSegments };
         } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : String(error);
+            const msg = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다';
             this.logger.error(`STT 변환 실패: ${msg}`);
             throw new Error(`STT 변환 실패: ${msg}`);
         }
@@ -148,7 +159,7 @@ export class GoogleSpeechProvider implements SpeechProvider {
             await this.speechClient.recognize(testRequest);
             return { status: 'success', message: 'Google STT API 연결 성공' };
         } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : String(error);
+            const msg = error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다';
             return { status: 'error', message: `연결 실패: ${msg}` };
         }
     }
@@ -176,212 +187,35 @@ export class GoogleSpeechProvider implements SpeechProvider {
         return gcsUrl; // fallback
     }
 
-    private processWordTimings(
-        wordSegments?: GoogleSpeechWord[],
-        sessionStartTimeOffset = 0,
-    ): SpeakerSegment[] {
-        if (!wordSegments || !Array.isArray(wordSegments)) return [];
+    private processWordTimings(words: GoogleSpeechWord[]): SpeakerSegment[] {
+        if (!words || words.length === 0) return [];
 
-        const filteredWordSegments = wordSegments
-            .filter((w) => {
-                const text = w.word || ''; // null/undefined 처리
-                const confidence = w.confidence || 0;
-
-                // 기본 필터링
-                if (!text.trim() || text.length === 0 || text === '▁' || text === ' ') {
-                    return false;
-                }
-
-                // 신뢰도 임계값
-                if (confidence < 0.1) {
-                    return false;
-                }
-            })
-            .map((w) => ({
-                text_Content: (w.word || '').replace(/^▁/, '').trim(),
-                startTime:
-                    Math.round((Number(w.startTime?.seconds || 0) + sessionStartTimeOffset) * 10) /
-                    10,
-                endTime:
-                    Math.round((Number(w.endTime?.seconds || 0) + sessionStartTimeOffset) * 10) /
-                    10,
-                speakerTag: w.speakerTag || 1,
-            }))
-            .filter((w) => w.text_Content.length > 0);
-
-        const sentences = this.groupWordsIntoSentences(filteredWordSegments);
-        const mergedSentences = this.mergeSimilarSpeakers(sentences);
-        return this.enhanceContinuity(mergedSentences);
-    }
-    private mergeSimilarSpeakers(sentences: SpeakerSegment[]): SpeakerSegment[] {
-        if (sentences.length === 0) return [];
-
-        const merged: SpeakerSegment[] = [];
-        let currentSpeaker = sentences[0].speakerTag;
-        let currentText = sentences[0].text_Content;
-        let startTime = sentences[0].startTime;
-        let endTime = sentences[0].endTime;
-
-        for (let i = 1; i < sentences.length; i++) {
-            const sentence = sentences[i];
-
-            // 짧은 문장이고 시간 간격이 가까우면 같은 화자로 처리
-            const timeGap = sentence.startTime - endTime;
-            const isShortSentence = sentence.text_Content.length < 5;
-            const isCloseInTime = timeGap < 1.0; // 1초 이내
-
-            if (isShortSentence && isCloseInTime && sentence.speakerTag !== currentSpeaker) {
-                // 화자 변경 무시하고 통합
-                currentText += ' ' + sentence.text_Content;
-                endTime = sentence.endTime;
-            } else {
-                // 새로운 문장으로 처리
-                merged.push({
-                    text_Content: currentText.trim(),
-                    startTime: Math.round(startTime * 10) / 10,
-                    endTime: Math.round(endTime * 10) / 10,
-                    speakerTag: currentSpeaker,
-                });
-                currentText = sentence.text_Content;
-                currentSpeaker = sentence.speakerTag;
-                startTime = sentence.startTime;
-                endTime = sentence.endTime;
-            }
-        }
-
-        // 마지막 문장 추가
-        merged.push({
-            text_Content: currentText.trim(),
-            startTime: Math.round(startTime * 10) / 10,
-            endTime: Math.round(endTime * 10) / 10,
-            speakerTag: currentSpeaker,
-        });
-
-        return merged;
+        return words.map((word) => ({
+            text_Content: word.word || '',
+            startTime: this.convertDurationToSeconds(word.startTime),
+            endTime: this.convertDurationToSeconds(word.endTime),
+            speakerTag: word.speakerTag || 1,
+        }));
     }
 
-    private enhanceContinuity(sentences: SpeakerSegment[]): SpeakerSegment[] {
-        return sentences.map((sentence, index) => {
-            // 이전 문장과의 연속성 체크
-            if (index > 0) {
-                const prevSentence = sentences[index - 1];
-                const timeGap = sentence.startTime - prevSentence.endTime;
-
-                // 시간 간격이 너무 작으면 연결
-                if (timeGap < 0.5) {
-                    return {
-                        ...sentence,
-                        startTime: Math.round(prevSentence.endTime * 10) / 10, // 시간 연결
-                    };
-                }
-            }
-
-            return sentence;
-        });
-    }
-
-    private groupWordsIntoSentences(wordSegments: SpeakerSegment[]): SpeakerSegment[] {
-        if (wordSegments.length === 0) return [];
-
-        const sentences: SpeakerSegment[] = [];
-
-        let currentSentence = '';
-        let currentSpeaker = wordSegments[0].speakerTag;
-        let sentenceStartTime = wordSegments[0].startTime;
-        let sentenceEndTime = wordSegments[0].endTime;
-        let wordCount = 0;
-
-        // 더 정확한 설정
-        const PAUSE_THRESHOLD = 1.5; // 더 정확한 자르기
-        const MIN_WORDS_PER_SENTENCE = 1;
-        const MAX_WORDS_PER_SENTENCE = 30; // 더 짧은 문장
-
-        for (let i = 0; i < wordSegments.length; i++) {
-            const word = wordSegments[i];
-
-            // 시간 간격 계산 개선
-            const prevEndTime = i > 0 ? wordSegments[i - 1].endTime : word.startTime;
-            const timeGap = word.startTime - prevEndTime;
-
-            // 화자 변경시 즉시 분리
-            const isSpeakerChange = word.speakerTag !== currentSpeaker;
-
-            // 시간 간격 체크 (같은 화자일 때만)
-            const isLongPause =
-                !isSpeakerChange &&
-                i > 0 &&
-                timeGap > PAUSE_THRESHOLD &&
-                wordCount >= MIN_WORDS_PER_SENTENCE;
-
-            const isNewSentence =
-                isSpeakerChange || isLongPause || wordCount >= MAX_WORDS_PER_SENTENCE;
-
-            if (isNewSentence) {
-                // 현재 문장 저장
-                if (currentSentence.trim().length > 0) {
-                    sentences.push({
-                        text_Content: this.cleanKoreanText(currentSentence.trim()),
-                        startTime: Math.round(sentenceStartTime * 10) / 10,
-                        endTime: Math.round(sentenceEndTime * 10) / 10,
-                        speakerTag: currentSpeaker,
-                    });
-                }
-
-                // 새로운 문장 시작
-                currentSentence = word.text_Content;
-                currentSpeaker = word.speakerTag;
-                sentenceStartTime = word.startTime;
-                sentenceEndTime = word.endTime;
-                wordCount = 1;
-            } else {
-                // 문장 계속 이어가기
-                currentSentence += ' ' + word.text_Content;
-                sentenceEndTime = word.endTime; // 끝 시간만 업데이트
-                wordCount += 1;
-            }
-        }
-
-        // 마지막 문장 저장
-        if (currentSentence.trim().length > 0) {
-            sentences.push({
-                text_Content: currentSentence.trim(),
-                startTime: Math.round(sentenceStartTime * 10) / 10,
-                endTime: Math.round(sentenceEndTime * 10) / 10,
-                speakerTag: currentSpeaker,
-            });
-        }
-
-        return sentences;
-    }
-
-    private createWordsFromTranscript(
-        transcript: string,
-        sessionStartTimeOffset = 0,
-    ): SpeakerSegment[] {
+    private createWordsFromTranscript(transcript: string): SpeakerSegment[] {
         if (!transcript.trim()) return [];
-        const textSegments = transcript
-            .replace(/[.,!?;:]/g, ' ')
-            .split(/\s+/)
-            .filter((t) => t.trim().length > 0);
-        const wordDuration = 1; // fallback 1초 단위
-        return textSegments.map((text, idx) => ({
-            text_Content: text.trim(),
-            startTime: Math.round((sessionStartTimeOffset + idx * wordDuration) * 10) / 10,
-            endTime: Math.round((sessionStartTimeOffset + (idx + 1) * wordDuration) * 10) / 10,
+
+        const words = transcript.split(/\s+/).filter((word) => word.trim());
+        const segmentDuration = 1.0; // 기본 1초씩 할당
+
+        return words.map((word, index) => ({
+            text_Content: word,
+            startTime: index * segmentDuration,
+            endTime: (index + 1) * segmentDuration,
             speakerTag: 1,
         }));
     }
 
-    private cleanKoreanText(text: string): string {
-        if (!text || typeof text !== 'string') return '';
-
-        return text.replace(/\s+/g, ' ').trim();
-    }
-
-    private convertDurationToSeconds(duration?: Duration) {
+    private convertDurationToSeconds(duration: Duration | undefined): number {
         if (!duration) return 0;
-        const seconds = parseInt(String(duration.seconds ?? '0'), 10);
-        const nanos = parseInt(String(duration.nanos ?? '0'), 10);
-        return seconds + nanos / 1_000_000_000;
+        const seconds = typeof duration.seconds === 'number' ? duration.seconds : 0;
+        const nanos = typeof duration.nanos === 'number' ? duration.nanos : 0;
+        return seconds + nanos / 1000000000;
     }
 }
