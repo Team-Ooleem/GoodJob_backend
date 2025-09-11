@@ -86,3 +86,34 @@ CREATE TABLE IF NOT EXISTS audio_metrics_question (
   PRIMARY KEY (session_id, question_id),
   CONSTRAINT fk_amq_q FOREIGN KEY (session_id, question_id) REFERENCES questions(session_id, question_id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 분석 결과 리포트 저장(선택)
+CREATE TABLE IF NOT EXISTS interview_reports (
+  session_id     VARCHAR(64) PRIMARY KEY,
+  overall_score  INT NOT NULL,
+  question_count INT NOT NULL,
+  payload        JSON NOT NULL,
+  created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_ir_session FOREIGN KEY (session_id) REFERENCES interview_sessions(session_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -- Indexes for faster listing/filtering
+-- -- MySQL does not support CREATE INDEX IF NOT EXISTS; use drop-if-exists then create
+-- DROP INDEX IF EXISTS idx_ir_created_at ON interview_reports;
+-- CREATE INDEX idx_ir_created_at ON interview_reports (created_at);
+
+
+-- 문항별 점수 저장(조회/통계 최적화용)
+CREATE TABLE IF NOT EXISTS interview_report_question_scores (
+  session_id     VARCHAR(64) NOT NULL,
+  question_index INT NOT NULL,
+  question_text  TEXT NULL,
+  score          INT NOT NULL,
+  PRIMARY KEY (session_id, question_index),
+  CONSTRAINT fk_irq_session FOREIGN KEY (session_id) REFERENCES interview_sessions(session_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- -- Optional: expose external_key for user-level filtering
+-- DROP INDEX IF EXISTS idx_sessions_external_key ON interview_sessions;
+-- CREATE INDEX idx_sessions_external_key ON interview_sessions (external_key);

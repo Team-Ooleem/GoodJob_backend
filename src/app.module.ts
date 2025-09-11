@@ -30,6 +30,8 @@ import { GcsService } from './lib/gcs';
 /* tts 모듈 */
 import { TTSModule } from './tts/tts.module';
 import { AvatarModule } from './modules/avatar/avatar.module';
+import { ReportModule } from './modules/report/report.module';
+import { AudioMetricsModule } from './modules/audio-metrics/audio-metrics.module';
 import { MentoringModule } from './modules/mentoring/mentoring.module';
 
 @Module({
@@ -57,6 +59,8 @@ import { MentoringModule } from './modules/mentoring/mentoring.module';
         TTSModule,
         STTModule,
         AvatarModule,
+        ReportModule,
+        AudioMetricsModule,
         ResumeModule,
         MentoringModule,
     ],
