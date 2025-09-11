@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { MentoringProductDto } from './dto/product.dto';
 import { MentoringProductSlotsDto } from './dto/product-slots.dto';
+import { ApplicationResponseDto, CreateApplicationDto } from './dto/application.dto';
+import { MentoringProductReviewsDto } from './dto/product-reviews.dto';
 
 @Injectable()
 export class MentoringService {
@@ -99,6 +101,93 @@ export class MentoringService {
                 { hour_slot: 11, time_range: '11:00-12:00', available: false },
                 { hour_slot: 15, time_range: '15:00-16:00', available: true },
             ],
+        };
+    }
+
+    createApplication(
+        productIdx: number,
+        dto: CreateApplicationDto,
+        menteeIdx = 20,
+    ): ApplicationResponseDto {
+        /* 결제 정보 저장 */
+        /*
+        INSERT INTO payments (user_idx, product_idx, amount, payment_status, transaction_id, paid_at)
+            VALUES (20, 1, 50000, 'completed', 'PAY-20250911-123456', NOW());
+        */
+
+        /* 신청 정보 저장 */
+        /*
+        INSERT INTO mentoring_applications (
+            mentee_idx, product_idx, regular_slots_idx, booked_date,
+            payment_id, message_to_mentor, application_status, created_at
+        )
+        VALUES (
+            20, 1, 42, '2025-09-14',
+            LAST_INSERT_ID(), '포트폴리오 피드백 위주로 받고 싶습니다.', 'pending', NOW()
+        );
+        */
+        return {
+            application_id: 101,
+            product_idx: productIdx,
+            mentee_idx: menteeIdx,
+            regular_slots_idx: dto.regular_slots_idx,
+            booked_date: dto.booked_date,
+            application_status: 'pending',
+            message_to_mentor: dto.message_to_mentor,
+            payment: {
+                payment_id: 555,
+                amount: dto.payment.amount,
+                status: dto.payment.status,
+                transaction_id: dto.payment.transaction_id,
+                paid_at: '2025-09-11T15:20:00Z',
+            },
+            created_at: '2025-09-11T15:20:00Z',
+        };
+    }
+
+    getProductReviews(productIdx: number, limit = 10, cursor?: string): MentoringProductReviewsDto {
+        /*
+        SELECT 
+            r.review_idx,
+            r.rating,
+            r.review_content,
+            r.created_at,
+            u.name AS mentee_name,
+            u.profile_img
+        FROM mentoring_reviews r
+        JOIN users u ON r.mentee_idx = u.idx
+        WHERE r.product_idx = 1
+        AND (r.created_at < '2025-09-10 12:00:00')  -- cursor 조건
+        ORDER BY r.created_at DESC
+        LIMIT 10;
+        */
+
+        const reviews = [
+            {
+                review_idx: 201,
+                mentee_name: '홍길동',
+                rating: 5,
+                review_content: '멘토님 덕분에 면접 잘 봤습니다.',
+                created_at: '2025-09-10T12:00:00Z',
+            },
+            {
+                review_idx: 200,
+                mentee_name: '이영희',
+                rating: 4,
+                review_content: '조언이 유익했어요.',
+                created_at: '2025-09-09T15:30:00Z',
+            },
+        ];
+
+        return {
+            product_idx: productIdx,
+            average_rating: 4.7,
+            review_count: 53,
+            reviews,
+            page_info: {
+                next_cursor: '2025-09-09T15:30:00Z',
+                has_more: true,
+            },
         };
     }
 }
