@@ -14,7 +14,6 @@ import { AuthModule } from './auth/auth.module';
 import { AiModule } from './modules/interview/interview.module';
 import { CollabModule } from './modules/collab/collab.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
-import { UsersModule } from './users/users.module';
 import { ChatModule } from './chat/chat.module';
 import { SessionGuard } from './auth/session.guard';
 // resume
@@ -52,7 +51,6 @@ import { MentoringModule } from './modules/mentoring/mentoring.module';
         AiModule,
         CollabModule,
         MetricsModule,
-        UsersModule,
         ChatModule,
         CanvasModule,
         SocialModule,
@@ -61,7 +59,6 @@ import { MentoringModule } from './modules/mentoring/mentoring.module';
         AvatarModule,
         ReportModule,
         AudioMetricsModule,
-        ResumeModule,
         MentoringModule,
     ],
     controllers: [AppController],
