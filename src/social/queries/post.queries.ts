@@ -20,7 +20,6 @@ export const PostQueries = {
             p.updated_at,
             u.name AS author_name,
             u.profile_img AS author_profile_image,
-            u.short_bio AS author_short_bio,
             COALESCE(pl.like_count, 0) AS like_count,
             COALESCE(pc.comment_count, 0) AS comment_count,
             CASE WHEN user_like.user_id IS NOT NULL THEN 1 ELSE 0 END AS is_liked_by_current_user,
@@ -73,7 +72,6 @@ export const PostQueries = {
             p.updated_at,
             u.name AS author_name,
             u.profile_img AS author_profile_image,
-            u.short_bio AS author_short_bio,
             COALESCE(pl.like_count, 0) AS like_count,
             COALESCE(pc.comment_count, 0) AS comment_count,
             CASE WHEN user_like.user_id IS NOT NULL THEN 1 ELSE 0 END AS is_liked_by_current_user,
@@ -134,21 +132,6 @@ export const PostQueries = {
     createPost: `
         INSERT INTO posts (user_id, content, media_url, created_at, updated_at)
         VALUES (?, ?, ?, NOW(), NOW())
-    `,
-
-    /**
-     * 포스트 수정
-     *
-     * 파라미터 순서:
-     * 1. content (string) - 수정할 내용
-     * 2. mediaUrl (string | null) - 수정할 미디어 파일 URL
-     * 3. postId (number) - 수정할 포스트 ID
-     * 4. userId (number) - 작성자 ID (권한 확인용)
-     */
-    updatePost: `
-        UPDATE posts 
-        SET content = ?, media_url = ?, updated_at = NOW()
-        WHERE post_idx = ? AND user_id = ?
     `,
 
     /**

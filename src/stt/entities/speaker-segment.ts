@@ -31,7 +31,7 @@ export interface SessionMessageData {
 
 export interface SessionDetailData {
     stt_session_idx: number;
-    canvas_idx: number;
+    canvas_id: string;
     mentor_idx: number;
     mentee_idx: number;
     audio_url: string;

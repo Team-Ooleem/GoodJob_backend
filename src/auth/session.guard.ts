@@ -26,7 +26,25 @@ export class SessionGuard implements CanActivate {
             '/api/auth/cookie-check',
         ];
 
-        if (publicPaths.includes(req.path) || (req.path as string).startsWith('/api/stt/')) {
+        if (
+            publicPaths.includes(req.path) ||
+            (req.path as string).startsWith('/api/stt/') ||
+            // TODO: mentoring-products는 임시로 공개 허용. 로그인 연동 후 제거할 것.
+            (req.path as string).startsWith('/api/mentoring-products/') ||
+            (req.path as string) === '/api/mentoring-products' ||
+            // TODO: social/posts/user 엔드포인트 임시 공개. 로그인 연동 후 제거할 것.
+            (req.path as string).startsWith('/api/social/posts/user') ||
+            // TODO: mentors 엔드포인트(리뷰 등) 임시 공개. 인증 연동 후 제거할 것.
+            (req.path as string).startsWith('/api/mentors/') ||
+            // TODO: mentees 엔드포인트(신청 조회) 임시 공개. 인증 연동 후 제거할 것.
+            (req.path as string).startsWith('/api/mentees/') ||
+            // TODO: mentoring-applications 임시 공개. 인증 연동 후 제거할 것.
+            (req.path as string).startsWith('/api/mentoring-applications/')
+        ) {
+            // 비로그인 접근 시, 의존 로직을 위해 guest 사용자 idx를 0으로 설정
+            if (!req.user_idx) {
+                req.user_idx = 0;
+            }
             console.log('✅ [SessionGuard] 공개 경로로 인증 생략');
             return true;
         }

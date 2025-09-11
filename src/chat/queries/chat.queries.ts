@@ -14,7 +14,7 @@ export const ChatQueries = {
             END as other_user_id,
             u.name as other_user_name,
             u.profile_img as other_user_profile_img,
-            u.short_bio as other_user_short_bio,
+            u.bio as other_user_bio,
             m.content as last_message,
             m.created_at as last_message_time,
             crs.unread_count,
@@ -155,17 +155,9 @@ export const ChatQueries = {
             u.idx as user_id,
             u.name,
             u.email,
-            u.short_bio,
-            u.profile_img,
-            CASE 
-                WHEN ip.desired_job IS NOT NULL THEN jr.name
-                WHEN bp.company_name IS NOT NULL THEN bp.company_name
-                ELSE NULL
-            END as job_info
+            u.bio,
+            u.profile_img
         FROM users u
-        LEFT JOIN individual_profile ip ON ip.user_idx = u.idx
-        LEFT JOIN business_profile bp ON bp.user_idx = u.idx
-        LEFT JOIN job_role jr ON jr.id = ip.desired_job
         WHERE u.idx != ?
           AND u.name LIKE CONCAT('%', ?, '%')
         ORDER BY 
