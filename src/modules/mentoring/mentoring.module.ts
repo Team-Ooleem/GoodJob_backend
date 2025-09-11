@@ -1,11 +1,10 @@
 import { Module } from '@nestjs/common';
-import { MentoringController } from './mentoring.controller';
+import { MentoringProductsController } from './mentoring-products.controller';
 import { MentoringService } from './mentoring.service';
 
 @Module({
-    controllers: [MentoringController],
+    controllers: [MentoringProductsController],
     providers: [MentoringService],
     exports: [MentoringService],
 })
 export class MentoringModule {}
-
