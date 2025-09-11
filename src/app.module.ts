@@ -35,6 +35,8 @@ import { GcsService } from './lib/gcs';
 /* tts 모듈 */
 import { TTSModule } from './tts/tts.module';
 import { AvatarModule } from './modules/avatar/avatar.module';
+import { ReportModule } from './modules/report/report.module';
+import { AudioMetricsModule } from './modules/audio-metrics/audio-metrics.module';
 
 @Module({
     imports: [
@@ -65,6 +67,8 @@ import { AvatarModule } from './modules/avatar/avatar.module';
         TTSModule,
         STTModule,
         AvatarModule,
+        ReportModule,
+        AudioMetricsModule,
         ResumeModule,
     ],
     controllers: [AppController],
@@ -75,7 +79,7 @@ import { AvatarModule } from './modules/avatar/avatar.module';
             provide: APP_GUARD,
             useClass: SessionGuard,
         },
-      GcsService,
+        GcsService,
     ],
 })
 export class AppModule {}

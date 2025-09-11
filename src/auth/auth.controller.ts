@@ -108,13 +108,15 @@ export class AuthController {
             sameSite: cookieOptions.sameSite,
         });
 
-        // 6) 온보딩 상태 확인 후 적절한 페이지로 리다이렉트
-        const userResult = await this.databaseService.query(
-            'SELECT is_onboarded FROM users WHERE idx = ?',
-            [userIdx],
-        );
+        // // 6) 온보딩 상태 확인 후 적절한 페이지로 리다이렉트
+        // const userResult = await this.databaseService.query(
+        //     'SELECT is_onboarded FROM users WHERE idx = ?',
+        //     [userIdx],
+        // );
 
-        const isOnboarded = userResult[0]?.is_onboarded === 1;
+        // const isOnboarded = userResult[0]?.is_onboarded === 1;
+
+        const isOnboarded = true;
 
         // 쿠키 설정 후 중간 로딩 페이지로 리다이렉트 (쿠키 저장 시간 확보)
         // 프론트엔드에서 /api/auth/me를 통해 온보딩 상태 확인 후 적절한 페이지로 이동
@@ -137,18 +139,19 @@ export class AuthController {
     @Get('me')
     async me(@Req() req: Request) {
         const token = req.cookies?.session;
+        const isOnboarded = true; // 완전 임시(온보딩 삭제예정)
         if (!token) return { authenticated: false };
 
         try {
             const payload = jwt.verify(token, this.configService.session.secret) as any;
 
             // 온보딩 상태 확인
-            const userResult = await this.databaseService.query(
-                'SELECT is_onboarded FROM users WHERE idx = ?',
-                [payload.idx],
-            );
+            // const userResult = await this.databaseService.query(
+            //     'SELECT is_onboarded FROM users WHERE idx = ?',
+            //     [payload.idx],
+            // );
 
-            const isOnboarded = userResult[0]?.is_onboarded === 1;
+            // const isOnboarded = userResult[0]?.is_onboarded === 1;
 
             return {
                 authenticated: true,
