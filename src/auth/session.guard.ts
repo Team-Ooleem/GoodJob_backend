@@ -26,7 +26,12 @@ export class SessionGuard implements CanActivate {
             '/api/auth/cookie-check',
         ];
 
-        if (publicPaths.includes(req.path) || (req.path as string).startsWith('/api/stt/')) {
+        if (
+            publicPaths.includes(req.path) ||
+            (req.path as string).startsWith('/api/stt/') ||
+            // TODO: mentoring-products는 임시로 공개 허용. 로그인 연동 후 제거할 것.
+            (req.path as string).startsWith('/api/mentoring-products/')
+        ) {
             console.log('✅ [SessionGuard] 공개 경로로 인증 생략');
             return true;
         }

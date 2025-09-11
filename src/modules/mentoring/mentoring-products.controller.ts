@@ -11,4 +11,3 @@ export class MentoringProductsController {
         return this.svc.getProduct(Number(productIdx));
     }
 }
-
