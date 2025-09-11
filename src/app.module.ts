@@ -26,15 +26,15 @@ import { ResumeModule } from './resume/resume.module';
 import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 import { AppConfigModule } from './config/config.module';
 
-/* stt 모듈 */
+//stt 모델
 import { STTModule } from './stt/stt_module';
+
+/* gcs 모듈 */
+import { GcsService } from './lib/gcs';
 
 /* tts 모듈 */
 import { TTSModule } from './tts/tts.module';
 import { AvatarModule } from './modules/avatar/avatar.module';
-
-/* gcs 모듈 */
-import { GcsService } from './lib/gcs';
 
 @Module({
     imports: [
@@ -52,7 +52,6 @@ import { GcsService } from './lib/gcs';
         DatabaseModule,
         AuthModule,
         AiModule,
-        SocialModule,
         CollabModule,
         MetricsModule,
         UsersModule,
@@ -64,9 +63,9 @@ import { GcsService } from './lib/gcs';
         CanvasModule,
         SocialModule,
         TTSModule,
+        STTModule,
         AvatarModule,
         ResumeModule,
-        STTModule,
     ],
     controllers: [AppController],
     providers: [
@@ -76,7 +75,7 @@ import { GcsService } from './lib/gcs';
             provide: APP_GUARD,
             useClass: SessionGuard,
         },
-        GcsService,
+      GcsService,
     ],
 })
 export class AppModule {}
