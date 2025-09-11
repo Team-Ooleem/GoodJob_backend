@@ -14,7 +14,6 @@ export interface Post {
     updatedAt: string;
     authorName: string;
     authorProfileImage?: string;
-    authorShortBio?: string;
     likeCount: number;
     commentCount: number;
     isLikedByCurrentUser: boolean;
@@ -71,7 +70,6 @@ interface PostRow {
     updated_at: string;
     author_name: string;
     author_profile_image?: string;
-    author_short_bio?: string;
     like_count: number;
     comment_count: number;
     is_liked_by_current_user: number;
@@ -116,7 +114,6 @@ export class PostService {
                 updatedAt: row.updated_at,
                 authorName: row.author_name,
                 authorProfileImage: row.author_profile_image,
-                authorShortBio: row.author_short_bio,
                 likeCount: row.like_count,
                 commentCount: row.comment_count,
                 isLikedByCurrentUser: row.is_liked_by_current_user === 1,
@@ -309,7 +306,6 @@ export class PostService {
                 updatedAt: row.updated_at,
                 authorName: row.author_name,
                 authorProfileImage: row.author_profile_image,
-                authorShortBio: row.author_short_bio,
                 likeCount: row.like_count,
                 commentCount: row.comment_count,
                 isLikedByCurrentUser: row.is_liked_by_current_user === 1,

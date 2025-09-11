@@ -7,7 +7,7 @@ export interface Conversation {
     other_user_id: number;
     other_user_name: string;
     other_user_profile_img?: string;
-    other_user_short_bio?: string;
+    other_user_bio?: string;
     last_message?: string;
     last_message_time?: string;
     unread_count: number;
@@ -36,9 +36,8 @@ export interface SearchUserResult {
     user_id: number;
     name: string;
     email: string;
-    short_bio?: string;
+    bio?: string;
     profile_img?: string;
-    job_info?: string;
 }
 
 export interface ChatStats {
