@@ -27,7 +27,6 @@ export default registerAs('app', () => ({
     // 프론트엔드 URL 설정
     frontend: {
         successUrl: process.env.FRONTEND_SUCCESS_URL || '',
-        onboardingUrl: process.env.FRONTEND_ONBOARDING_URL || '',
     },
 
     // 세션 설정

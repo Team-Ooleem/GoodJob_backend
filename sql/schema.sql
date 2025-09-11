@@ -186,12 +186,12 @@ DROP TABLE IF EXISTS `stt_transcriptions`;
 CREATE TABLE `stt_transcriptions` (
   `stt_session_idx` INT NOT NULL AUTO_INCREMENT COMMENT '세션 고유 ID',
   `canvas_id` CHAR(36) NOT NULL COMMENT '캔버스 ID (UUID)',
-  `mentor_idxx` INT NOT NULL COMMENT '멘토 user_id',
+  `mentor_idx` INT NOT NULL COMMENT '멘토 user_id',
   `mentee_idx` INT NOT NULL COMMENT '멘티 user_id',
   `audio_url` TEXT NOT NULL COMMENT '오디오 파일 URL',
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '생성 시간',
   PRIMARY KEY (`stt_session_idx`),
-  KEY `mentor_idxx_idx` (`mentor_idxx`),
+  KEY `mentor_idx_idx` (`mentor_idx`),
   KEY `mentee_idx_idx` (`mentee_idx`),
   KEY `canvas_idx_idx` (`canvas_id`)
   -- 외래키 제약조건 제거
