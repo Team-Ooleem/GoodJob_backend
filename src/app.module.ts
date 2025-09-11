@@ -35,6 +35,7 @@ import { GcsService } from './lib/gcs';
 /* tts 모듈 */
 import { TTSModule } from './tts/tts.module';
 import { AvatarModule } from './modules/avatar/avatar.module';
+import { MentoringModule } from './modules/mentoring/mentoring.module';
 
 @Module({
     imports: [
@@ -66,6 +67,7 @@ import { AvatarModule } from './modules/avatar/avatar.module';
         STTModule,
         AvatarModule,
         ResumeModule,
+        MentoringModule,
     ],
     controllers: [AppController],
     providers: [
