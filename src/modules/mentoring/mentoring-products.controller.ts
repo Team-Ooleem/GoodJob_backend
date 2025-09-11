@@ -5,16 +5,17 @@ import { MentoringProductSlotsDto } from './dto/product-slots.dto';
 import { ApplicationResponseDto, CreateApplicationDto } from './dto/application.dto';
 import { MentoringProductReviewsDto } from './dto/product-reviews.dto';
 import { CreateProductReviewDto, ProductReviewResponseDto } from './dto/product-review.dto';
-import { CreateMentoringProductDto, MentoringProductCreatedResponseDto } from './dto/product-create.dto';
+import {
+    CreateMentoringProductDto,
+    MentoringProductCreatedResponseDto,
+} from './dto/product-create.dto';
 
 @Controller('mentoring-products')
 export class MentoringProductsController {
     constructor(private readonly svc: MentoringService) {}
 
     @Post()
-    createProduct(
-        @Body() body: CreateMentoringProductDto,
-    ): MentoringProductCreatedResponseDto {
+    createProduct(@Body() body: CreateMentoringProductDto): MentoringProductCreatedResponseDto {
         return this.svc.createProduct(body);
     }
 

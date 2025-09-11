@@ -9,6 +9,7 @@ import {
     CreateMentoringProductDto,
     MentoringProductCreatedResponseDto,
 } from './dto/product-create.dto';
+import { MenteeApplicationsResponseDto } from './dto/mentee-applications.dto';
 
 @Injectable()
 export class MentoringService {
@@ -336,6 +337,21 @@ export class MentoringService {
             description: body.description,
             price: body.price,
             slots: body.slots.map((s) => ({ day_of_week: s.day_of_week, hour_slot: s.hour_slot })),
+        };
+    }
+
+    getMenteeApplications(menteeIdx: number): MenteeApplicationsResponseDto {
+        // 더미 데이터: menteeIdx는 현재 로직에 직접 사용하지 않음
+        return {
+            applications: [
+                {
+                    application_id: 101,
+                    product_title: '프론트엔드 면접 대비',
+                    mentor_name: '홍길동',
+                    booked_date: '2025-09-14',
+                    application_status: 'approved',
+                },
+            ],
         };
     }
 }
