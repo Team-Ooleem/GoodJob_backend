@@ -4,10 +4,19 @@ import { MentoringProductDto } from './dto/product.dto';
 import { MentoringProductSlotsDto } from './dto/product-slots.dto';
 import { ApplicationResponseDto, CreateApplicationDto } from './dto/application.dto';
 import { MentoringProductReviewsDto } from './dto/product-reviews.dto';
+import { CreateProductReviewDto, ProductReviewResponseDto } from './dto/product-review.dto';
+import { CreateMentoringProductDto, MentoringProductCreatedResponseDto } from './dto/product-create.dto';
 
 @Controller('mentoring-products')
 export class MentoringProductsController {
     constructor(private readonly svc: MentoringService) {}
+
+    @Post()
+    createProduct(
+        @Body() body: CreateMentoringProductDto,
+    ): MentoringProductCreatedResponseDto {
+        return this.svc.createProduct(body);
+    }
 
     @Get(':product_idx')
     getProduct(@Param('product_idx') productIdx: string): MentoringProductDto {
@@ -35,5 +44,13 @@ export class MentoringProductsController {
     ): MentoringProductReviewsDto {
         const lim = limit ? Number(limit) : undefined;
         return this.svc.getProductReviews(Number(productIdx), lim ?? 10, cursor);
+    }
+
+    @Post(':product_idx/reviews')
+    createProductReview(
+        @Param('product_idx') productIdx: string,
+        @Body() body: CreateProductReviewDto,
+    ): ProductReviewResponseDto {
+        return this.svc.createProductReview(Number(productIdx), body);
     }
 }

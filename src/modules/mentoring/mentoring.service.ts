@@ -3,6 +3,12 @@ import { MentoringProductDto } from './dto/product.dto';
 import { MentoringProductSlotsDto } from './dto/product-slots.dto';
 import { ApplicationResponseDto, CreateApplicationDto } from './dto/application.dto';
 import { MentoringProductReviewsDto } from './dto/product-reviews.dto';
+import { MentorReviewsResponseDto } from './dto/mentor-reviews.dto';
+import { CreateProductReviewDto, ProductReviewResponseDto } from './dto/product-review.dto';
+import {
+    CreateMentoringProductDto,
+    MentoringProductCreatedResponseDto,
+} from './dto/product-create.dto';
 
 @Injectable()
 export class MentoringService {
@@ -188,6 +194,148 @@ export class MentoringService {
                 next_cursor: '2025-09-09T15:30:00Z',
                 has_more: true,
             },
+        };
+    }
+
+    getMentorReviews(mentorIdx: number, page = 1, limit = 20): MentorReviewsResponseDto {
+        /*
+          SELECT 
+            r.review_idx,
+            r.product_idx,
+            p.title AS product_title,
+            r.rating,
+            r.review_content,
+            r.created_at,
+            u.idx AS mentee_idx,
+            u.name AS mentee_name,
+            u.profile_img
+            FROM mentoring_reviews r
+            JOIN mentoring_products p ON r.product_idx = p.product_idx
+            JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
+            JOIN users u ON r.mentee_idx = u.idx
+            WHERE mp.mentor_idx = ?
+            ORDER BY r.created_at DESC
+            LIMIT ? OFFSET ?;
+        */
+
+        /*
+        SELECT 
+        COUNT(*) AS review_count,
+        ROUND(AVG(r.rating),1) AS average_rating
+        FROM mentoring_reviews r
+        JOIN mentoring_products p ON r.product_idx = p.product_idx
+        WHERE p.mentor_idx = ?;
+        */
+
+        return {
+            mentor_idx: mentorIdx,
+            review_count: 53,
+            average_rating: 4.8,
+            page_info: {
+                page,
+                limit,
+                total_pages: 3,
+                has_next: true,
+            },
+            reviews: [
+                {
+                    review_idx: 201,
+                    product_idx: 1,
+                    product_title: '프론트엔드 면접 대비 멘토링',
+                    mentee: {
+                        user_idx: 20,
+                        name: '김민수',
+                        profile_img: 'https://cdn.example.com/profiles/20.png',
+                    },
+                    rating: 5,
+                    review_content: '멘토링 덕분에 합격했습니다!',
+                    created_at: '2025-09-10T12:00:00Z',
+                },
+                {
+                    review_idx: 200,
+                    product_idx: 2,
+                    product_title: '포트폴리오 클리닉',
+                    mentee: {
+                        user_idx: 21,
+                        name: '이영희',
+                        profile_img: 'https://cdn.example.com/profiles/21.png',
+                    },
+                    rating: 4,
+                    review_content: '도움은 되었지만 시간이 부족했어요.',
+                    created_at: '2025-09-09T15:30:00Z',
+                },
+            ],
+        };
+    }
+
+    createProductReview(
+        productIdx: number,
+        body: CreateProductReviewDto,
+        menteeIdx = 20,
+    ): ProductReviewResponseDto {
+        /*
+        INSERT INTO mentoring_reviews (
+        application_id,
+        product_idx,
+        mentee_idx,
+        rating,
+        review_content,
+        created_at
+        )
+        SELECT
+        a.application_id,
+        a.product_idx,
+        a.mentee_idx,
+        5, -- rating
+        '멘토님이 실제 면접에서 유용한 팁을 많이 알려주셨어요!',
+        NOW()
+        FROM mentoring_applications a
+        WHERE a.application_id = 101
+        AND a.application_status = 'completed';
+        */
+        return {
+            review_idx: 555,
+            product_idx: productIdx,
+            application_id: body.application_id,
+            mentee_idx: menteeIdx,
+            rating: body.rating,
+            review_content: body.review_content,
+            created_at: '2025-09-11T15:30:00Z',
+        };
+    }
+
+    createProduct(body: CreateMentoringProductDto): MentoringProductCreatedResponseDto {
+        /*
+        INSERT INTO mentoring_products (
+            mentor_idx, title, job_category_id, description, price, is_active, created_at
+            ) VALUES (
+            10, 
+            '프론트엔드 면접 대비 1:1 멘토링',
+            101,
+            '실제 면접 경험 기반으로 포트폴리오와 코딩테스트 준비를 도와드립니다.',
+            50000,
+            1,
+            NOW()
+            );
+
+            -- 새로 생성된 product_idx 얻기
+            SET @productId = LAST_INSERT_ID();
+            */
+
+        /*
+        INSERT INTO mentoring_regular_slots (product_idx, day_of_week, hour_slot, created_at)
+        VALUES 
+        (@productId, 2, 19, NOW()),
+        (@productId, 4, 21, NOW());
+        */
+
+        return {
+            mentor_idx: body.mentor_idx,
+            title: body.title,
+            job_category_id: body.job_category_id,
+            description: body.description,
+            price: body.price,
+            slots: body.slots.map((s) => ({ day_of_week: s.day_of_week, hour_slot: s.hour_slot })),
         };
     }
 }
