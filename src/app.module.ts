@@ -22,7 +22,6 @@ import { SalariesModule } from './onboarding/salaries/salaries.module';
 import { ProfileModule } from './onboarding/profile/profile.module';
 import { SessionGuard } from './auth/session.guard';
 // resume
-import { ResumeModule } from './resume/resume.module';
 import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 import { AppConfigModule } from './config/config.module';
 
@@ -77,7 +76,7 @@ import { MentoringModule } from './modules/mentoring/mentoring.module';
             provide: APP_GUARD,
             useClass: SessionGuard,
         },
-      GcsService,
+        GcsService,
     ],
 })
 export class AppModule {}
