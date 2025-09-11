@@ -10,6 +10,11 @@ import {
     MentoringProductCreatedResponseDto,
 } from './dto/product-create.dto';
 import { MenteeApplicationsResponseDto } from './dto/mentee-applications.dto';
+import { MentoringApplicationsResponseDto } from './dto/mentoring-applications.dto';
+import {
+    UpdateApplicationStatusDto,
+    UpdateApplicationStatusResponseDto,
+} from './dto/application-update.dto';
 
 @Injectable()
 export class MentoringService {
@@ -352,6 +357,53 @@ export class MentoringService {
                     application_status: 'approved',
                 },
             ],
+        };
+    }
+
+    getMentoringApplications(
+        userIdx: number,
+        page = 1,
+        limit = 10,
+    ): MentoringApplicationsResponseDto {
+        return {
+            applications: [
+                {
+                    application_id: 101,
+                    product_idx: 1,
+                    product_title: '프론트엔드 면접 대비',
+                    booked_date: '2025-09-14',
+                    application_status: 'approved',
+                    mentee: {
+                        user_idx: 20,
+                        name: '김민수',
+                        profile_img: 'https://cdn.example.com/profiles/20.png',
+                    },
+                    mentor: {
+                        mentor_idx: 10,
+                        business_name: '홍길동',
+                        job_category: '프론트엔드 개발',
+                    },
+                },
+            ],
+            page_info: {
+                page,
+                limit,
+                total: 42,
+                has_next: true,
+            },
+        };
+    }
+
+    updateApplicationStatus(
+        applicationId: number,
+        dto: UpdateApplicationStatusDto,
+    ): UpdateApplicationStatusResponseDto {
+        // 더미 구현: 실제로는 상태 전이 검증 및 권한 체크 필요
+        return {
+            application_id: applicationId,
+            application_status: dto.application_status,
+            rejection_reason: dto.rejection_reason,
+            updated_at: '2025-09-11T16:00:00Z',
         };
     }
 }
