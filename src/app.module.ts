@@ -26,9 +26,6 @@ import { ResumeModule } from './resume/resume.module';
 import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 import { AppConfigModule } from './config/config.module';
 
-/* stt 모듈 */
-import { STTModule } from './stt/stt_module';
-
 /* tts 모듈 */
 import { TTSModule } from './tts/tts.module';
 import { AvatarModule } from './modules/avatar/avatar.module';
@@ -64,6 +61,7 @@ import { GcsService } from './lib/gcs';
         CanvasModule,
         SocialModule,
         TTSModule,
+        STTModule,
         AvatarModule,
         ResumeModule,
         STTModule,
@@ -76,7 +74,6 @@ import { GcsService } from './lib/gcs';
             provide: APP_GUARD,
             useClass: SessionGuard,
         },
-        GcsService,
     ],
 })
 export class AppModule {}
