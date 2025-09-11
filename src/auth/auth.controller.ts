@@ -108,17 +108,8 @@ export class AuthController {
             sameSite: cookieOptions.sameSite,
         });
 
-        // 6) 온보딩 상태 확인 후 적절한 페이지로 리다이렉트
-        const userResult = await this.databaseService.query(
-            'SELECT is_onboarded FROM users WHERE idx = ?',
-            [userIdx],
-        );
-
-        const isOnboarded = userResult[0]?.is_onboarded === 1;
-
-        // 쿠키 설정 후 중간 로딩 페이지로 리다이렉트 (쿠키 저장 시간 확보)
-        // 프론트엔드에서 /api/auth/me를 통해 온보딩 상태 확인 후 적절한 페이지로 이동
-        return res.redirect(`${this.configService.frontend.successUrl}/auth/loading`);
+        // 6) 로그인 완료 후 메인 페이지로 리다이렉트
+        return res.redirect(`${this.configService.frontend.successUrl}`);
     }
 
     // 쿠키 설정 상태 확인 (인증 불필요)
@@ -142,14 +133,6 @@ export class AuthController {
         try {
             const payload = jwt.verify(token, this.configService.session.secret) as any;
 
-            // 온보딩 상태 확인
-            const userResult = await this.databaseService.query(
-                'SELECT is_onboarded FROM users WHERE idx = ?',
-                [payload.idx],
-            );
-
-            const isOnboarded = userResult[0]?.is_onboarded === 1;
-
             return {
                 authenticated: true,
                 user: {
@@ -158,12 +141,6 @@ export class AuthController {
                     email: payload.email,
                     name: payload.name,
                     picture: payload.picture,
-                },
-                onboarding: {
-                    isOnboarded,
-                    redirectUrl: isOnboarded
-                        ? this.configService.frontend.successUrl
-                        : this.configService.frontend.onboardingUrl,
                 },
             };
         } catch {
@@ -191,16 +168,16 @@ export class AuthController {
                 // 기존 사용자가 있으면 idx 반환
                 const userIdx = existingUsers[0].idx;
 
-                // social_accout 테이블에 구글 정보가 있는지 확인
+                // social_account 테이블에 구글 정보가 있는지 확인
                 const socialAccounts = await this.databaseService.query(
-                    'SELECT * FROM social_accout WHERE user_idx = ? AND provider_id = ?',
+                    'SELECT * FROM social_account WHERE user_idx = ? AND provider_id = ?',
                     [userIdx, decoded.sub],
                 );
 
-                // social_accout에 구글 정보가 없으면 추가
+                // social_account에 구글 정보가 없으면 추가
                 if (socialAccounts.length === 0) {
                     await this.databaseService.query(
-                        'INSERT INTO social_accout (user_idx, provider_id, created_at) VALUES (?, ?, NOW())',
+                        'INSERT INTO social_account (user_idx, provider_id, created_at) VALUES (?, ?, NOW())',
                         [userIdx, decoded.sub],
                     );
                 }
@@ -217,9 +194,9 @@ export class AuthController {
             // MySQL insertId 가져오기
             const userIdx = (insertResult as any).insertId;
 
-            // 3) social_accout 테이블에 구글 정보 저장
+            // 3) social_account 테이블에 구글 정보 저장
             await this.databaseService.query(
-                'INSERT INTO social_accout (user_idx, provider_id, created_at) VALUES (?, ?, NOW())',
+                'INSERT INTO social_account (user_idx, provider_id, created_at) VALUES (?, ?, NOW())',
                 [userIdx, decoded.sub],
             );
 

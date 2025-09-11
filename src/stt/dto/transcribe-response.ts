@@ -79,7 +79,7 @@ export class ChatMessageDto {
     timestamp: string;
 
     @ApiProperty({ description: '멘토 인덱스' })
-    mentor_idx: number;
+    mentor_idxx: number;
 
     @ApiProperty({ description: '멘티 인덱스' })
     mentee_idx: number;

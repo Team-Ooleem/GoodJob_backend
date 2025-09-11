@@ -51,9 +51,6 @@ class EnvironmentVariables {
     @IsString()
     FRONTEND_SUCCESS_URL: string;
 
-    @IsString()
-    FRONTEND_ONBOARDING_URL: string;
-
     // 세션 설정
     @IsString()
     SESSION_SECRET: string;
