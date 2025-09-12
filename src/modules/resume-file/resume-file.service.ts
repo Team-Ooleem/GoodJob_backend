@@ -43,6 +43,9 @@ export class ResumeFileService {
         console.log('File size:', file.size);
         console.log('Mimetype:', file.mimetype);
         console.log('Buffer length:', file.buffer.length);
+        console.log('latin1 해석:', Buffer.from(file.originalname, 'latin1').toString('utf8'));
+        console.log('binary 해석:', Buffer.from(file.originalname, 'binary').toString('utf8'));
+        console.log('Bytes:', [...Buffer.from(file.originalname, 'utf8')]);
 
         const user = await this.db.queryOne(`SELECT idx FROM users WHERE idx=?`, [userId]);
         if (!user) {
@@ -301,19 +304,37 @@ export class ResumeFileService {
     }
 }
 
-// filename encoding normalization
 function normalizeOriginalName(name: string): string {
+    if (!name) return 'resume.pdf';
+
     try {
-        if (/%(?:[0-9A-Fa-f]{2})/.test(name)) {
+        // URL 인코딩된 경우 먼저 처리 (프론트에서 encodeURIComponent 사용)
+        if (name.includes('%')) {
             try {
-                const dec = decodeURIComponent(name);
-                if (dec) return dec;
-            } catch {}
+                const decoded = decodeURIComponent(name);
+                console.log(`파일명 URL 디코딩 성공: "${name}" → "${decoded}"`);
+                return decoded;
+            } catch (e) {
+                console.log('URL 디코딩 실패, 다른 방법 시도:', e.message);
+            }
         }
-        const converted = Buffer.from(name, 'latin1').toString('utf8');
-        const nonAscii = (s: string) => (s.match(/[\u0080-\uFFFF]/g) || []).length;
-        return nonAscii(converted) >= nonAscii(name) ? converted : name;
-    } catch {
+
+        // URL 인코딩이 아닌 경우, 기존 latin1->utf8 변환 시도
+        const corrected = Buffer.from(name, 'latin1').toString('utf8');
+
+        // 한글이나 의미있는 변환인지 확인
+        if (
+            /[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF]/.test(corrected) ||
+            (corrected !== name && corrected.includes('.pdf'))
+        ) {
+            console.log(`파일명 인코딩 복구 성공: "${name}" → "${corrected}"`);
+            return corrected;
+        }
+
+        // 복구가 안 되면 원본 사용
+        return name;
+    } catch (error) {
+        console.log(`파일명 처리 오류, 원본 사용: ${name}`);
         return name;
     }
 }
