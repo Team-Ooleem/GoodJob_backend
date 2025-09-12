@@ -67,6 +67,7 @@ export class STTMessageService {
                         },
                         canvasId: canvasId,
                         segments: [],
+                        audioDuration: 0,
                     };
                 }
 
@@ -80,8 +81,24 @@ export class STTMessageService {
                 }
             }
 
+            // 🆕 각 메시지의 duration 계산 (세그먼트 기반)
             const messages: ChatMessage[] = Object.values(grouped).map((msg) => {
                 msg.contextText = this.extractContextText(msg.segments) || '음성 메시지';
+
+                // 🆕 세그먼트 기반 duration 계산
+                if (msg.segments.length > 0) {
+                    const endTimes: number[] = msg.segments.map((s: SegmentData) =>
+                        Number(s.end_time),
+                    );
+                    const maxEndTime = Math.max(...endTimes);
+                    msg.audioDuration = Math.round(maxEndTime * 10) / 10; // 소수점 첫째자리
+                    this.logger.log(
+                        `Duration 계산 완료: ${msg.audioDuration.toFixed(1)}초 (session: ${msg.messageId})`,
+                    );
+                } else {
+                    msg.audioDuration = 0;
+                }
+
                 return msg;
             });
 
@@ -130,6 +147,15 @@ export class STTMessageService {
                 [sessionIdx],
             );
 
+            // 🆕 audioDuration 계산
+            let audioDuration = 0;
+            if (segments.length > 0) {
+                const maxEndTime = Math.max(
+                    ...segments.map((seg: SegmentData) => parseFloat(seg.end_time.toString())),
+                );
+                audioDuration = Math.round(maxEndTime * 10) / 10;
+            }
+
             const contextText = this.extractContextText(
                 segments.map((segment: SegmentData) => ({
                     speakerTag: segment.speaker_idx,
@@ -143,6 +169,7 @@ export class STTMessageService {
                 success: true,
                 session: sessionInfo[0] as SessionDetailData,
                 contextText,
+                audioDuration, // 🆕 duration 정보 추가
                 segments: segments.map((segment: SegmentData) => ({
                     speakerTag: segment.speaker_idx,
                     textContent: segment.text_content,

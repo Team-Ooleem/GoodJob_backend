@@ -75,6 +75,7 @@ export interface ChatMessage {
         startTime: number;
         endTime: number;
     }>;
+    audioDuration: number;
 }
 
 export interface ChunkCacheData {
