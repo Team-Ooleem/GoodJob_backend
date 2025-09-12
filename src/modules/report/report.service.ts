@@ -395,4 +395,17 @@ export class ReportService {
         );
         return rows;
     }
+
+    async listReportsByUser(userId: number, limit = 20, offset = 0) {
+        const rows = await this.db.query<any>(
+            `SELECT r.session_id, r.overall_score, r.question_count, r.created_at
+       FROM interview_reports r
+       JOIN interview_sessions s ON s.session_id = r.session_id
+       WHERE s.user_id = ?
+       ORDER BY r.created_at DESC
+       LIMIT ? OFFSET ?`,
+            [userId, limit, offset],
+        );
+        return rows;
+    }
 }

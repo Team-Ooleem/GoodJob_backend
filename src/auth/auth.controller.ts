@@ -108,10 +108,8 @@ export class AuthController {
             sameSite: cookieOptions.sameSite,
         });
 
-
         // 6) 로그인 완료 후 메인 페이지로 리다이렉트
         return res.redirect(`${this.configService.frontend.successUrl}`);
-
     }
 
     // 쿠키 설정 상태 확인 (인증 불필요)

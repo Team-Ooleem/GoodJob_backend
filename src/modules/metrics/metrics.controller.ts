@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req } from '@nestjs/common';
 import { MetricsService } from './metrics.service';
 import { VisualAggregateDto } from './dto/visual-aggregate.dto';
 
@@ -14,8 +14,10 @@ export class MetricsController {
         @Param('sessionId') sessionId: string,
         @Param('questionId') questionId: string,
         @Body() dto: VisualAggregateDto,
+        @Req() req: any,
     ) {
-        await this.svc.upsertQuestionAggregate(sessionId, questionId, dto);
+        const userId = Number(req.user_idx ?? req.user?.idx);
+        await this.svc.upsertQuestionAggregate(sessionId, questionId, dto, userId);
         return { ok: true };
     }
 
@@ -23,8 +25,9 @@ export class MetricsController {
      * 면접 종료 시점에 세션 전체 집계(문항 집계의 가중 평균/합산) 저장 및 반환
      */
     @Post(':sessionId/finalize')
-    async finalizeSession(@Param('sessionId') sessionId: string) {
-        const aggregate = await this.svc.finalizeSession(sessionId);
+    async finalizeSession(@Param('sessionId') sessionId: string, @Req() req: any) {
+        const userId = Number(req.user_idx ?? req.user?.idx);
+        const aggregate = await this.svc.finalizeSession(sessionId, userId);
         return { ok: true, aggregate };
     }
 

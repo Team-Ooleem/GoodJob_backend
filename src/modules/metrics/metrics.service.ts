@@ -91,10 +91,15 @@ export class MetricsService {
      * 세션/문항 존재 보장 (idempotent)
      * 질문 순번/텍스트는 필요 시 별도 API로 업데이트 권장
      */
-    private async ensureSessionAndQuestion(sessionId: string, questionId: string): Promise<void> {
-        await this.db.execute(`INSERT IGNORE INTO interview_sessions (session_id) VALUES (?)`, [
-            sessionId,
-        ]);
+    private async ensureSessionAndQuestion(
+        sessionId: string,
+        questionId: string,
+        userId: number,
+    ): Promise<void> {
+        await this.db.execute(
+            `INSERT IGNORE INTO interview_sessions (session_id, user_id) VALUES (?, ?)`,
+            [sessionId, userId],
+        );
 
         await this.db.execute(
             `INSERT IGNORE INTO questions (session_id, question_id, order_no, text)
@@ -111,8 +116,9 @@ export class MetricsService {
         sessionId: string,
         questionId: string,
         a: VisualAggregateDto,
+        userId: number,
     ): Promise<void> {
-        await this.ensureSessionAndQuestion(sessionId, questionId);
+        await this.ensureSessionAndQuestion(sessionId, questionId, userId);
 
         await this.db.execute(
             `INSERT INTO visual_agg_question
@@ -174,7 +180,13 @@ export class MetricsService {
      * 세션 전체 집계: visual_agg_question을 가중 평균/합산 → visual_agg_session 업서트
      * 그리고 perQuestion + overall 구조로 반환
      */
-    async finalizeSession(sessionId: string): Promise<SessionVisualAggregate> {
+    async finalizeSession(sessionId: string, userId?: number): Promise<SessionVisualAggregate> {
+        if (userId) {
+            await this.db.execute(
+                `INSERT IGNORE INTO interview_sessions (session_id, user_id) VALUES (?, ?)`,
+                [sessionId, userId],
+            );
+        }
         const rows = await this.db.query<VisualAggQuestionRow>(
             `SELECT * FROM visual_agg_question WHERE session_id=?`,
             [sessionId],

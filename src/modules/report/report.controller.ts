@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Query, Req } from '@nestjs/common';
 import { AnalyzeReportDto } from './dto/analyze-report.dto';
 import { ReportService } from './report.service';
 
@@ -31,6 +31,20 @@ export class ReportController {
         const lim = Math.max(1, Math.min(100, parseInt(limit || '20', 10) || 20));
         const off = Math.max(0, parseInt(offset || '0', 10) || 0);
         const rows = await this.svc.listReports(lim, off, externalKey);
+        return { success: true, data: rows };
+    }
+
+    // List my reports based on authenticated user
+    @Get('my')
+    async listMy(
+        @Query('limit') limit?: string,
+        @Query('offset') offset?: string,
+        @Req() req?: any,
+    ) {
+        const lim = Math.max(1, Math.min(100, parseInt(limit || '20', 10) || 20));
+        const off = Math.max(0, parseInt(offset || '0', 10) || 0);
+        const userId = Number(req?.user_idx ?? req?.user?.idx);
+        const rows = await this.svc.listReportsByUser(userId, lim, off);
         return { success: true, data: rows };
     }
 }
