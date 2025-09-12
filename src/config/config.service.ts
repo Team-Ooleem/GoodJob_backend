@@ -20,7 +20,6 @@ interface GoogleConfig {
 
 interface FrontendConfig {
     successUrl: string;
-    onboardingUrl: string;
 }
 
 interface SessionConfig {
@@ -81,7 +80,6 @@ export class AppConfigService {
         return (
             this.configService.get<FrontendConfig>('app.frontend') || {
                 successUrl: '',
-                onboardingUrl: '',
             }
         );
     }

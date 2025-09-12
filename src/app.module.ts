@@ -14,15 +14,9 @@ import { AuthModule } from './auth/auth.module';
 import { AiModule } from './modules/interview/interview.module';
 import { CollabModule } from './modules/collab/collab.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
-import { UsersModule } from './users/users.module';
 import { ChatModule } from './chat/chat.module';
-import { JobsModule } from './onboarding/jobs/jobs.module';
-import { LocationsModule } from './onboarding/locations/locations.module';
-import { SalariesModule } from './onboarding/salaries/salaries.module';
-import { ProfileModule } from './onboarding/profile/profile.module';
 import { SessionGuard } from './auth/session.guard';
 // resume
-import { ResumeModule } from './resume/resume.module';
 import { CanvasModule } from './modules/coaching-resume/canvas.modeule';
 import { AppConfigModule } from './config/config.module';
 
@@ -35,6 +29,9 @@ import { GcsService } from './lib/gcs';
 /* tts 모듈 */
 import { TTSModule } from './tts/tts.module';
 import { AvatarModule } from './modules/avatar/avatar.module';
+import { ReportModule } from './modules/report/report.module';
+import { AudioMetricsModule } from './modules/audio-metrics/audio-metrics.module';
+import { MentoringModule } from './modules/mentoring/mentoring.module';
 
 @Module({
     imports: [
@@ -54,18 +51,15 @@ import { AvatarModule } from './modules/avatar/avatar.module';
         AiModule,
         CollabModule,
         MetricsModule,
-        UsersModule,
         ChatModule,
-        JobsModule,
-        LocationsModule,
-        SalariesModule,
-        ProfileModule,
         CanvasModule,
         SocialModule,
         TTSModule,
         STTModule,
         AvatarModule,
-        ResumeModule,
+        ReportModule,
+        AudioMetricsModule,
+        MentoringModule,
     ],
     controllers: [AppController],
     providers: [
