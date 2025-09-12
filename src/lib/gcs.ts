@@ -60,7 +60,7 @@ export class GcsService {
     ): string {
         const timestamp = Date.now();
         const randomString = Math.random().toString(36).substring(2, 8);
-        const extension = path.extname(originalName) || '.webm';
+        const extension = path.extname(originalName) || '.mp4';
 
         let fileName = '';
         if (canvasId !== undefined && mentorIdx !== undefined && menteeIdx !== undefined) {

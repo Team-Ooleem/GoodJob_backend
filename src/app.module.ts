@@ -75,7 +75,7 @@ import { AvatarModule } from './modules/avatar/avatar.module';
             provide: APP_GUARD,
             useClass: SessionGuard,
         },
-      GcsService,
+        GcsService,
     ],
 })
 export class AppModule {}
