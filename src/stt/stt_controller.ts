@@ -92,6 +92,7 @@ export class STTController {
                         mimeType,
                     );
                     this.logger.log(`계산된 duration: ${actualDuration.toFixed(2)}초`);
+                    this.logger.log(`계산된 duration: ${actualDuration.toFixed(2)}초`);
 
                     // Duration 품질 검증
                     const qualityCheck = AudioProcessorUtil.validateDurationQuality(

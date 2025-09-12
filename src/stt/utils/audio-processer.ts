@@ -9,26 +9,10 @@ export class AudioProcessorUtil {
     }
 
     /* mp4 오디오 전처리 */
-    static async getMP4Duration(audioBuffer: Buffer): Promise<number> {
+    static getMP4Duration(audioBuffer: Buffer): Promise<number> {
         try {
-            const uint8Array = new Uint8Array(audioBuffer);
-            const blob = new Blob([uint8Array], { type: 'audio/mp4' });
-
-            return new Promise((resolve, reject) => {
-                const audio = new Audio();
-                const url = URL.createObjectURL(blob);
-
-                audio.addEventListener('loadedmetadata', () => {
-                    URL.revokeObjectURL(url);
-                    resolve(audio.duration);
-                });
-
-                audio.addEventListener('error', () => {
-                    URL.revokeObjectURL(url);
-                    reject(new Error('MP4 duration 계산 실패'));
-                });
-                audio.src = url;
-            });
+            // Node.js 환경에서는 브라우저 API를 사용할 수 없으므로 추정 방식 사용
+            return Promise.resolve(this.estimateDurationByFormat(audioBuffer, 'audio/mp4'));
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             throw new Error(`MP4 duration 계산 실패: ${errorMessage}`);
