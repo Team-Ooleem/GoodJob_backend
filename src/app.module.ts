@@ -32,6 +32,7 @@ import { AvatarModule } from './modules/avatar/avatar.module';
 import { ReportModule } from './modules/report/report.module';
 import { AudioMetricsModule } from './modules/audio-metrics/audio-metrics.module';
 import { MentoringModule } from './modules/mentoring/mentoring.module';
+import { ResumeFileModule } from './modules/resume-file/resume-file.module';
 
 @Module({
     imports: [
@@ -60,6 +61,7 @@ import { MentoringModule } from './modules/mentoring/mentoring.module';
         ReportModule,
         AudioMetricsModule,
         MentoringModule,
+        ResumeFileModule,
     ],
     controllers: [AppController],
     providers: [

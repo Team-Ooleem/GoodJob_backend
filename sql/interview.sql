@@ -2,9 +2,12 @@ USE `new-good-job-test`;
 
 CREATE TABLE IF NOT EXISTS interview_sessions (
   session_id      VARCHAR(64) PRIMARY KEY,
+  user_id         INT NOT NULL,
   external_key    VARCHAR(128) UNIQUE NULL,
   created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  ended_at        TIMESTAMP NULL
+  ended_at        TIMESTAMP NULL,
+  INDEX idx_sessions_user_created (user_id, created_at),
+  CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS questions (
@@ -117,3 +120,21 @@ CREATE TABLE IF NOT EXISTS interview_report_question_scores (
 -- -- Optional: expose external_key for user-level filtering
 -- DROP INDEX IF EXISTS idx_sessions_external_key ON interview_sessions;
 -- CREATE INDEX idx_sessions_external_key ON interview_sessions (external_key);
+
+-- Uploaded resume PDFs and their parsing/summary state
+CREATE TABLE IF NOT EXISTS resume_files (
+  id            VARCHAR(64) PRIMARY KEY,
+  user_id       INT NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  s3_key        VARCHAR(512) NOT NULL,
+  url           VARCHAR(1024) NOT NULL,
+  size          INT NOT NULL DEFAULT 0,
+  mimetype      VARCHAR(128) NOT NULL,
+  text_content  LONGTEXT NULL,
+  summary       TEXT NULL,
+  parse_status  ENUM('none','pending','processing','done','error') NOT NULL DEFAULT 'none',
+  error_message TEXT NULL,
+  created_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_user_created (user_id, created_at),
+  CONSTRAINT fk_resume_files_user FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
