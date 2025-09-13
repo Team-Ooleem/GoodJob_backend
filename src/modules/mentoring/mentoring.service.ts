@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { MentoringProductDto } from './dto/product.dto';
 import { MentoringProductSlotsDto } from './dto/product-slots.dto';
+import { ProductRegularSlotsResponseDto } from './dto/product-regular-slots.dto';
 import { ApplicationResponseDto, CreateApplicationDto } from './dto/application.dto';
 import { MentoringProductReviewsDto } from './dto/product-reviews.dto';
 import { MentorReviewsResponseDto } from './dto/mentor-reviews.dto';
@@ -25,7 +26,7 @@ import { DatabaseService } from '@/database/database.service';
 @Injectable()
 export class MentoringService {
     constructor(private readonly databaseService: DatabaseService) {}
-    getProduct(productIdx: number): MentoringProductDto {
+    async getProduct(productIdx: number): Promise<MentoringProductDto> {
         /*
         SELECT 
             p.product_idx,
@@ -63,27 +64,67 @@ export class MentoringService {
             p.product_idx, p.title, p.description, p.price, jc.name,
             u.name, jc2.name, mp.business_name;
         */
+        const sql = `
+            SELECT 
+                p.product_idx,
+                p.title,
+                p.description,
+                p.price,
+                jc.name AS job_category,
+                COUNT(DISTINCT r.review_idx) AS review_count,
+                COALESCE(ROUND(AVG(r.rating), 1), 0) AS average_rating,
+                u.name AS mentor_name,
+                jc2.name AS mentor_job_category,
+                mp.business_name,
+                COUNT(DISTINCT CASE WHEN a.application_status = 'completed' THEN a.mentee_idx END) AS mentee_count
+            FROM mentoring_products p
+            JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
+            JOIN users u ON mp.user_idx = u.idx
+            JOIN job_category jc ON p.job_category_id = jc.id
+            JOIN job_category jc2 ON mp.preferred_field_id = jc2.id
+            LEFT JOIN mentoring_reviews r ON p.product_idx = r.product_idx
+            LEFT JOIN mentoring_applications a ON p.product_idx = a.product_idx
+            WHERE p.product_idx = ?
+            GROUP BY p.product_idx, p.title, p.description, p.price, jc.name, u.name, jc2.name, mp.business_name
+        `;
+
+        const row = await this.databaseService.queryOne<{
+            product_idx: number;
+            title: string;
+            description: string;
+            price: number;
+            job_category: string;
+            review_count: number;
+            average_rating: number;
+            mentor_name: string;
+            mentor_job_category: string;
+            business_name: string;
+            mentee_count: number;
+        }>(sql, [productIdx]);
+
+        if (!row) {
+            throw new Error('멘토링 상품을 찾을 수 없습니다.');
+        }
+
         return {
-            product_idx: productIdx,
-            title: '프론트엔드 면접 대비 1:1 멘토링',
-            description: '실제 면접 경험 기반으로 포트폴리오와 코딩테스트 준비를 도와드립니다.',
-            price: 50000,
-            job_category: '프론트엔드 개발',
-
-            mentee_count: 8,
-            review_count: 12,
-            average_rating: 4.8,
-
+            product_idx: row.product_idx,
+            title: row.title,
+            description: row.description,
+            price: Number(row.price),
+            job_category: row.job_category,
+            mentee_count: Number(row.mentee_count ?? 0),
+            review_count: Number(row.review_count ?? 0),
+            average_rating: Number(row.average_rating ?? 0),
             mentor: {
-                name: '홍길동',
-                job_category: '프론트엔드 개발',
-                career: '5년차',
-                business_name: '네이버',
+                name: row.mentor_name,
+                job_category: row.mentor_job_category,
+                career: '',
+                business_name: row.business_name,
             },
         };
     }
 
-    getProductSlots(productIdx: number): MentoringProductSlotsDto {
+    async getProductSlots(productIdx: number, date: string): Promise<MentoringProductSlotsDto> {
         // productIdx는 더미 응답에 직접적 영향을 주지 않지만, 시그니처로 포함
         /*
         -- 1. 날짜로 요일 계산 (MySQL: 1=일요일, 2=월요일 ...)
@@ -111,23 +152,140 @@ export class MentoringService {
         GROUP BY s.regular_slots_idx, s.hour_slot;
 
         */
+        // validate date (YYYY-MM-DD)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!date || !dateRegex.test(date)) {
+            throw new Error('유효한 날짜 형식이 필요합니다. 예: 2025-09-14');
+        }
+        const d = new Date(date);
+        if (isNaN(d.getTime())) {
+            throw new Error('유효한 날짜가 아닙니다.');
+        }
+        const jsDay = d.getDay(); // 0=Sun..6=Sat
+        const dayOfWeek = ((jsDay + 6) % 7) + 1; // 1=Mon..7=Sun
+
+        const sql = `
+            SELECT 
+                s.hour_slot,
+                CONCAT(LPAD(s.hour_slot,2,'0'), ':00-', LPAD(s.hour_slot+1,2,'0'), ':00') AS time_range,
+                COUNT(a.application_id) AS reserved_count
+            FROM mentoring_regular_slots s
+            LEFT JOIN mentoring_applications a 
+                ON s.regular_slots_idx = a.regular_slots_idx
+               AND a.booked_date = ?
+               AND a.application_status IN ('approved','completed')
+            WHERE s.product_idx = ?
+              AND s.day_of_week = ?
+            GROUP BY s.hour_slot
+            ORDER BY s.hour_slot ASC
+        `;
+
+        const rows = await this.databaseService.query<{
+            hour_slot: number;
+            time_range: string;
+            reserved_count: number;
+        }>(sql, [date, productIdx, dayOfWeek]);
+
+        const slotsAll = rows.map((r) => ({
+            hour_slot: Number(r.hour_slot),
+            time_range: r.time_range,
+            available: Number(r.reserved_count ?? 0) === 0,
+        }));
+
+        // 가능한(예약되지 않은) 정기 슬롯만 반환
+        const slots = slotsAll.filter((s) => s.available);
+
         return {
-            date: '2025-09-14',
-            day_of_week: 7,
-            slots: [
-                { hour_slot: 9, time_range: '09:00-10:00', available: false },
-                { hour_slot: 10, time_range: '10:00-11:00', available: true },
-                { hour_slot: 11, time_range: '11:00-12:00', available: false },
-                { hour_slot: 15, time_range: '15:00-16:00', available: true },
-            ],
+            date,
+            day_of_week: dayOfWeek,
+            slots,
         };
     }
 
-    createApplication(
+    async getProductRegularSlots(productIdx: number): Promise<ProductRegularSlotsResponseDto> {
+        const sql = `
+            SELECT day_of_week, hour_slot
+              FROM mentoring_regular_slots
+             WHERE product_idx = ?
+             ORDER BY day_of_week, hour_slot
+        `;
+        const rows = await this.databaseService.query<{
+            day_of_week: number;
+            hour_slot: number;
+        }>(sql, [productIdx]);
+
+        const slots = rows.map((r) => ({
+            day_of_week: Number(r.day_of_week),
+            hour_slot: Number(r.hour_slot),
+            time_range: `${String(r.hour_slot).padStart(2, '0')}:00-${String(r.hour_slot + 1).padStart(2, '0')}:00`,
+        }));
+
+        return { product_idx: productIdx, slots };
+    }
+
+    async createApplication(
         productIdx: number,
         dto: CreateApplicationDto,
-        menteeIdx = 20,
-    ): ApplicationResponseDto {
+        menteeIdx: number,
+    ): Promise<ApplicationResponseDto> {
+        // Basic validations
+        if (!menteeIdx || Number.isNaN(Number(menteeIdx))) {
+            throw new BadRequestException('유효한 멘티 ID가 필요합니다.');
+        }
+        const user = await this.databaseService.queryOne<{ idx: number }>(
+            'SELECT idx FROM users WHERE idx = ? LIMIT 1',
+            [menteeIdx],
+        );
+        if (!user) {
+            throw new NotFoundException('해당 멘티가 존재하지 않습니다.');
+        }
+
+        const product = await this.databaseService.queryOne<{ product_idx: number }>(
+            'SELECT product_idx FROM mentoring_products WHERE product_idx = ? AND is_active = 1 LIMIT 1',
+            [productIdx],
+        );
+        if (!product) {
+            throw new NotFoundException('활성화된 멘토링 상품을 찾을 수 없습니다.');
+        }
+
+        const slot = await this.databaseService.queryOne<{
+            regular_slots_idx: number;
+            day_of_week: number;
+        }>(
+            'SELECT regular_slots_idx, day_of_week FROM mentoring_regular_slots WHERE regular_slots_idx = ? AND product_idx = ? LIMIT 1',
+            [dto.regular_slots_idx, productIdx],
+        );
+        if (!slot) {
+            throw new BadRequestException('해당 상품에 속하지 않는 예약 슬롯입니다.');
+        }
+
+        // Validate date format and weekday match
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dto.booked_date || !dateRegex.test(dto.booked_date)) {
+            throw new BadRequestException('예약일자는 YYYY-MM-DD 형식이어야 합니다.');
+        }
+        const booked = new Date(dto.booked_date);
+        if (isNaN(booked.getTime())) {
+            throw new BadRequestException('유효한 예약일자가 아닙니다.');
+        }
+        const jsDay = booked.getDay();
+        const dayOfWeek = ((jsDay + 6) % 7) + 1; // 1=Mon..7=Sun
+        if (dayOfWeek !== Number(slot.day_of_week)) {
+            throw new BadRequestException(
+                '선택한 예약일자의 요일과 슬롯 요일이 일치하지 않습니다.',
+            );
+        }
+
+        // Prevent double booking on approved/completed
+        const reserved = await this.databaseService.queryOne<{ cnt: number }>(
+            `SELECT COUNT(*) AS cnt
+               FROM mentoring_applications
+              WHERE regular_slots_idx = ? AND booked_date = ? AND application_status IN ('approved','completed')`,
+            [dto.regular_slots_idx, dto.booked_date],
+        );
+        if (Number(reserved?.cnt ?? 0) > 0) {
+            throw new BadRequestException('이미 예약된 시간입니다. 다른 슬롯을 선택해주세요.');
+        }
         /* 결제 정보 저장 */
         /*
         INSERT INTO payments (user_idx, product_idx, amount, payment_status, transaction_id, paid_at)
@@ -145,26 +303,77 @@ export class MentoringService {
             LAST_INSERT_ID(), '포트폴리오 피드백 위주로 받고 싶습니다.', 'pending', NOW()
         );
         */
-        return {
-            application_id: 101,
-            product_idx: productIdx,
-            mentee_idx: menteeIdx,
-            regular_slots_idx: dto.regular_slots_idx,
-            booked_date: dto.booked_date,
-            application_status: 'pending',
-            message_to_mentor: dto.message_to_mentor,
-            payment: {
-                payment_id: 555,
-                amount: dto.payment.amount,
-                status: dto.payment.status,
-                transaction_id: dto.payment.transaction_id,
-                paid_at: '2025-09-11T15:20:00Z',
-            },
-            created_at: '2025-09-11T15:20:00Z',
-        };
+        return this.databaseService.transaction(async (conn) => {
+            const paySql = `
+                INSERT INTO payments (user_idx, product_idx, amount, payment_status, transaction_id, paid_at)
+                VALUES (?, ?, ?, ?, ?, CASE WHEN ? = 'completed' THEN NOW() ELSE NULL END)
+            `;
+            const [payRes]: any = await conn.execute(paySql, [
+                menteeIdx,
+                productIdx,
+                dto.payment.amount,
+                dto.payment.status,
+                dto.payment.transaction_id,
+                dto.payment.status,
+            ]);
+            const paymentId = payRes.insertId as number;
+
+            const appSql = `
+                INSERT INTO mentoring_applications (
+                    mentee_idx, product_idx, regular_slots_idx, booked_date, payment_id, message_to_mentor, application_status, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW())
+            `;
+            const [appRes]: any = await conn.execute(appSql, [
+                menteeIdx,
+                productIdx,
+                dto.regular_slots_idx,
+                dto.booked_date,
+                paymentId,
+                dto.message_to_mentor ?? null,
+            ]);
+            const applicationId = appRes.insertId as number;
+
+            const appRowSql = `
+                SELECT application_id, mentee_idx, product_idx, regular_slots_idx, booked_date, application_status, message_to_mentor, created_at
+                  FROM mentoring_applications WHERE application_id = ?
+            `;
+            const [appRow] = await conn.query<any[]>(appRowSql, [applicationId]);
+            const created = appRow[0];
+
+            const payRowSql = `
+                SELECT payment_id, amount, payment_status AS status, transaction_id, paid_at
+                  FROM payments WHERE payment_id = ?
+            `;
+            const [payRow] = await conn.query<any[]>(payRowSql, [paymentId]);
+            const payment = payRow[0];
+
+            return {
+                application_id: applicationId,
+                product_idx: productIdx,
+                mentee_idx: menteeIdx,
+                regular_slots_idx: dto.regular_slots_idx,
+                booked_date: dto.booked_date,
+                application_status: created?.application_status ?? 'pending',
+                message_to_mentor: dto.message_to_mentor,
+                payment: {
+                    payment_id: paymentId,
+                    amount: Number(payment?.amount ?? dto.payment.amount),
+                    status: payment?.status ?? dto.payment.status,
+                    transaction_id: payment?.transaction_id ?? dto.payment.transaction_id,
+                    paid_at: payment?.paid_at ? new Date(payment.paid_at).toISOString() : '',
+                } as any,
+                created_at: created?.created_at
+                    ? new Date(created.created_at).toISOString()
+                    : new Date().toISOString(),
+            };
+        });
     }
 
-    getProductReviews(productIdx: number, limit = 10, cursor?: string): MentoringProductReviewsDto {
+    async getProductReviews(
+        productIdx: number,
+        limit = 10,
+        cursor?: string,
+    ): Promise<MentoringProductReviewsDto> {
         /*
         SELECT 
             r.review_idx,
@@ -181,36 +390,65 @@ export class MentoringService {
         LIMIT 10;
         */
 
-        const reviews = [
-            {
-                review_idx: 201,
-                mentee_name: '홍길동',
-                rating: 5,
-                review_content: '멘토님 덕분에 면접 잘 봤습니다.',
-                created_at: '2025-09-10T12:00:00Z',
-            },
-            {
-                review_idx: 200,
-                mentee_name: '이영희',
-                rating: 4,
-                review_content: '조언이 유익했어요.',
-                created_at: '2025-09-09T15:30:00Z',
-            },
-        ];
+        const aggSql = `
+            SELECT COUNT(*) AS review_count, COALESCE(ROUND(AVG(rating),1),0) AS average_rating
+              FROM mentoring_reviews
+             WHERE product_idx = ?
+        `;
+        const agg = await this.databaseService.queryOne<{
+            review_count: number;
+            average_rating: number;
+        }>(aggSql, [productIdx]);
+
+        let listSql = `
+            SELECT r.review_idx, r.rating, r.review_content, r.created_at, u.name AS mentee_name
+              FROM mentoring_reviews r
+              JOIN users u ON r.mentee_idx = u.idx
+             WHERE r.product_idx = ?
+        `;
+        const params: any[] = [productIdx];
+        if (cursor) {
+            listSql += ' AND r.created_at < ?';
+            params.push(new Date(cursor));
+        }
+        listSql += ' ORDER BY r.created_at DESC LIMIT ?';
+        params.push(Number(limit));
+
+        const rows = await this.databaseService.query<{
+            review_idx: number;
+            rating: number;
+            review_content: string;
+            created_at: Date;
+            mentee_name: string;
+        }>(listSql, params);
+
+        const reviews = rows.map((r) => ({
+            review_idx: r.review_idx,
+            mentee_name: r.mentee_name,
+            rating: Number(r.rating),
+            review_content: r.review_content,
+            created_at: new Date(r.created_at).toISOString(),
+        }));
+
+        const nextCursor = reviews.length > 0 ? reviews[reviews.length - 1].created_at : null;
 
         return {
             product_idx: productIdx,
-            average_rating: 4.7,
-            review_count: 53,
+            average_rating: Number(agg?.average_rating ?? 0),
+            review_count: Number(agg?.review_count ?? 0),
             reviews,
             page_info: {
-                next_cursor: '2025-09-09T15:30:00Z',
-                has_more: true,
+                next_cursor: nextCursor,
+                has_more: reviews.length === Number(limit),
             },
         };
     }
 
-    getMentorReviews(mentorIdx: number, page = 1, limit = 20): MentorReviewsResponseDto {
+    async getMentorReviews(
+        mentorIdx: number,
+        page = 1,
+        limit = 20,
+    ): Promise<MentorReviewsResponseDto> {
         /*
           SELECT 
             r.review_idx,
@@ -240,52 +478,77 @@ export class MentoringService {
         WHERE p.mentor_idx = ?;
         */
 
+        const aggSql = `
+            SELECT COUNT(*) AS review_count, COALESCE(ROUND(AVG(r.rating),1),0) AS average_rating
+              FROM mentoring_reviews r
+              JOIN mentoring_products p ON r.product_idx = p.product_idx
+             WHERE p.mentor_idx = ?
+        `;
+        const agg = await this.databaseService.queryOne<{
+            review_count: number;
+            average_rating: number;
+        }>(aggSql, [mentorIdx]);
+
+        const offset = (Number(page) - 1) * Number(limit);
+        const listSql = `
+            SELECT 
+                r.review_idx,
+                r.product_idx,
+                p.title AS product_title,
+                r.rating,
+                r.review_content,
+                r.created_at,
+                u.idx AS mentee_idx,
+                u.name AS mentee_name,
+                u.profile_img
+            FROM mentoring_reviews r
+            JOIN mentoring_products p ON r.product_idx = p.product_idx
+            JOIN users u ON r.mentee_idx = u.idx
+            WHERE p.mentor_idx = ?
+            ORDER BY r.created_at DESC
+            LIMIT ? OFFSET ?
+        `;
+        const rows = await this.databaseService.query<any>(listSql, [
+            mentorIdx,
+            Number(limit),
+            offset,
+        ]);
+
+        const reviews = rows.map((r: any) => ({
+            review_idx: r.review_idx,
+            product_idx: r.product_idx,
+            product_title: r.product_title,
+            mentee: {
+                user_idx: r.mentee_idx,
+                name: r.mentee_name,
+                profile_img: r.profile_img ?? '',
+            },
+            rating: Number(r.rating),
+            review_content: r.review_content,
+            created_at: new Date(r.created_at).toISOString(),
+        }));
+
+        const totalPages = Math.max(1, Math.ceil(Number(agg?.review_count ?? 0) / Number(limit)));
+
         return {
             mentor_idx: mentorIdx,
-            review_count: 53,
-            average_rating: 4.8,
+            review_count: Number(agg?.review_count ?? 0),
+            average_rating: Number(agg?.average_rating ?? 0),
             page_info: {
-                page,
-                limit,
-                total_pages: 3,
-                has_next: true,
+                page: Number(page),
+                limit: Number(limit),
+                total_pages: totalPages,
+                has_next: Number(page) < totalPages,
             },
-            reviews: [
-                {
-                    review_idx: 201,
-                    product_idx: 1,
-                    product_title: '프론트엔드 면접 대비 멘토링',
-                    mentee: {
-                        user_idx: 20,
-                        name: '김민수',
-                        profile_img: 'https://cdn.example.com/profiles/20.png',
-                    },
-                    rating: 5,
-                    review_content: '멘토링 덕분에 합격했습니다!',
-                    created_at: '2025-09-10T12:00:00Z',
-                },
-                {
-                    review_idx: 200,
-                    product_idx: 2,
-                    product_title: '포트폴리오 클리닉',
-                    mentee: {
-                        user_idx: 21,
-                        name: '이영희',
-                        profile_img: 'https://cdn.example.com/profiles/21.png',
-                    },
-                    rating: 4,
-                    review_content: '도움은 되었지만 시간이 부족했어요.',
-                    created_at: '2025-09-09T15:30:00Z',
-                },
-            ],
+            reviews,
         };
     }
 
-    createProductReview(
+    async createProductReview(
         productIdx: number,
         body: CreateProductReviewDto,
         menteeIdx = 20,
-    ): ProductReviewResponseDto {
+    ): Promise<ProductReviewResponseDto> {
         /*
         INSERT INTO mentoring_reviews (
         application_id,
@@ -306,18 +569,90 @@ export class MentoringService {
         WHERE a.application_id = 101
         AND a.application_status = 'completed';
         */
+        const appSql = `
+            SELECT application_id, product_idx, mentee_idx
+              FROM mentoring_applications
+             WHERE application_id = ?
+               AND product_idx = ?
+               AND application_status = 'completed'
+        `;
+        const app = await this.databaseService.queryOne<{
+            application_id: number;
+            product_idx: number;
+            mentee_idx: number;
+        }>(appSql, [body.application_id, productIdx]);
+
+        if (!app) {
+            throw new Error('리뷰를 작성할 수 있는 완료된 신청이 없습니다.');
+        }
+
+        const insertSql = `
+            INSERT INTO mentoring_reviews (
+                application_id, product_idx, mentee_idx, rating, review_content, created_at
+            ) VALUES (?, ?, ?, ?, ?, NOW())
+        `;
+        const res = await this.databaseService.execute(insertSql, [
+            app.application_id,
+            app.product_idx,
+            app.mentee_idx,
+            body.rating,
+            body.review_content,
+        ]);
+        const reviewIdx = (res as any).insertId as number;
+
         return {
-            review_idx: 555,
+            review_idx: reviewIdx,
             product_idx: productIdx,
-            application_id: body.application_id,
-            mentee_idx: menteeIdx,
+            application_id: app.application_id,
+            mentee_idx: app.mentee_idx,
             rating: body.rating,
             review_content: body.review_content,
-            created_at: '2025-09-11T15:30:00Z',
+            created_at: new Date().toISOString(),
         };
     }
 
-    createProduct(body: CreateMentoringProductDto): MentoringProductCreatedResponseDto {
+    async createProduct(
+        body: CreateMentoringProductDto,
+    ): Promise<MentoringProductCreatedResponseDto> {
+        // mentor 존재 및 승인 상태 확인
+        const mentor = await this.databaseService.queryOne<{
+            mentor_idx: number;
+            is_approved: number;
+        }>('SELECT mentor_idx, is_approved FROM mentor_profiles WHERE mentor_idx = ? LIMIT 1', [
+            body.mentor_idx,
+        ]);
+        if (!mentor) {
+            throw new NotFoundException(
+                '유효하지 않은 mentor_idx 입니다. 먼저 멘토 등록을 해주세요.',
+            );
+        }
+        if (Number(mentor.is_approved) !== 1) {
+            throw new BadRequestException(
+                '멘토가 아직 승인되지 않았습니다. 승인 후 상품을 등록할 수 있습니다.',
+            );
+        }
+
+        // job_category 존재 확인
+        const category = await this.databaseService.queryOne<{ id: number }>(
+            'SELECT id FROM job_category WHERE id = ? LIMIT 1',
+            [body.job_category_id],
+        );
+        if (!category) {
+            throw new BadRequestException('존재하지 않는 직무 카테고리입니다.');
+        }
+
+        // 슬롯 유효성 확인
+        if (body.slots && Array.isArray(body.slots)) {
+            for (const s of body.slots) {
+                if (s.day_of_week < 1 || s.day_of_week > 7) {
+                    throw new BadRequestException('day_of_week는 1~7 범위여야 합니다.');
+                }
+                if (s.hour_slot < 0 || s.hour_slot > 23) {
+                    throw new BadRequestException('hour_slot은 0~23 범위여야 합니다.');
+                }
+            }
+        }
+
         /*
         INSERT INTO mentoring_products (
             mentor_idx, title, job_category_id, description, price, is_active, created_at
@@ -342,75 +677,198 @@ export class MentoringService {
         (@productId, 4, 21, NOW());
         */
 
+        const result = await this.databaseService.transaction(async (conn) => {
+            const insertProductSql = `
+                INSERT INTO mentoring_products (
+                    mentor_idx, title, job_category_id, description, price, is_active, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, NOW())
+            `;
+            const isActive = body.is_active === undefined ? 1 : body.is_active ? 1 : 0;
+            const [prodRes]: any = await conn.execute(insertProductSql, [
+                body.mentor_idx,
+                body.title,
+                body.job_category_id,
+                body.description,
+                body.price,
+                isActive,
+            ]);
+            const productIdx = prodRes.insertId as number;
+
+            const slots = body.slots || [];
+            if (slots.length > 0) {
+                const insertSlotSql = `
+                    INSERT IGNORE INTO mentoring_regular_slots (product_idx, day_of_week, hour_slot, created_at)
+                    VALUES (?, ?, ?, NOW())
+                `;
+                for (const s of slots) {
+                    await conn.execute(insertSlotSql, [productIdx, s.day_of_week, s.hour_slot]);
+                }
+            }
+
+            const slotRowsSql = `
+                SELECT day_of_week, hour_slot FROM mentoring_regular_slots WHERE product_idx = ? ORDER BY day_of_week, hour_slot
+            `;
+            const [slotRows] = await conn.query<any[]>(slotRowsSql, [productIdx]);
+
+            return {
+                mentor_idx: body.mentor_idx,
+                title: body.title,
+                job_category_id: body.job_category_id,
+                description: body.description,
+                price: body.price,
+                slots: slotRows.map((r) => ({
+                    day_of_week: r.day_of_week,
+                    hour_slot: r.hour_slot,
+                })),
+            } as MentoringProductCreatedResponseDto;
+        });
+
+        return result;
+    }
+
+    async getMenteeApplications(menteeIdx: number): Promise<MenteeApplicationsResponseDto> {
+        const sql = `
+            SELECT a.application_id, p.title AS product_title, u.name AS mentor_name, a.booked_date, a.application_status
+              FROM mentoring_applications a
+              JOIN mentoring_products p ON a.product_idx = p.product_idx
+              JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
+              JOIN users u ON mp.user_idx = u.idx
+             WHERE a.mentee_idx = ?
+             ORDER BY a.created_at DESC
+        `;
+        const rows = await this.databaseService.query<{
+            application_id: number;
+            product_title: string;
+            mentor_name: string;
+            booked_date: Date;
+            application_status: any;
+        }>(sql, [menteeIdx]);
+
         return {
-            mentor_idx: body.mentor_idx,
-            title: body.title,
-            job_category_id: body.job_category_id,
-            description: body.description,
-            price: body.price,
-            slots: body.slots.map((s) => ({ day_of_week: s.day_of_week, hour_slot: s.hour_slot })),
+            applications: rows.map((r) => ({
+                application_id: r.application_id,
+                product_title: r.product_title,
+                mentor_name: r.mentor_name,
+                booked_date: new Date(r.booked_date).toISOString().slice(0, 10),
+                application_status: r.application_status,
+            })),
         };
     }
 
-    getMenteeApplications(menteeIdx: number): MenteeApplicationsResponseDto {
-        // 더미 데이터: menteeIdx는 현재 로직에 직접 사용하지 않음
-        return {
-            applications: [
-                {
-                    application_id: 101,
-                    product_title: '프론트엔드 면접 대비',
-                    mentor_name: '홍길동',
-                    booked_date: '2025-09-14',
-                    application_status: 'approved',
-                },
-            ],
-        };
-    }
-
-    getMentoringApplications(
+    async getMentoringApplications(
         userIdx: number,
         page = 1,
         limit = 10,
-    ): MentoringApplicationsResponseDto {
+    ): Promise<MentoringApplicationsResponseDto> {
+        const mentorRow = await this.databaseService.queryOne<{ mentor_idx: number }>(
+            'SELECT mentor_idx FROM mentor_profiles WHERE user_idx = ? LIMIT 1',
+            [userIdx],
+        );
+
+        if (!mentorRow) {
+            return {
+                applications: [],
+                page_info: { page, limit, total: 0, has_next: false },
+            } as MentoringApplicationsResponseDto;
+        }
+
+        const mentorIdx = mentorRow.mentor_idx;
+
+        const countSql = `
+            SELECT COUNT(*) AS total
+              FROM mentoring_applications a
+              JOIN mentoring_products p ON a.product_idx = p.product_idx
+             WHERE p.mentor_idx = ?
+        `;
+        const countRow = await this.databaseService.queryOne<{ total: number }>(countSql, [
+            mentorIdx,
+        ]);
+        const total = Number(countRow?.total ?? 0);
+
+        const offset = (Number(page) - 1) * Number(limit);
+        const listSql = `
+            SELECT 
+                a.application_id,
+                a.product_idx,
+                p.title AS product_title,
+                a.booked_date,
+                a.application_status,
+                mpu.idx AS mentee_idx,
+                mpu.name AS mentee_name,
+                mpu.profile_img AS mentee_profile_img,
+                mp.mentor_idx,
+                mp.business_name,
+                jc.name AS mentor_job_category
+            FROM mentoring_applications a
+            JOIN mentoring_products p ON a.product_idx = p.product_idx
+            JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
+            JOIN job_category jc ON mp.preferred_field_id = jc.id
+            JOIN users mpu ON a.mentee_idx = mpu.idx
+            WHERE p.mentor_idx = ?
+            ORDER BY a.created_at DESC
+            LIMIT ? OFFSET ?
+        `;
+        const rows = await this.databaseService.query<any>(listSql, [
+            mentorIdx,
+            Number(limit),
+            offset,
+        ]);
+
         return {
-            applications: [
-                {
-                    application_id: 101,
-                    product_idx: 1,
-                    product_title: '프론트엔드 면접 대비',
-                    booked_date: '2025-09-14',
-                    application_status: 'approved',
-                    mentee: {
-                        user_idx: 20,
-                        name: '김민수',
-                        profile_img: 'https://cdn.example.com/profiles/20.png',
-                    },
-                    mentor: {
-                        mentor_idx: 10,
-                        business_name: '홍길동',
-                        job_category: '프론트엔드 개발',
-                    },
+            applications: rows.map((r: any) => ({
+                application_id: r.application_id,
+                product_idx: r.product_idx,
+                product_title: r.product_title,
+                booked_date: new Date(r.booked_date).toISOString().slice(0, 10),
+                application_status: r.application_status,
+                mentee: {
+                    user_idx: r.mentee_idx,
+                    name: r.mentee_name,
+                    profile_img: r.mentee_profile_img ?? '',
                 },
-            ],
+                mentor: {
+                    mentor_idx: r.mentor_idx,
+                    business_name: r.business_name,
+                    job_category: r.mentor_job_category,
+                },
+            })),
             page_info: {
-                page,
-                limit,
-                total: 42,
-                has_next: true,
+                page: Number(page),
+                limit: Number(limit),
+                total,
+                has_next: offset + Number(limit) < total,
             },
         };
     }
 
-    updateApplicationStatus(
+    async updateApplicationStatus(
         applicationId: number,
         dto: UpdateApplicationStatusDto,
-    ): UpdateApplicationStatusResponseDto {
-        // 더미 구현: 실제로는 상태 전이 검증 및 권한 체크 필요
+    ): Promise<UpdateApplicationStatusResponseDto> {
+        const sql = `
+            UPDATE mentoring_applications
+               SET application_status = ?,
+                   rejection_reason = ?,
+                   approved_at = CASE WHEN ? = 'approved' THEN NOW() ELSE approved_at END,
+                   rejected_at = CASE WHEN ? = 'rejected' THEN NOW() ELSE rejected_at END,
+                   completed_at = CASE WHEN ? = 'completed' THEN NOW() ELSE completed_at END,
+                   updated_at = NOW()
+             WHERE application_id = ?
+        `;
+        await this.databaseService.execute(sql, [
+            dto.application_status,
+            dto.rejection_reason ?? null,
+            dto.application_status,
+            dto.application_status,
+            dto.application_status,
+            applicationId,
+        ]);
+
         return {
             application_id: applicationId,
             application_status: dto.application_status,
             rejection_reason: dto.rejection_reason,
-            updated_at: '2025-09-11T16:00:00Z',
+            updated_at: new Date().toISOString(),
         };
     }
 

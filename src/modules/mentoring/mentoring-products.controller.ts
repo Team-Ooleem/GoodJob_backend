@@ -1,7 +1,17 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+    BadRequestException,
+    Body,
+    Controller,
+    Get,
+    Param,
+    Post,
+    Query,
+    Req,
+} from '@nestjs/common';
 import { MentoringService } from './mentoring.service';
 import { MentoringProductDto } from './dto/product.dto';
 import { MentoringProductSlotsDto } from './dto/product-slots.dto';
+import { ProductRegularSlotsResponseDto } from './dto/product-regular-slots.dto';
 import { ApplicationResponseDto, CreateApplicationDto } from './dto/application.dto';
 import { MentoringProductReviewsDto } from './dto/product-reviews.dto';
 import { CreateProductReviewDto, ProductReviewResponseDto } from './dto/product-review.dto';
@@ -15,43 +25,71 @@ export class MentoringProductsController {
     constructor(private readonly svc: MentoringService) {}
 
     @Post()
-    createProduct(@Body() body: CreateMentoringProductDto): MentoringProductCreatedResponseDto {
-        return this.svc.createProduct(body);
+    async createProduct(
+        @Body() body: CreateMentoringProductDto,
+    ): Promise<MentoringProductCreatedResponseDto> {
+        return await this.svc.createProduct(body);
     }
 
     @Get(':product_idx')
-    getProduct(@Param('product_idx') productIdx: string): MentoringProductDto {
-        return this.svc.getProduct(Number(productIdx));
+    async getProduct(@Param('product_idx') productIdx: string): Promise<MentoringProductDto> {
+        return await this.svc.getProduct(Number(productIdx));
     }
 
     @Get(':product_idx/slots')
-    getProductSlots(@Param('product_idx') productIdx: string): MentoringProductSlotsDto {
-        return this.svc.getProductSlots(Number(productIdx));
+    async getProductSlots(
+        @Param('product_idx') productIdx: string,
+        @Query('date') date: string,
+    ): Promise<MentoringProductSlotsDto> {
+        return await this.svc.getProductSlots(Number(productIdx), date);
+    }
+
+    @Get(':product_idx/regular-slots')
+    async getProductRegularSlots(
+        @Param('product_idx') productIdx: string,
+    ): Promise<ProductRegularSlotsResponseDto> {
+        return await this.svc.getProductRegularSlots(Number(productIdx));
     }
 
     @Post(':product_idx/applications')
-    createApplication(
+    async createApplication(
         @Param('product_idx') productIdx: string,
         @Body() body: CreateApplicationDto,
-    ): ApplicationResponseDto {
-        return this.svc.createApplication(Number(productIdx), body);
+        @Req() req: any,
+    ): Promise<ApplicationResponseDto> {
+        // 우선순위: body.mentee_idx -> body.user_idx -> 세션(req.user_idx or req.user.idx)
+        const bodyMentee = (body as any)?.mentee_idx ?? (body as any)?.user_idx;
+        const sessionMentee = (req && (req.user_idx ?? req.user?.idx)) as number | undefined;
+        const menteeIdx = Number(
+            bodyMentee !== undefined && bodyMentee !== null
+                ? bodyMentee
+                : sessionMentee && Number(sessionMentee) > 0
+                  ? sessionMentee
+                  : NaN,
+        );
+        if (!menteeIdx || Number.isNaN(menteeIdx)) {
+            throw new BadRequestException(
+                '멘티 식별자를 확인할 수 없습니다. 로그인하거나 body에 mentee_idx(또는 user_idx)를 넣어주세요.',
+            );
+        }
+        return await this.svc.createApplication(Number(productIdx), body, menteeIdx);
     }
 
     @Get(':product_idx/reviews')
-    getProductReviews(
+    async getProductReviews(
         @Param('product_idx') productIdx: string,
         @Query('limit') limit?: string,
         @Query('cursor') cursor?: string,
-    ): MentoringProductReviewsDto {
+    ): Promise<MentoringProductReviewsDto> {
         const lim = limit ? Number(limit) : undefined;
-        return this.svc.getProductReviews(Number(productIdx), lim ?? 10, cursor);
+        return await this.svc.getProductReviews(Number(productIdx), lim ?? 10, cursor);
     }
 
     @Post(':product_idx/reviews')
-    createProductReview(
+    async createProductReview(
         @Param('product_idx') productIdx: string,
         @Body() body: CreateProductReviewDto,
-    ): ProductReviewResponseDto {
-        return this.svc.createProductReview(Number(productIdx), body);
+    ): Promise<ProductReviewResponseDto> {
+        return await this.svc.createProductReview(Number(productIdx), body);
     }
 }
