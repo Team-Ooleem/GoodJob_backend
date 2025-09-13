@@ -63,6 +63,8 @@ export const UserProfileQueries = {
             EXISTS(SELECT 1 FROM mentor_profiles WHERE user_idx = u.idx) as is_mentor,
             -- 멘토 통계 (멘토인 경우에만)
             mp.business_name,
+            mp.introduction,
+            mp.portfolio_link,
             jc.name as preferred_field_name,
             mp.is_approved,
             (SELECT COUNT(*) FROM mentoring_applications ma 
