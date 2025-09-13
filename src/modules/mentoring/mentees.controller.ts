@@ -7,7 +7,7 @@ export class MenteesController {
     constructor(private readonly svc: MentoringService) {}
 
     @Get(':mentee_idx/applications')
-    getMenteeApplications(@Param('mentee_idx') menteeIdx: string): MenteeApplicationsResponseDto {
-        return this.svc.getMenteeApplications(Number(menteeIdx));
+    async getMenteeApplications(@Param('mentee_idx') menteeIdx: string): Promise<MenteeApplicationsResponseDto> {
+        return await this.svc.getMenteeApplications(Number(menteeIdx));
     }
 }
