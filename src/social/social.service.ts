@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
     UserProfileService,
+    MyProfileInfo,
     UserProfileInfo,
-    UserProfileDetailResponse,
 } from './services/user-profile.service';
 import {
     PostService,
@@ -25,7 +25,7 @@ import {
 import { FollowService, FollowRequest, FollowResponse } from './services/follow.service';
 
 // Re-export interfaces from individual services for backward compatibility
-export type { UserProfileInfo, UserProfileDetailResponse } from './services/user-profile.service';
+export type { MyProfileInfo, UserProfileInfo } from './services/user-profile.service';
 export type {
     Post,
     PostsResponse,
@@ -62,27 +62,20 @@ export class SocialService {
     // ==================== User Profile 관련 메서드 ====================
 
     /**
-     * 사용자 프로필 정보 조회 (Facade)
+     * 내 정보 조회 (Facade)
      */
-    async getUserProfileInfo(userId: number): Promise<UserProfileInfo> {
-        return this.userProfileService.getUserProfileInfo(userId);
+    async getMyProfileInfo(userId: number): Promise<MyProfileInfo> {
+        return this.userProfileService.getMyProfileInfo(userId);
     }
 
     /**
-     * 사용자 프로필 상세 정보 조회 (프로필 정보 + 포스트 목록) (Facade)
+     * 다른 사용자 프로필 조회 (Facade)
      */
-    async getUserProfileDetail(
-        targetUserId: number,
+    async getUserProfileInfo(
         currentUserId: number,
-        postsLimit: number = 10,
-        postsCursor?: number,
-    ): Promise<UserProfileDetailResponse> {
-        return this.userProfileService.getUserProfileDetail(
-            targetUserId,
-            currentUserId,
-            postsLimit,
-            postsCursor,
-        );
+        targetUserId: number,
+    ): Promise<UserProfileInfo> {
+        return this.userProfileService.getUserProfileInfo(currentUserId, targetUserId);
     }
 
     // ==================== Post 관련 메서드 ====================

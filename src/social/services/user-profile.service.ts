@@ -2,24 +2,53 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { UserProfileQueries } from '../queries/user-profile.queries';
 import { FollowService } from './follow.service';
-import { PostService, Post } from './post.service';
 
-export interface UserProfileInfo {
+// 내 정보 조회용 (멘토 통계 포함)
+export interface MyProfileInfo {
     name: string;
     profileImage?: string;
     bio?: string;
-    phone?: string;
-    email?: string;
     followerCount: number;
     followingCount: number;
-    isFollowing?: boolean; // 현재 사용자가 이 사용자를 팔로우하고 있는지 여부
+    totalPosts: number;
+    totalLikes: number;
+    joinDate: string;
+    isMentor: boolean;
+    mentorProfile?: {
+        businessName: string;
+        preferredField: string;
+        isApproved: boolean;
+        totalMentoringSessions: number;
+        totalMentoringReviews: number;
+        avgMentoringRating: number;
+        totalMentoringApplications: number;
+    };
 }
 
-export interface UserProfileDetailResponse {
-    userInfo: UserProfileInfo;
-    posts: Post[];
-    hasMore: boolean;
-    nextCursor?: number;
+// 다른 사용자 프로필 조회용 (팔로우 상태 포함)
+export interface UserProfileInfo {
+    userIdx: number;
+    name: string;
+    profileImage?: string;
+    bio?: string;
+    followerCount: number;
+    followingCount: number;
+    totalPosts: number;
+    totalLikes: number;
+    joinDate: string;
+    isMentor: boolean;
+    isFollowing: boolean; // 현재 사용자가 이 사용자를 팔로우하고 있는지
+    mentorProfile?: {
+        businessName: string;
+        preferredField: string;
+        isApproved: boolean;
+        totalMentoringSessions: number;
+        totalMentoringReviews: number;
+        avgMentoringRating: number;
+        totalMentoringApplications: number;
+        introduction: string; // 멘토 소개글
+        portfolioLink?: string;
+    };
 }
 
 @Injectable()
@@ -27,20 +56,18 @@ export class UserProfileService {
     constructor(
         private readonly databaseService: DatabaseService,
         private readonly followService: FollowService,
-        private readonly postService: PostService,
     ) {}
 
     /**
-     * 사용자 프로필 정보 조회
+     * 내 정보 조회 (멘토 통계 포함)
      * @param userId 사용자 ID
-     * @param currentUserId 현재 사용자 ID (팔로우 상태 확인용, 선택사항)
-     * @returns 사용자 프로필 정보
+     * @returns 내 프로필 정보
      */
-    async getUserProfileInfo(userId: number, currentUserId?: number): Promise<UserProfileInfo> {
+    async getMyProfileInfo(userId: number): Promise<MyProfileInfo> {
         try {
-            // 사용자 기본 정보 조회
+            // 내 기본 정보 조회 (통합 쿼리)
             const userResult = await this.databaseService.query(
-                UserProfileQueries.getUserBasicInfo,
+                UserProfileQueries.getMyProfileInfo,
                 [userId],
             );
 
@@ -52,85 +79,133 @@ export class UserProfileService {
                 name: string;
                 bio: string;
                 profile_img: string;
-                phone: string;
-                email: string;
+                created_at: string;
+                follower_count: number;
+                following_count: number;
+                total_posts: number;
+                total_likes: number;
+                business_name: string;
+                preferred_field_name: string;
+                is_approved: boolean;
+                total_mentoring_sessions: number;
+                total_mentoring_reviews: number;
+                avg_mentoring_rating: number;
+                total_mentoring_applications: number;
             };
 
-            // 팔로워/팔로잉 수 조회
-            const followCountsResult = await this.databaseService.query(
-                UserProfileQueries.getFollowCounts,
-                [userId, userId],
-            );
-            const followCounts = followCountsResult[0] as
-                | { follower_count: number; following_count: number }
-                | undefined;
-            const followerCount = followCounts?.follower_count || 0;
-            const followingCount = followCounts?.following_count || 0;
+            const isMentor = !!user.business_name;
+            const mentorProfile = isMentor
+                ? {
+                      businessName: user.business_name,
+                      preferredField: user.preferred_field_name,
+                      isApproved: user.is_approved,
+                      totalMentoringSessions: user.total_mentoring_sessions,
+                      totalMentoringReviews: user.total_mentoring_reviews,
+                      avgMentoringRating: user.avg_mentoring_rating,
+                      totalMentoringApplications: user.total_mentoring_applications,
+                  }
+                : undefined;
 
-            // 팔로우 상태 확인 (다른 사용자의 프로필일 때만)
-            let isFollowing: boolean | undefined;
-            if (currentUserId && currentUserId !== userId) {
-                isFollowing = await this.followService.checkFollowStatus(currentUserId, userId);
-            }
-
-            const result: UserProfileInfo = {
+            const result: MyProfileInfo = {
                 name: user.name,
                 profileImage: user.profile_img,
                 bio: user.bio,
-                phone: user.phone,
-                email: user.email,
-                followerCount,
-                followingCount,
-                isFollowing,
+                followerCount: user.follower_count,
+                followingCount: user.following_count,
+                totalPosts: user.total_posts,
+                totalLikes: user.total_likes,
+                joinDate: user.created_at,
+                isMentor,
+                mentorProfile,
             };
 
             return result;
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            console.error(`❌ 에러 발생:`, error);
-            console.error(`❌ 에러 스택:`, error instanceof Error ? error.stack : 'No stack trace');
-            throw new Error(`사용자 프로필 정보 조회 실패: ${errorMessage}`);
+            console.error(`❌ 내 정보 조회 실패:`, error);
+            throw new Error(`내 정보 조회 실패: ${errorMessage}`);
         }
     }
 
     /**
-     * 사용자 프로필 상세 정보 조회 (프로필 정보 + 포스트 목록)
-     * @param targetUserId 조회할 사용자 ID
-     * @param currentUserId 현재 사용자 ID (좋아요, 팔로우 상태 확인용)
-     * @param postsLimit 포스트 조회 수 (기본값: 10)
-     * @param postsCursor 포스트 커서 (기본값: undefined)
-     * @returns 사용자 프로필 상세 정보
+     * 다른 사용자 프로필 조회 (팔로우 상태 포함)
+     * @param currentUserId 현재 로그인한 사용자 ID
+     * @param targetUserId 조회할 대상 사용자 ID
+     * @returns 사용자 프로필 정보
      */
-    async getUserProfileDetail(
-        targetUserId: number,
+    async getUserProfileInfo(
         currentUserId: number,
-        postsLimit: number = 10,
-        postsCursor?: number,
-    ): Promise<UserProfileDetailResponse> {
+        targetUserId: number,
+    ): Promise<UserProfileInfo> {
         try {
-            // 1. 사용자 프로필 정보 조회
-            const userInfo = await this.getUserProfileInfo(targetUserId, currentUserId);
-
-            // 2. 해당 사용자의 포스트 목록 조회
-            const postsResponse = await this.postService.getUserPosts(
-                targetUserId,
-                currentUserId,
-                postsLimit,
-                postsCursor,
+            // 사용자 기본 정보 조회 (팔로우 상태 포함)
+            const userResult = await this.databaseService.query(
+                UserProfileQueries.getUserProfileDetail,
+                [currentUserId, targetUserId],
             );
 
-            const result: UserProfileDetailResponse = {
-                userInfo,
-                posts: postsResponse.posts,
-                hasMore: postsResponse.hasMore,
-                nextCursor: postsResponse.nextCursor,
+            if (!userResult || userResult.length === 0) {
+                throw new Error('사용자를 찾을 수 없습니다.');
+            }
+
+            const user = userResult[0] as {
+                user_idx: number;
+                name: string;
+                bio: string;
+                profile_img: string;
+                created_at: string;
+                follower_count: number;
+                following_count: number;
+                total_posts: number;
+                total_likes: number;
+                is_following: boolean;
+                is_mentor: boolean;
+                business_name: string;
+                introduction: string;
+                portfolio_link: string;
+                preferred_field_name: string;
+                is_approved: boolean;
+                total_mentoring_sessions: number;
+                total_mentoring_reviews: number;
+                avg_mentoring_rating: number;
+                total_mentoring_applications: number;
+            };
+
+            const isMentor = !!user.is_mentor;
+            const mentorProfile = isMentor
+                ? {
+                      businessName: user.business_name,
+                      preferredField: user.preferred_field_name,
+                      isApproved: user.is_approved,
+                      totalMentoringSessions: user.total_mentoring_sessions,
+                      totalMentoringReviews: user.total_mentoring_reviews,
+                      avgMentoringRating: user.avg_mentoring_rating,
+                      totalMentoringApplications: user.total_mentoring_applications,
+                      introduction: user.introduction || '', // 멘토 소개글
+                      portfolioLink: user.portfolio_link || undefined, // 포트폴리오 링크
+                  }
+                : undefined;
+
+            const result: UserProfileInfo = {
+                userIdx: user.user_idx,
+                name: user.name,
+                profileImage: user.profile_img,
+                bio: user.bio,
+                followerCount: user.follower_count,
+                followingCount: user.following_count,
+                totalPosts: user.total_posts,
+                totalLikes: user.total_likes,
+                joinDate: user.created_at,
+                isMentor,
+                isFollowing: user.is_following,
+                mentorProfile,
             };
 
             return result;
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-            console.error(`❌ 사용자 프로필 상세 정보 조회 실패:`, error);
-            throw new Error(`사용자 프로필 상세 정보 조회 실패: ${errorMessage}`);
+            console.error(`❌ 사용자 프로필 조회 실패:`, error);
+            throw new Error(`사용자 프로필 조회 실패: ${errorMessage}`);
         }
     }
 }

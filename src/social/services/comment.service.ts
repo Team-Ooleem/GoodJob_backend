@@ -64,7 +64,7 @@ export class CommentService {
                 throw new Error('댓글은 500자를 초과할 수 없습니다.');
             }
 
-            // 자신의 글에 댓글 달기 방지
+            // 포스트 존재 여부 확인
             const postResult = await this.databaseService.query(
                 'SELECT user_id FROM posts WHERE post_idx = ?',
                 [postId],
@@ -72,11 +72,6 @@ export class CommentService {
 
             if (!postResult || postResult.length === 0) {
                 throw new Error('포스트를 찾을 수 없습니다.');
-            }
-
-            const postAuthorId = (postResult[0] as { user_id: number }).user_id;
-            if (postAuthorId === userId) {
-                throw new Error('자신의 글에는 댓글을 달 수 없습니다.');
             }
 
             // 댓글 추가
@@ -116,12 +111,8 @@ export class CommentService {
         try {
             const { commentId, userId } = request;
 
-            console.log(`🗑️ 댓글 삭제 시작 - commentId: ${commentId}, userId: ${userId}`);
-
             // 댓글 삭제 (작성자만 삭제 가능)
             await this.databaseService.query(CommentQueries.deletePostComment, [commentId, userId]);
-
-            console.log(`✅ 댓글 삭제 완료`);
 
             return {
                 success: true,
