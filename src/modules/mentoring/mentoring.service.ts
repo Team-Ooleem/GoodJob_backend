@@ -15,9 +15,16 @@ import {
     UpdateApplicationStatusDto,
     UpdateApplicationStatusResponseDto,
 } from './dto/application-update.dto';
+import {
+    CreateMentorApplicationDto,
+    MentorApplicationCreateResponseDto,
+} from './dto/mentor-application.dto';
+import { JobCategoryResponseDto } from './dto/job-category.dto';
+import { DatabaseService } from '@/database/database.service';
 
 @Injectable()
 export class MentoringService {
+    constructor(private readonly databaseService: DatabaseService) {}
     getProduct(productIdx: number): MentoringProductDto {
         /*
         SELECT 
@@ -405,5 +412,75 @@ export class MentoringService {
             rejection_reason: dto.rejection_reason,
             updated_at: '2025-09-11T16:00:00Z',
         };
+    }
+
+    async createMentorApplication(
+        dto: CreateMentorApplicationDto,
+        userIdx: number = 1,
+    ): Promise<MentorApplicationCreateResponseDto> {
+        try {
+            // 먼저 이미 멘토로 등록되어 있는지 확인
+            const checkSql = 'SELECT mentor_idx FROM mentor_profiles WHERE user_idx = ?';
+            const existingMentor = await this.databaseService.queryOne(checkSql, [userIdx]);
+
+            if (existingMentor) {
+                return {
+                    success: false,
+                    message: '이미 경험을 나눠주고 계세요! 멘토링 상품을 등록하거나 관리해보세요.',
+                    mentor_idx: existingMentor.mentor_idx,
+                };
+            }
+
+            const sql = `
+                INSERT INTO mentor_profiles (
+                    user_idx, contact_email, business_name, contact_phone, 
+                    preferred_field_id, introduction, portfolio_link, is_approved, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, NOW())
+            `;
+
+            const params = [
+                userIdx,
+                dto.contact_email,
+                dto.business_name,
+                dto.contact_phone,
+                dto.preferred_field_id,
+                dto.introduction,
+                dto.portfolio_link || null,
+            ];
+
+            const result = await this.databaseService.execute(sql, params);
+            const mentorIdx = (result as { insertId: number }).insertId;
+
+            return {
+                success: true,
+                message: '멘토가 되어주셔서 감사합니다. 다른 분들에게 경험을 공유해주세요.',
+                mentor_idx: mentorIdx,
+            };
+        } catch (error) {
+            console.error('멘토 지원 등록 실패:', error);
+            return {
+                success: false,
+                message: '멘토 지원 등록 중 오류가 발생했습니다.',
+            };
+        }
+    }
+
+    async getJobCategories(): Promise<JobCategoryResponseDto> {
+        try {
+            const sql = 'SELECT id, name FROM job_category ORDER BY id';
+            const categories = await this.databaseService.query(sql);
+
+            return {
+                categories: categories.map((category: { id: number; name: string }) => ({
+                    id: category.id,
+                    name: category.name,
+                })),
+            };
+        } catch (error) {
+            console.error('직무 카테고리 조회 실패:', error);
+            return {
+                categories: [],
+            };
+        }
     }
 }
