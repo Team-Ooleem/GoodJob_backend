@@ -45,7 +45,7 @@ export class TTSService {
             case 'ALAW':
                 return 'ALAW' as unknown as AudioEncoding;
             default:
-                return 'LINEAR16' as unknown as AudioEncoding; // WAV 형식으로 기본값 변경
+                return 'MP3' as unknown as AudioEncoding;
         }
     }
     async synthesizeSpeech(dto: SynthesizeSpeechDto): Promise<Buffer> {
@@ -67,7 +67,7 @@ export class TTSService {
                 name: dto.voiceName || 'ko-KR-Chirp3-HD-Charon',
             },
             audioConfig: {
-                audioEncoding: this.getAudioEncoding(dto.audioEncoding || 'LINEAR16'),
+                audioEncoding: this.getAudioEncoding(dto.audioEncoding || 'MP3'),
                 speakingRate: dto.speakingRate || 1.0,
                 pitch: dto.pitch || 0.0,
             },
@@ -127,7 +127,7 @@ export class TTSService {
                 text: '테스트',
                 languageCode: 'ko-KR',
                 voiceName: 'ko-KR-Chirp3-HD-Charon',
-                audioEncoding: 'LINEAR16',
+                audioEncoding: 'MP3',
             });
             return true;
         } catch (error) {
@@ -150,7 +150,7 @@ export class TTSService {
                     name: 'ko-KR-Chirp3-HD-Charon',
                 },
                 audioConfig: {
-                    audioEncoding: this.getAudioEncoding('LINEAR16'),
+                    audioEncoding: this.getAudioEncoding('MP3'),
                 },
             };
 
