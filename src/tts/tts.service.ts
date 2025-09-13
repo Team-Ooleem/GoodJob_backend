@@ -34,10 +34,10 @@ export class TTSService {
     // 오디오 인코딩 타입을 올바르게 변환하는 헬퍼 함수
     private getAudioEncoding(encoding: string): AudioEncoding {
         switch (encoding.toUpperCase()) {
-            case 'MP3':
-                return 'MP3' as unknown as AudioEncoding;
             case 'LINEAR16':
                 return 'LINEAR16' as unknown as AudioEncoding;
+            case 'MP3':
+                return 'MP3' as unknown as AudioEncoding;
             case 'OGG_OPUS':
                 return 'OGG_OPUS' as unknown as AudioEncoding;
             case 'MULAW':
@@ -45,7 +45,7 @@ export class TTSService {
             case 'ALAW':
                 return 'ALAW' as unknown as AudioEncoding;
             default:
-                return 'MP3' as unknown as AudioEncoding;
+                return 'LINEAR16' as unknown as AudioEncoding; // WAV 형식으로 기본값 변경
         }
     }
     async synthesizeSpeech(dto: SynthesizeSpeechDto): Promise<Buffer> {
@@ -67,7 +67,7 @@ export class TTSService {
                 name: dto.voiceName || 'ko-KR-Chirp3-HD-Charon',
             },
             audioConfig: {
-                audioEncoding: this.getAudioEncoding(dto.audioEncoding || 'MP3'),
+                audioEncoding: this.getAudioEncoding(dto.audioEncoding || 'LINEAR16'),
                 speakingRate: dto.speakingRate || 1.0,
                 pitch: dto.pitch || 0.0,
             },
@@ -127,7 +127,7 @@ export class TTSService {
                 text: '테스트',
                 languageCode: 'ko-KR',
                 voiceName: 'ko-KR-Chirp3-HD-Charon',
-                audioEncoding: 'MP3',
+                audioEncoding: 'LINEAR16',
             });
             return true;
         } catch (error) {
@@ -150,11 +150,11 @@ export class TTSService {
                     name: 'ko-KR-Chirp3-HD-Charon',
                 },
                 audioConfig: {
-                    audioEncoding: this.getAudioEncoding('MP3'),
+                    audioEncoding: this.getAudioEncoding('LINEAR16'),
                 },
             };
 
-            const [response] = await this.textToSpeechClient.synthesizeSpeech(testRequest);
+            await this.textToSpeechClient.synthesizeSpeech(testRequest);
             return { status: 'success', message: 'Google TTS API 연결 성공' };
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);

@@ -63,7 +63,7 @@ export class TTSController {
             this.logger.error('TTS 처리 실패:', error);
             res.status(HttpStatus.BAD_REQUEST).json({
                 success: false,
-                error: error.message || 'TTS 변환에 실패했습니다.',
+                error: error instanceof Error ? error.message : 'TTS 변환에 실패했습니다.',
             });
         }
     }
@@ -84,7 +84,7 @@ export class TTSController {
             this.logger.error('음성 목록 조회 실패:', error);
             return {
                 success: false,
-                error: error.message || '음성 목록 조회에 실패했습니다.',
+                error: error instanceof Error ? error.message : '음성 목록 조회에 실패했습니다.',
             };
         }
     }
@@ -107,7 +107,7 @@ export class TTSController {
             return {
                 success: false,
                 status: 'error',
-                error: error.message,
+                error: error instanceof Error ? error.message : 'TTS 헬스체크에 실패했습니다.',
                 timestamp: new Date().toISOString(),
             };
         }
@@ -140,7 +140,7 @@ export class TTSController {
             this.logger.error('TTS 테스트 실패:', error);
             res.status(HttpStatus.BAD_REQUEST).json({
                 success: false,
-                error: error.message || 'TTS 테스트에 실패했습니다.',
+                error: error instanceof Error ? error.message : 'TTS 테스트에 실패했습니다.',
             });
         }
     }
@@ -150,7 +150,7 @@ export class TTSController {
      */
     private getContentType(audioEncoding: string): string {
         switch (audioEncoding.toUpperCase()) {
-            case 'MP3':
+            case 'MP4':
                 return 'audio/mpeg';
             case 'LINEAR16':
                 return 'audio/wav';

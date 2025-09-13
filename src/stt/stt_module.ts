@@ -9,7 +9,7 @@ import { DatabaseModule } from '../database/database.module';
 import { GcsService } from '../lib/gcs';
 
 @Module({
-    imports: [DatabaseModule], // GcsService 제거
+    imports: [DatabaseModule],
     controllers: [STTController],
     providers: [
         STTService,
@@ -17,7 +17,7 @@ import { GcsService } from '../lib/gcs';
         STTSessionService,
         STTMessageService,
         STTUtilService,
-        GcsService, // providers에 추가
+        GcsService,
     ],
     exports: [STTService],
 })

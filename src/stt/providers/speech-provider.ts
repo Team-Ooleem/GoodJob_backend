@@ -14,11 +14,11 @@ export interface AudioConfig {
     encoding: string;
     sampleRate: number;
     languageCode: string;
-    enableSpeakerDiarization: boolean;
-    diarizationSpeakerCount: number;
     enableAutomaticPunctuation: boolean;
     maxAlternatives: number;
     speechContexts: SpeechContext[];
+    enableSpeakerDiarization?: boolean;
+    diarizationSpeakerCount?: number; // Add this line
 }
 
 export interface SpeechContext {

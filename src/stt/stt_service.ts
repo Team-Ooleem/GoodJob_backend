@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { GoogleSpeechProvider } from './providers/google-speech';
 import { AudioProcessorUtil } from './utils/audio-processer';
-import { SpeechPatternsUtil } from './utils/speech-patterms';
 import { TextProcessorUtil } from './utils/text_processor';
 import { TranscriptionResult, ConnectionTestResult, STTResult } from './entities/transcription';
+import { SpeechPatternsUtil } from './utils/speech-patterms';
 
 @Injectable()
 export class STTService {
@@ -210,19 +210,38 @@ export class STTService {
         if (gcsUrl) {
             return AudioProcessorUtil.convertToGcsUri(gcsUrl);
         }
-
-        const processedAudioBuffer = AudioProcessorUtil.preprocessAudio(
-            Buffer.from(base64Data, 'base64'),
-        );
-        return processedAudioBuffer.toString('base64');
+        // 원래는 단순히 base64 데이터를 그대로 반환했을 것
+        return base64Data; // ← 이제 원래대로 단순히 base64 반환
     }
 
     private createAudioConfig(mimeType: string) {
-        const { encoding, sampleRate } = AudioProcessorUtil.getAudioConfig(mimeType);
+        // MP4/M4A 파일의 경우 다른 설정 사용
+        if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
+            return {
+                encoding: 'MP3', // MP3 인코딩 사용
+                sampleRate: 44100,
+                languageCode: 'ko-KR',
+                enableSpeakerDiarization: true,
+                diarizationSpeakerCount: 2,
+                enableAutomaticPunctuation: false,
+                maxAlternatives: 1,
+                speechContexts: [], // 빈 배열로 설정
+            };
+        }
+
+        // 다른 포맷들
+        let encoding: 'LINEAR16' | 'MP3' | 'WEBM_OPUS' | 'FLAC' = 'LINEAR16';
+        if (mimeType.includes('mp3')) {
+            encoding = 'MP3';
+        } else if (mimeType.includes('webm') || mimeType.includes('opus')) {
+            encoding = 'WEBM_OPUS';
+        } else if (mimeType.includes('flac')) {
+            encoding = 'FLAC';
+        }
 
         return {
             encoding,
-            sampleRate,
+            sampleRate: 44100,
             languageCode: 'ko-KR',
             enableSpeakerDiarization: true,
             diarizationSpeakerCount: 2,
@@ -234,11 +253,16 @@ export class STTService {
 
     private adjustTimings(result: TranscriptionResult, sessionStartTimeOffset: number): STTResult {
         // TranscriptionResult를 STTResult로 변환
-        let speakers =
+        let speakers: Array<{
+            text_Content: string;
+            startTime: number;
+            endTime: number;
+            speakerTag: number;
+        }> =
             result.speakers?.map((speaker) => ({
                 text_Content: speaker.text_Content,
-                startTime: Math.round((speaker.startTime + sessionStartTimeOffset) * 10) / 10, // 소수점 첫째자리
-                endTime: Math.round((speaker.endTime + sessionStartTimeOffset) * 10) / 10, // 소수점 첫째자리
+                startTime: Math.round((speaker.startTime + sessionStartTimeOffset) * 10) / 10,
+                endTime: Math.round((speaker.endTime + sessionStartTimeOffset) * 10) / 10,
                 speakerTag: speaker.speakerTag,
             })) || [];
 
