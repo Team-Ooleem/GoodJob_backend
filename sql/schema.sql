@@ -332,7 +332,6 @@ CREATE TABLE `mentoring_reviews` (
   `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '작성일시',
   `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일시',
   PRIMARY KEY (`review_idx`),
-  UNIQUE KEY `unique_application_review` (`application_id`),
   KEY `product_idx_idx` (`product_idx`),
   KEY `mentee_idx_idx` (`mentee_idx`),
   KEY `rating_idx` (`rating`),

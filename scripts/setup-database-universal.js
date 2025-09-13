@@ -252,6 +252,7 @@ class DatabaseSetup {
         const dataFiles = [
             { name: 'interview.sql', path: path.join(__dirname, '..', 'sql', 'interview.sql') },
             { name: 'job-role.sql', path: path.join(__dirname, '..', 'sql', 'job-role.sql') },
+            { name: 'dummy.sql', path: path.join(__dirname, '..', 'sql', 'dummy.sql') },
         ];
 
         let allSuccess = true;
