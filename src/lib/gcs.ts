@@ -40,9 +40,12 @@ export class GcsService {
             return { isValid: false, error: `청크 크기는 ${maxChunkSize / (1024 * 1024)}MB 초과` };
         }
 
-        const allowedMimeTypes = ['audio/webm', 'audio/wav', 'audio/mp3', 'audio/mp4', 'audio/ogg'];
+        const allowedMimeTypes = ['audio/wav', 'audio/webm', 'audio/mp4'];
         if (file.mimetype && !allowedMimeTypes.includes(file.mimetype)) {
-            return { isValid: false, error: '지원되지 않는 오디오 형식입니다.' };
+            return {
+                isValid: false,
+                error: '지원되지 않는 오디오 형식입니다. (WAV, WebM, MP4만 허용)',
+            };
         }
 
         return { isValid: true };

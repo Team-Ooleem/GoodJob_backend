@@ -34,10 +34,10 @@ export class TTSService {
     // 오디오 인코딩 타입을 올바르게 변환하는 헬퍼 함수
     private getAudioEncoding(encoding: string): AudioEncoding {
         switch (encoding.toUpperCase()) {
-            case 'MP3':
-                return 'MP3' as unknown as AudioEncoding;
             case 'LINEAR16':
                 return 'LINEAR16' as unknown as AudioEncoding;
+            case 'MP3':
+                return 'MP3' as unknown as AudioEncoding;
             case 'OGG_OPUS':
                 return 'OGG_OPUS' as unknown as AudioEncoding;
             case 'MULAW':
@@ -154,7 +154,7 @@ export class TTSService {
                 },
             };
 
-            const [response] = await this.textToSpeechClient.synthesizeSpeech(testRequest);
+            await this.textToSpeechClient.synthesizeSpeech(testRequest);
             return { status: 'success', message: 'Google TTS API 연결 성공' };
         } catch (error: unknown) {
             const msg = error instanceof Error ? error.message : String(error);

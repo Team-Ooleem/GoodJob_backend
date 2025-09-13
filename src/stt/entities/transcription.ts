@@ -45,11 +45,11 @@ export interface STTWithContextResponse {
     audioUrl: string;
     speakers: Array<{
         speakerTag: number;
-        textContent: string;
+        text_content: string;
         startTime: number;
         endTime: number;
     }>;
-    segmentIndex?: number; // 현재 세그먼트 인덱스
+    segmentIndex?: number;
 }
 
 export interface SessionUserResponse {
@@ -60,7 +60,7 @@ export interface SessionUserResponse {
 }
 
 export interface ChatMessage {
-    messageId: number;
+    messageIdx: number;
     contextText: string;
     audioUrl: string;
     timestamp: string;
@@ -84,13 +84,41 @@ export interface ChunkCacheData {
     chunks: Array<{
         audioUrl: string;
         speakers: Array<{
-            text_Content: string;
+            text_content: string;
             startTime: number;
             endTime: number;
             speakerTag: number;
         }>;
-    }>; // SpeakerSegment[] 대신 STTResult의 speakers 타입 사용
+        duration: number; // 🆕 duration 필드 추가
+    }>;
     segmentIndex: number;
     lastActivity: number;
     sessionStartTime: number;
+}
+
+export interface RawSessionData {
+    stt_session_idx: number;
+    audio_url: string;
+    created_at: string;
+    mentor_idx: number;
+    mentee_idx: number;
+    speaker_idx: number;
+    text_content: string;
+    start_time: number;
+    end_time: number;
+}
+
+export interface TransformedSession {
+    messageId: number;
+    audioUrl: string;
+    timestamp: string;
+    mentor_idx: number;
+    mentee_idx: number;
+    segments: Array<{
+        speakerTag: number;
+        textContent: string;
+        startTime: number;
+        endTime: number;
+    }>;
+    audioDuration: number;
 }

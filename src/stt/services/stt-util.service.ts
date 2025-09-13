@@ -33,7 +33,7 @@ export class STTUtilService {
     extractContextText(
         speakers: Array<{
             speakerTag: number;
-            textContent?: string;
+            text_content?: string;
             text?: string;
             startTime: number;
             endTime: number;
@@ -42,7 +42,7 @@ export class STTUtilService {
         if (!speakers?.length) return '';
         return speakers
             .sort((a, b) => a.startTime - b.startTime)
-            .map((seg) => (seg.textContent || seg.text || '').trim())
+            .map((seg) => (seg.text_content || seg.text || '').trim())
             .filter(
                 (text) =>
                     text.length > 2 &&

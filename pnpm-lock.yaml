@@ -95,6 +95,9 @@ importers:
       multer:
         specifier: ^2.0.2
         version: 2.0.2
+      music-metadata:
+        specifier: ^11.8.3
+        version: 11.8.3
       mysql2:
         specifier: ^3.14.3
         version: 3.14.3
@@ -574,6 +577,9 @@ packages:
 
   '@borewit/text-codec@0.1.1':
     resolution: {integrity: sha512-5L/uBxmjaCIX5h8Z+uu+kA9BQLkc/Wl06UGR5ajNRxu+/XjonB5i8JpgFMrPj3LXTCPA0pv8yxUvbUi+QthGGA==}
+
+  '@borewit/text-codec@0.2.0':
+    resolution: {integrity: sha512-X999CKBxGwX8wW+4gFibsbiNdwqmdQEXmUejIWaIqdrHBgS5ARIOOeyiQbHjP9G58xVEPcuvP6VwwH3A0OFTOA==}
 
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
@@ -3433,6 +3439,10 @@ packages:
     resolution: {integrity: sha512-u7f2xaZ/UG8oLXHvtF/oWTRvT44p9ecwBBqTwgJVq0+4BW1g8OW01TyMEGWBHbyMOYVHXslaut7qEQ1meATXgw==}
     engines: {node: '>= 10.16.0'}
 
+  music-metadata@11.8.3:
+    resolution: {integrity: sha512-Tgiv4MlCgDb6XzelziB1mmL2xeoHls0KTpCm3Z3qr+LfF4mBEpkuc5vNrc927IT5+S5fv+vzStfI+HYC0igDpA==}
+    engines: {node: '>=18'}
+
   mute-stream@2.0.0:
     resolution: {integrity: sha512-WWdIxpyjEn+FhQJQQv9aQAYlHoNVdzIzUySNV1gHUPDSdZJ3yZn7pAAbQcV7B56Mvu881q9FZV+0Vx2xC44VWA==}
     engines: {node: ^18.17.0 || >=20.5.0}
@@ -5130,6 +5140,8 @@ snapshots:
   '@bcoe/v8-coverage@0.2.3': {}
 
   '@borewit/text-codec@0.1.1': {}
+
+  '@borewit/text-codec@0.2.0': {}
 
   '@colors/colors@1.5.0':
     optional: true
@@ -8611,6 +8623,20 @@ snapshots:
       object-assign: 4.1.1
       type-is: 1.6.18
       xtend: 4.0.2
+
+  music-metadata@11.8.3:
+    dependencies:
+      '@borewit/text-codec': 0.2.0
+      '@tokenizer/token': 0.3.0
+      content-type: 1.0.5
+      debug: 4.4.1
+      file-type: 21.0.0
+      media-typer: 1.1.0
+      strtok3: 10.3.4
+      token-types: 6.1.1
+      uint8array-extras: 1.5.0
+    transitivePeerDependencies:
+      - supports-color
 
   mute-stream@2.0.0: {}
 

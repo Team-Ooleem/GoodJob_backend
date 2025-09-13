@@ -33,6 +33,7 @@ import { STTSessionService } from './services/stt-seesion.service';
 import { STTMessageService } from './services/stt-message.service';
 import { STTUtilService } from './services/stt-util.service';
 import { AudioProcessorUtil } from './utils/audio-processer'; // 🆕 추가
+import { SpeakerSegment } from './entities/speaker-segment';
 
 @ApiTags('Speech-to-Text')
 @Controller('stt')
@@ -60,7 +61,7 @@ export class STTController {
     ): Promise<STTWithContextResponse> {
         const {
             audioData,
-            mimeType = 'audio/mp4', // 🆕 MP4로 변경
+            mimeType = 'audio/mp4',
             canvasId,
             mentorIdx,
             menteeIdx,
@@ -83,36 +84,25 @@ export class STTController {
             const audioBuffer = Buffer.from(audioData, 'base64');
             const sessionKey = body.url ? `${canvasId}_${body.url}` : canvasId;
 
-            // 🆕 정확한 duration 계산
+            // 🆕 music-metadata로 정확한 청크 duration 계산
+            let chunkDuration = 0;
+            try {
+                chunkDuration = await AudioProcessorUtil.getAudioDuration(audioBuffer, mimeType);
+                this.logger.log(`청크 duration: ${chunkDuration.toFixed(2)}초`);
+            } catch (durationError) {
+                this.logger.warn(`청크 duration 계산 실패: ${durationError}`);
+                chunkDuration = audioBuffer.length / 16000;
+            }
+
+            // 정확한 duration 계산
             let actualDuration = duration;
             if (!actualDuration || actualDuration <= 0) {
-                try {
-                    actualDuration = await AudioProcessorUtil.getAudioDuration(
-                        audioBuffer,
-                        mimeType,
-                    );
+                actualDuration = chunkDuration;
+                if (actualDuration > 0) {
                     this.logger.log(`계산된 duration: ${actualDuration.toFixed(2)}초`);
-                    this.logger.log(`계산된 duration: ${actualDuration.toFixed(2)}초`);
-
-                    // Duration 품질 검증
-                    const qualityCheck = AudioProcessorUtil.validateDurationQuality(
-                        actualDuration,
-                        audioBuffer,
-                        mimeType,
-                    );
-
-                    if (!qualityCheck.isValid) {
-                        this.logger.warn(
-                            `Duration 품질 경고: ${qualityCheck.message} (신뢰도: ${(qualityCheck.confidence * 100).toFixed(1)}%)`,
-                        );
-                    } else {
-                        this.logger.log(
-                            `Duration 품질 양호: ${qualityCheck.message} (신뢰도: ${(qualityCheck.confidence * 100).toFixed(1)}%)`,
-                        );
-                    }
-                } catch (durationError) {
-                    this.logger.warn(`Duration 계산 실패, 기본값 사용: ${durationError}`);
-                    actualDuration = audioBuffer.length / 16000; // 기본 추정값
+                } else {
+                    this.logger.warn('Duration이 0이므로 기본값을 사용합니다.');
+                    actualDuration = audioBuffer.length / 16000;
                 }
             }
 
@@ -133,48 +123,60 @@ export class STTController {
                     sessionStartTime: Date.now(),
                 };
                 this.logger.log(
-                    ` 새 세그먼트 시작 - canvasId: ${canvasId}, segmentIndex: ${cached.segmentIndex}`,
+                    `새 세그먼트 시작 - canvasId: ${canvasId}, segmentIndex: ${cached.segmentIndex}`,
                 );
             }
+
+            // �� 이전 청크들의 누적 duration 계산
+            let cumulativeDuration = 0;
+            for (const chunk of cached.chunks) {
+                if (chunk.duration && chunk.duration > 0) {
+                    cumulativeDuration += chunk.duration;
+                } else {
+                    cumulativeDuration += 0.3; // 기본 0.3초
+                }
+            }
+
+            this.logger.log(
+                `누적 duration: ${cumulativeDuration.toFixed(2)}초, 현재 청크: ${chunkDuration.toFixed(2)}초`,
+            );
 
             // 활동 시간 업데이트
             cached.lastActivity = Date.now();
             const actualRecordingTime = Date.now() - cached.sessionStartTime;
 
             const gcsKey = this.gcsService.generateGcsKey(
-                `voice_chunk_${cached.segmentIndex}_${body.chunkIndex}.mp4`, // �� .mp4로 변경
+                `voice_chunk_${cached.segmentIndex}_${body.chunkIndex}.mp4`,
                 canvasId,
                 mentorIdx,
                 menteeIdx,
             );
 
-            let gcsResult: { success: boolean; url?: string };
-            let sttResult: STTResult;
+            const gcsResult = await this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType);
+            if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
 
-            if (audioBuffer.length <= 10 * 1024 * 1024) {
-                // 작은 파일: 기존 병렬 처리
-                [gcsResult, sttResult] = await Promise.all([
-                    this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType),
-                    this.sttService.transcribeAudioBuffer(
-                        audioBuffer,
-                        mimeType,
-                        actualRecordingTime,
-                    ),
-                ]);
+            const sttResult: STTResult = await this.sttService.transcribeAudioBuffer(
+                audioBuffer,
+                mimeType,
+                actualRecordingTime + cumulativeDuration, // 🆕 누적 duration 추가
+                gcsResult.url as string,
+            );
+
+            // 🔍 STT 결과 디버깅 로그 추가
+            this.logger.log(
+                `🔍 STT 원본 결과: transcript="${sttResult.transcript}", confidence=${sttResult.confidence}, speakers=${sttResult.speakers?.length || 0}개`,
+            );
+            if (sttResult.speakers && sttResult.speakers.length > 0) {
+                sttResult.speakers.forEach((speaker, i) => {
+                    this.logger.log(
+                        `  세그먼트 ${i}: "${speaker.text_Content}" (${speaker.startTime}s-${speaker.endTime}s)`,
+                    );
+                });
             } else {
-                // 큰 파일: GCS 업로드 먼저, 그 다음 STT
-                gcsResult = await this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType);
-                if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
-
-                sttResult = await this.sttService.transcribeAudioBuffer(
-                    audioBuffer,
-                    mimeType,
-                    actualRecordingTime,
-                    gcsResult.url as string,
+                this.logger.warn(
+                    `❌ STT 결과에 speakers가 없습니다. transcript: "${sttResult.transcript}"`,
                 );
             }
-
-            if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
 
             // 🆕 개선된 시간 정규화
             let normalizedSpeakers = sttResult.speakers || [];
@@ -190,10 +192,14 @@ export class STTController {
                 this.logger.warn('Duration이 없어 시간 정규화를 건너뜁니다.');
             }
 
-            // 캐시에 임시 저장
+            // 캐시에 임시 저장 (duration 포함)
             cached.chunks.push({
                 audioUrl: gcsResult.url || '',
-                speakers: normalizedSpeakers,
+                speakers: normalizedSpeakers.map((speaker) => ({
+                    ...speaker,
+                    text_content: speaker.text_Content,
+                })),
+                duration: chunkDuration, // 🆕 현재 청크의 duration 저장
             });
             this.sessionService.addToCache(sessionKey, cached);
 
@@ -224,23 +230,40 @@ export class STTController {
                 } else {
                     throw new Error('데이터베이스에서 insert ID를 가져오는데 실패했습니다');
                 }
+
                 // 세그먼트 배치 저장
                 const allSegments: Array<[number, number, string, number, number]> = [];
 
                 for (const chunk of cached.chunks) {
                     const mappedSpeakers = this.utilService.mapSpeakersToUsers(
-                        chunk.speakers,
+                        chunk.speakers as unknown as SpeakerSegment[],
                         mentorIdx,
                         menteeIdx,
                     );
                     for (const segment of mappedSpeakers) {
-                        allSegments.push([
-                            sttSessionIdx,
-                            segment.userId === mentorIdx ? 0 : 1,
-                            segment.text_Content,
-                            segment.startTime,
-                            segment.endTime,
-                        ]);
+                        // startTime과 endTime 유효성 검증
+                        if (
+                            typeof segment.startTime === 'number' &&
+                            typeof segment.endTime === 'number' &&
+                            !isNaN(segment.startTime) &&
+                            !isNaN(segment.endTime) &&
+                            isFinite(segment.startTime) &&
+                            isFinite(segment.endTime) &&
+                            segment.startTime >= 0 &&
+                            segment.endTime > segment.startTime
+                        ) {
+                            allSegments.push([
+                                sttSessionIdx,
+                                segment.userId === mentorIdx ? 0 : 1,
+                                segment.text_Content,
+                                segment.startTime,
+                                segment.endTime,
+                            ]);
+                        } else {
+                            this.logger.warn(
+                                `유효하지 않은 시간 값 건너뜀 - startTime: ${segment.startTime}, endTime: ${segment.endTime}`,
+                            );
+                        }
                     }
                 }
 
@@ -258,7 +281,7 @@ export class STTController {
                 const currentSegments = cached.chunks.flatMap((chunk) =>
                     chunk.speakers.map((speaker) => ({
                         speakerTag: speaker.speakerTag,
-                        textContent: speaker.text_Content,
+                        text_Content: speaker.text_content,
                         startTime: speaker.startTime,
                         endTime: speaker.endTime,
                     })),
@@ -280,13 +303,14 @@ export class STTController {
                 segmentIndex: cached.segmentIndex,
                 speakers: normalizedSpeakers.map((segment) => ({
                     speakerTag: segment.speakerTag,
-                    textContent: segment.text_Content,
+                    text_content: segment.text_Content,
                     startTime: segment.startTime,
                     endTime: segment.endTime,
                 })),
             };
         } catch (error) {
-            this.logger.error(`STT 실패: ${error}`);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.logger.error(`STT 실패: ${errorMessage}`);
             throw new InternalServerErrorException('STT 처리 실패');
         }
     }
@@ -294,7 +318,7 @@ export class STTController {
     @Post('transcribe-base64')
     @ApiOperation({ summary: 'Base64 오디오 변환' })
     async transcribeBase64(@Body() body: TranscribeBase64RequestDto): Promise<STTResponseDto> {
-        const { audioData, mimeType = 'audio/mp4' } = body; // 🆕 MP4로 변경
+        const { audioData, mimeType = 'audio/mp4' } = body;
         if (!audioData) throw new BadRequestException('오디오 데이터가 없습니다.');
         if (!this.utilService.isValidBase64(audioData))
             throw new BadRequestException('유효하지 않은 Base64 데이터입니다.');
@@ -304,7 +328,7 @@ export class STTController {
         try {
             const startTime = Date.now();
 
-            // �� Base64 duration 계산 추가
+            // 🆕 Base64 duration 계산 추가
             const audioBuffer = Buffer.from(audioData, 'base64');
             let base64Duration = 0;
             try {
@@ -372,7 +396,18 @@ export class STTController {
 
             // 🆕 시간 정규화 적용
             if (fileDuration > 0 && result.speakers) {
-                result.speakers = this.sttService.normalizeTimings(result.speakers, fileDuration);
+                const speakersForNormalization = result.speakers.map((speaker) => ({
+                    ...speaker,
+                    textContent: speaker.text_Content,
+                }));
+                const normalized = this.sttService.normalizeTimings(
+                    speakersForNormalization,
+                    fileDuration,
+                );
+                result.speakers = normalized.map((speaker) => ({
+                    ...speaker,
+                    text_Content: speaker.text_Content,
+                }));
                 this.logger.log(`파일 STT 시간 정규화 완료: duration ${fileDuration.toFixed(2)}초`);
             }
 

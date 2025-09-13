@@ -15,6 +15,56 @@ export class TextProcessorUtil {
         }));
     }
 
+    static cleanWordPieceTokens(text: string): string {
+        if (!text || typeof text !== 'string') return '';
+
+        return (
+            text
+                // 1단계: 모든 특수 문자 제거 (언더스코어, 공백 등)
+                .replace(/[▁_\s]+/g, '')
+                // 2단계: 연속된 한글 자모를 단어로 결합
+                .replace(/([가-힣])([가-힣])/g, '$1$2')
+                // 3단계: 의미 있는 단어 경계에 띄어쓰기 추가
+                .replace(/([가-힣]{2,})([가-힣]{2,})/g, '$1 $2')
+                // 4단계: 조사와 어미 분리
+                .replace(/([가-힣]{2,})([이가을를의에에서와과도는은])/g, '$1 $2')
+                // 5단계: 최종 공백 정리
+                .replace(/\s+/g, ' ')
+                .trim()
+        );
+    }
+    static improveKoreanGrammar(speakers: SpeakerSegment[]): SpeakerSegment[] {
+        return speakers.map((speaker) => {
+            let text = speaker.text_Content;
+
+            // 문법적 오류 교정
+            text = text
+                // 조사 오류 교정
+                .replace(/이 가/g, '이가')
+                .replace(/을 를/g, '을를')
+                .replace(/의 에/g, '의에')
+                .replace(/에서 와/g, '에서와')
+
+                // 어미 오류 교정
+                .replace(/습니다 어요/g, '습니다어요')
+                .replace(/어요 아요/g, '어요아요')
+                .replace(/입니다 예요/g, '입니다예요')
+
+                // 연결어미 교정
+                .replace(/하고 하면서/g, '하고하면서')
+                .replace(/그래서 그런데/g, '그래서그런데')
+
+                // 띄어쓰기 정리
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            return {
+                ...speaker,
+                text_Content: text,
+            };
+        });
+    }
+
     // 엉뚱한 단어 교정 및 문장 개선
     static processAndCorrectText(speakers: SpeakerSegment[]): SpeakerSegment[] {
         if (speakers.length === 0) return speakers;
@@ -29,13 +79,16 @@ export class TextProcessorUtil {
     private static correctSpeakerText(text: string): string {
         if (!text || typeof text !== 'string') return '';
 
-        // 1단계: 기본 교정
-        let corrected = SpeechPatternsUtil.correctText(text);
+        // 1단계: WordPiece 토큰 정리
+        let corrected = this.cleanWordPieceTokens(text);
 
-        // 2단계: 불필요한 단어 제거
+        // 2단계: 기본 교정
+        corrected = SpeechPatternsUtil.correctText(corrected);
+
+        // 3단계: 불필요한 단어 제거
         corrected = this.removeUnnecessaryWords(corrected);
 
-        // 3단계: 문장 부호 정리
+        // 4단계: 문장 부호 정리
         corrected = this.cleanPunctuation(corrected);
 
         return corrected.trim();

@@ -52,10 +52,10 @@ export class GoogleSpeechProvider implements SpeechProvider {
                     useEnhanced: true,
 
                     // 화자 분리 설정 (한국어 대화용)
-                    enableSpeakerDiarization: config.enableSpeakerDiarization,
-                    diarizationSpeakerCount: config.diarizationSpeakerCount,
+                    enableSpeakerDiarization: config.enableSpeakerDiarization || true,
+                    diarizationSpeakerCount: config.diarizationSpeakerCount || 2,
                     diarizationConfig: {
-                        minSpeakerCount: 1,
+                        minSpeakerCount: 2,
                         maxSpeakerCount: 2,
                     },
 
@@ -119,6 +119,8 @@ export class GoogleSpeechProvider implements SpeechProvider {
             wordSegments = TextProcessorUtil.processAndCorrectText(wordSegments);
 
             // speech-patterms.ts의 문장 연결성 개선 적용
+            wordSegments = TextProcessorUtil.improveKoreanGrammar(wordSegments);
+
             wordSegments = SpeechPatternsUtil.improveSentenceFlow(wordSegments);
 
             // 결과 품질 검증 및 로깅
@@ -187,35 +189,154 @@ export class GoogleSpeechProvider implements SpeechProvider {
         return gcsUrl; // fallback
     }
 
+    private postProcessSegments(segments: SpeakerSegment[]): SpeakerSegment[] {
+        if (segments.length === 0) return segments;
+
+        // 1. 너무 짧은 세그먼트 병합
+        const mergedSegments: SpeakerSegment[] = [];
+        let currentSegment = { ...segments[0] };
+
+        for (let i = 1; i < segments.length; i++) {
+            const nextSegment = segments[i];
+            const segmentDuration = currentSegment.endTime - currentSegment.startTime;
+
+            // 같은 화자이고 세그먼트가 짧으면 병합
+            if (currentSegment.speakerTag === nextSegment.speakerTag && segmentDuration < 1.0) {
+                currentSegment.text_Content += ' ' + nextSegment.text_Content;
+                currentSegment.endTime = nextSegment.endTime;
+            } else {
+                mergedSegments.push(currentSegment);
+                currentSegment = { ...nextSegment };
+            }
+        }
+        mergedSegments.push(currentSegment);
+
+        // 2. 텍스트 정리
+        return mergedSegments.map((segment) => ({
+            ...segment,
+            text_Content: segment.text_Content.trim(),
+        }));
+    }
+
     private processWordTimings(words: GoogleSpeechWord[]): SpeakerSegment[] {
         if (!words || words.length === 0) return [];
 
-        return words.map((word) => ({
-            text_Content: word.word || '',
-            startTime: this.convertDurationToSeconds(word.startTime),
-            endTime: this.convertDurationToSeconds(word.endTime),
-            speakerTag: word.speakerTag || 1,
-        }));
+        // 🆕 개선된 화자 분리 로직
+        const segments: SpeakerSegment[] = [];
+        let currentSegment: SpeakerSegment | null = null;
+        const minSegmentDuration = 0.5; // 최소 0.5초 세그먼트
+        const maxSegmentDuration = 10.0; // 최대 10초 세그먼트
+
+        for (let i = 0; i < words.length; i++) {
+            const word = words[i];
+            const cleanedText = TextProcessorUtil.cleanWordPieceTokens(word.word || '');
+
+            if (!cleanedText.trim()) continue;
+
+            // �� 실제 Google Speech API 시간 정보 사용
+            const startTime = this.convertDurationToSeconds(word.startTime);
+            const endTime = this.convertDurationToSeconds(word.endTime);
+            const speakerTag = word.speakerTag || 1;
+
+            // 화자 변경 감지
+            const isSpeakerChange = currentSegment && currentSegment.speakerTag !== speakerTag;
+
+            // 세그먼트가 너무 길어지면 강제 분할
+            const isTooLong =
+                currentSegment && startTime - currentSegment.startTime > maxSegmentDuration;
+
+            if (isSpeakerChange || isTooLong) {
+                if (currentSegment) {
+                    // 현재 세그먼트 완료
+                    if (currentSegment.endTime - currentSegment.startTime >= minSegmentDuration) {
+                        segments.push(currentSegment);
+                    }
+                }
+                // 새 세그먼트 시작
+                currentSegment = {
+                    text_Content: cleanedText,
+                    startTime: Math.round(startTime * 100) / 100,
+                    endTime: Math.round(endTime * 100) / 100,
+                    speakerTag: speakerTag,
+                };
+            } else {
+                if (currentSegment) {
+                    // 기존 세그먼트에 텍스트 추가
+                    currentSegment.text_Content += ' ' + cleanedText;
+                    currentSegment.endTime = Math.round(endTime * 100) / 100;
+                } else {
+                    // 첫 번째 세그먼트
+                    currentSegment = {
+                        text_Content: cleanedText,
+                        startTime: Math.round(startTime * 100) / 100,
+                        endTime: Math.round(endTime * 100) / 100,
+                        speakerTag: speakerTag,
+                    };
+                }
+            }
+        }
+
+        // 마지막 세그먼트 처리
+        if (
+            currentSegment &&
+            currentSegment.endTime - currentSegment.startTime >= minSegmentDuration
+        ) {
+            segments.push(currentSegment);
+        }
+
+        // 🆕 세그먼트 후처리
+        return this.postProcessSegments(segments);
     }
 
     private createWordsFromTranscript(transcript: string): SpeakerSegment[] {
         if (!transcript.trim()) return [];
 
         const words = transcript.split(/\s+/).filter((word) => word.trim());
-        const segmentDuration = 1.0; // 기본 1초씩 할당
+        const segmentDuration = 0.3; // 🆕 0.3초씩 할당
+
+        this.logger.log(
+            `Fallback: transcript에서 ${words.length}개 단어 생성, 각 ${segmentDuration}초씩`,
+        );
 
         return words.map((word, index) => ({
             text_Content: word,
-            startTime: index * segmentDuration,
-            endTime: (index + 1) * segmentDuration,
+            startTime: Math.round(index * segmentDuration * 100) / 100,
+            endTime: Math.round((index + 1) * segmentDuration * 100) / 100,
             speakerTag: 1,
         }));
     }
 
     private convertDurationToSeconds(duration: Duration | undefined): number {
-        if (!duration) return 0;
+        if (!duration) {
+            this.logger.warn('Duration이 undefined입니다');
+            return 0;
+        }
+
         const seconds = typeof duration.seconds === 'number' ? duration.seconds : 0;
         const nanos = typeof duration.nanos === 'number' ? duration.nanos : 0;
-        return seconds + nanos / 1000000000;
+
+        // �� 개선사항들
+        // 1. 음수 시간 방지
+        if (seconds < 0) {
+            this.logger.warn(`음수 시간 감지: ${seconds}초`);
+            return 0;
+        }
+
+        // 2. 너무 큰 시간 값 방지 (24시간 = 86400초)
+        if (seconds > 86400) {
+            this.logger.warn(`비정상적으로 큰 시간 값: ${seconds}초`);
+            return 86400;
+        }
+
+        // 3. 나노초 범위 검증
+        if (nanos < 0 || nanos >= 1000000000) {
+            this.logger.warn(`비정상적인 나노초 값: ${nanos}`);
+            return seconds; // 나노초 무시하고 초만 반환
+        }
+
+        const totalSeconds = seconds + nanos / 1000000000;
+
+        // 4. 소수점 정밀도 제한 (소수점 3자리)
+        return Math.round(totalSeconds * 1000) / 1000;
     }
 }
