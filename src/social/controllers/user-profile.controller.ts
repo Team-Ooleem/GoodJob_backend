@@ -1,18 +1,6 @@
-import {
-    Controller,
-    Get,
-    Param,
-    ParseIntPipe,
-    HttpException,
-    HttpStatus,
-    Req,
-} from '@nestjs/common';
+import { Controller, Get, HttpException, HttpStatus, Req } from '@nestjs/common';
 import type { Request } from 'express';
-import {
-    UserProfileService,
-    MyProfileInfo,
-    AnotherUserProfileInfo,
-} from '../services/user-profile.service';
+import { UserProfileService, MyProfileInfo } from '../services/user-profile.service';
 
 interface AuthenticatedRequest extends Request {
     user_idx: number;
@@ -32,47 +20,6 @@ export class UserProfileController {
         try {
             const myProfile = await this.userProfileService.getMyProfileInfo(currentUserId);
             return myProfile;
-        } catch (error: unknown) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-
-            // 사용자를 찾을 수 없는 경우 (404 Not Found)
-            if (errorMessage.includes('사용자를 찾을 수 없습니다')) {
-                throw new HttpException(
-                    {
-                        status: HttpStatus.NOT_FOUND,
-                        error: errorMessage,
-                    },
-                    HttpStatus.NOT_FOUND,
-                );
-            }
-
-            // 기타 서버 오류 (500 Internal Server Error)
-            throw new HttpException(
-                {
-                    status: HttpStatus.INTERNAL_SERVER_ERROR,
-                    error: errorMessage,
-                },
-                HttpStatus.INTERNAL_SERVER_ERROR,
-            );
-        }
-    }
-
-    /**
-     * 다른 사용자 정보 조회 (멘토 정보 포함)
-     * GET /social/profile/:userId
-     */
-    @Get(':userId')
-    async getAnotherUserProfile(
-        @Param('userId', ParseIntPipe) userId: number,
-        @Req() req: AuthenticatedRequest,
-    ): Promise<AnotherUserProfileInfo> {
-        const currentUserId = req.user_idx;
-        try {
-            const anotherUserProfile = await this.userProfileService.getAnotherUserProfileInfo(
-                userId,
-                currentUserId,
-            );
-            return anotherUserProfile;
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 

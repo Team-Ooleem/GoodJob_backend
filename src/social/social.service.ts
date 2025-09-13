@@ -1,9 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-    UserProfileService,
-    MyProfileInfo,
-    AnotherUserProfileInfo,
-} from './services/user-profile.service';
+import { UserProfileService, MyProfileInfo } from './services/user-profile.service';
 import {
     PostService,
     PostsResponse,
@@ -25,7 +21,7 @@ import {
 import { FollowService, FollowRequest, FollowResponse } from './services/follow.service';
 
 // Re-export interfaces from individual services for backward compatibility
-export type { MyProfileInfo, AnotherUserProfileInfo } from './services/user-profile.service';
+export type { MyProfileInfo } from './services/user-profile.service';
 export type {
     Post,
     PostsResponse,
@@ -66,16 +62,6 @@ export class SocialService {
      */
     async getMyProfileInfo(userId: number): Promise<MyProfileInfo> {
         return this.userProfileService.getMyProfileInfo(userId);
-    }
-
-    /**
-     * 다른 사용자 정보 조회 (Facade)
-     */
-    async getAnotherUserProfileInfo(
-        userId: number,
-        currentUserId: number,
-    ): Promise<AnotherUserProfileInfo> {
-        return this.userProfileService.getAnotherUserProfileInfo(userId, currentUserId);
     }
 
     // ==================== Post 관련 메서드 ====================
