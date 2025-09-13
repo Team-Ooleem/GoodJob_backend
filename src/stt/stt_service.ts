@@ -40,98 +40,6 @@ export class STTService {
         }
     }
 
-    // 🆕 개선된 시간 정규화 (검증 포함)
-    normalizeTimingsWithValidation(
-        speakers: Array<{
-            text_Content: string;
-            startTime: number;
-            endTime: number;
-            speakerTag: number;
-        }>,
-        actualDuration: number,
-        audioBufferLength?: number,
-    ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
-        if (speakers.length === 0) return speakers;
-
-        const maxSttTime = Math.max(...speakers.map((s) => s.endTime));
-        const scaleFactor = actualDuration / maxSttTime;
-
-        // �� 스케일링 검증
-        if (scaleFactor < 0.1 || scaleFactor > 10.0) {
-            this.logger.warn(
-                `비정상적인 스케일 팩터: ${scaleFactor.toFixed(1)} (duration: ${actualDuration.toFixed(1)}s, maxSttTime: ${maxSttTime.toFixed(1)}s)`,
-            );
-        }
-
-        // 🆕 파일 크기 기반 추정과 비교 (MP4인 경우)
-        if (audioBufferLength) {
-            const estimatedDuration = audioBufferLength / 16000; // 기본 추정
-            const durationRatio = actualDuration / estimatedDuration;
-
-            if (durationRatio < 0.5 || durationRatio > 2.0) {
-                this.logger.warn(
-                    `Duration 비율 이상: ${durationRatio.toFixed(1)} (실제: ${actualDuration.toFixed(1)}s, 추정: ${estimatedDuration.toFixed(1)}s)`,
-                );
-            }
-        }
-
-        const normalizedSpeakers = speakers.map((speaker) => ({
-            ...speaker,
-            startTime: Math.round(speaker.startTime * scaleFactor * 10) / 10, // 소수점 첫째자리
-            endTime: Math.round(speaker.endTime * scaleFactor * 10) / 10, // 소수점 첫째자리
-        }));
-
-        // 🆕 정규화 결과 검증
-        const normalizedMaxTime = Math.max(...normalizedSpeakers.map((s) => s.endTime));
-        const timeDifference = Math.abs(normalizedMaxTime - actualDuration);
-
-        if (timeDifference > 1.0) {
-            // 1초 이상 차이
-            this.logger.warn(
-                `정규화 후 시간 불일치: ${timeDifference.toFixed(1)}초 (목표: ${actualDuration.toFixed(1)}s, 실제: ${normalizedMaxTime.toFixed(1)}s)`,
-            );
-        }
-
-        this.logger.log(
-            `시간 정규화 완료: ${speakers.length}개 세그먼트, 스케일 팩터: ${scaleFactor.toFixed(1)}`,
-        );
-
-        return normalizedSpeakers;
-    }
-
-    // 기존 normalizeTimings 메서드도 유지 (호환성)
-    normalizeTimings(
-        speakers: Array<{
-            text_Content: string;
-            startTime: number;
-            endTime: number;
-            speakerTag: number;
-        }>,
-        actualDuration: number,
-    ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
-        if (speakers.length === 0) return speakers;
-
-        const maxSttTime = Math.max(...speakers.map((s) => s.endTime));
-        const scaleFactor = actualDuration / maxSttTime;
-
-        // �� 기본 검증 추가
-        if (scaleFactor < 0.1 || scaleFactor > 10.0) {
-            this.logger.warn(`비정상적인 스케일 팩터: ${scaleFactor.toFixed(1)}`);
-        }
-
-        const normalizedSpeakers = speakers.map((speaker) => ({
-            ...speaker,
-            startTime: Math.round(speaker.startTime * scaleFactor * 10) / 10, // 소수점 첫째자리
-            endTime: Math.round(speaker.endTime * scaleFactor * 10) / 10, // 소수점 첫째자리
-        }));
-
-        this.logger.log(
-            `시간 정규화 완료: ${speakers.length}개 세그먼트, 스케일 팩터: ${scaleFactor.toFixed(1)}`,
-        );
-
-        return normalizedSpeakers;
-    }
-
     // 🆕 STT 결과 품질 검증
     validateSTTResultQuality(
         result: STTResult,
@@ -245,7 +153,11 @@ export class STTService {
             languageCode: 'ko-KR',
             enableSpeakerDiarization: true,
             diarizationSpeakerCount: 2,
-            enableAutomaticPunctuation: false,
+            enableAutomaticPunctuation: true,
+            minSpeakerCount: 2,
+            maxSpeakerCount: 2,
+            enableWordTimeOffsets: true, // 🆕 추가
+            useEnhanced: true,
             maxAlternatives: 1,
             speechContexts: SpeechPatternsUtil.SPEECH_CONTEXTS,
         };

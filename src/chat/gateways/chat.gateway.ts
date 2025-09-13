@@ -17,6 +17,7 @@ import { ChatService } from '../services/chat.service';
             'http://localhost:3000',
             'http://localhost:4000',
             'https://localhost:3443',
+            'http://172.21.101.139:3000',
         ],
         credentials: true,
     },

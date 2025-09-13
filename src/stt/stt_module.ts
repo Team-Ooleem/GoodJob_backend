@@ -6,6 +6,7 @@ import { STTSessionService } from './services/stt-seesion.service';
 import { STTMessageService } from './services/stt-message.service';
 import { STTUtilService } from './services/stt-util.service';
 import { DatabaseModule } from '../database/database.module';
+import { AudioDurationService } from './services/audio-duration.service';
 import { GcsService } from '../lib/gcs';
 
 @Module({
@@ -17,6 +18,7 @@ import { GcsService } from '../lib/gcs';
         STTSessionService,
         STTMessageService,
         STTUtilService,
+        AudioDurationService,
         GcsService,
     ],
     exports: [STTService],

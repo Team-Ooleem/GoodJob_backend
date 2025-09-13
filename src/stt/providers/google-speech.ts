@@ -62,7 +62,7 @@ export class GoogleSpeechProvider implements SpeechProvider {
                     // 한국어 인식 개선
                     enableWordConfidence: true,
                     enableWordTimeOffsets: true,
-                    enableAutomaticPunctuation: false, // 자동 구두점 끄기 - 자연스러운 문장을 위해
+                    enableAutomaticPunctuation: true, // 자동 구두점 끄기 - 자연스러운 문장을 위해
 
                     // 한국어 우선, 영어 보조
                     alternativeLanguageCodes: ['en-US'],
@@ -236,7 +236,7 @@ export class GoogleSpeechProvider implements SpeechProvider {
             // �� 실제 Google Speech API 시간 정보 사용
             const startTime = this.convertDurationToSeconds(word.startTime);
             const endTime = this.convertDurationToSeconds(word.endTime);
-            const speakerTag = word.speakerTag || 1;
+            const speakerTag = word.speakerTag ?? 0;
 
             // 화자 변경 감지
             const isSpeakerChange = currentSegment && currentSegment.speakerTag !== speakerTag;

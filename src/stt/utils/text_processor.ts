@@ -2,6 +2,7 @@ import { SpeakerSegment } from '../entities/speaker-segment';
 import { SpeechPatternsUtil } from './speech-patterms';
 
 export class TextProcessorUtil {
+    // 시간 정규화
     static normalizeTimings(speakers: SpeakerSegment[], actualDuration: number): SpeakerSegment[] {
         if (speakers.length === 0) return speakers;
 
@@ -15,29 +16,47 @@ export class TextProcessorUtil {
         }));
     }
 
+    // WordPiece 토큰 정리 (전처리 전용)
     static cleanWordPieceTokens(text: string): string {
         if (!text || typeof text !== 'string') return '';
 
-        return (
-            text
-                // 1단계: 모든 특수 문자 제거 (언더스코어, 공백 등)
-                .replace(/[▁_\s]+/g, '')
-                // 2단계: 연속된 한글 자모를 단어로 결합
-                .replace(/([가-힣])([가-힣])/g, '$1$2')
-                // 3단계: 의미 있는 단어 경계에 띄어쓰기 추가
-                .replace(/([가-힣]{2,})([가-힣]{2,})/g, '$1 $2')
-                // 4단계: 조사와 어미 분리
-                .replace(/([가-힣]{2,})([이가을를의에에서와과도는은])/g, '$1 $2')
-                // 5단계: 최종 공백 정리
-                .replace(/\s+/g, ' ')
-                .trim()
-        );
+        return text
+            .replace(/[▁_\s]+/g, ' ') // 특수 문자/불필요한 공백 제거
+            .trim();
     }
+
+    // 규칙 기반 띄어쓰기 교정
+    static fixSpacing(text: string): string {
+        if (!text) return text;
+
+        let fixed = text;
+
+        // 조사 앞은 붙이기
+        fixed = fixed.replace(
+            /([가-힣])\s+(을|를|이|가|은|는|의|에|에서|와|과|도|만|까지|부터|처럼|보다)/g,
+            '$1$2',
+        );
+
+        // 접속사/부사 앞은 띄우기
+        fixed = fixed.replace(/([가-힣])\s*(그래서|그리고|그러나|하지만|또는|그러면)/g, '$1 $2');
+
+        // 자주 쓰이는 단어 합치기 (사전 기반)
+        const commonWords = ['오늘날씨', '한국사람', '컴퓨터비전'];
+        for (const word of commonWords) {
+            const spaced = word.split('').join(' ');
+            fixed = fixed.replace(new RegExp(spaced, 'g'), word);
+        }
+
+        // 공백 정리
+        fixed = fixed.replace(/\s+/g, ' ').trim();
+        return fixed;
+    }
+
+    // 문법 오류 교정
     static improveKoreanGrammar(speakers: SpeakerSegment[]): SpeakerSegment[] {
         return speakers.map((speaker) => {
-            let text = speaker.text_Content;
+            let text = speaker.text_Content || '';
 
-            // 문법적 오류 교정
             text = text
                 // 조사 오류 교정
                 .replace(/이 가/g, '이가')
@@ -54,6 +73,10 @@ export class TextProcessorUtil {
                 .replace(/하고 하면서/g, '하고하면서')
                 .replace(/그래서 그런데/g, '그래서그런데')
 
+                // 구두점 정리
+                .replace(/\s*([.,!?])\s*/g, '$1 ')
+                .replace(/([가-힣])\s*([.,!?])/g, '$1$2')
+
                 // 띄어쓰기 정리
                 .replace(/\s+/g, ' ')
                 .trim();
@@ -65,7 +88,7 @@ export class TextProcessorUtil {
         });
     }
 
-    // 엉뚱한 단어 교정 및 문장 개선
+    // 전체 텍스트 교정
     static processAndCorrectText(speakers: SpeakerSegment[]): SpeakerSegment[] {
         if (speakers.length === 0) return speakers;
 
@@ -79,17 +102,11 @@ export class TextProcessorUtil {
     private static correctSpeakerText(text: string): string {
         if (!text || typeof text !== 'string') return '';
 
-        // 1단계: WordPiece 토큰 정리
-        let corrected = this.cleanWordPieceTokens(text);
-
-        // 2단계: 기본 교정
-        corrected = SpeechPatternsUtil.correctText(corrected);
-
-        // 3단계: 불필요한 단어 제거
-        corrected = this.removeUnnecessaryWords(corrected);
-
-        // 4단계: 문장 부호 정리
-        corrected = this.cleanPunctuation(corrected);
+        let corrected = this.cleanWordPieceTokens(text); // 1. 전처리
+        corrected = this.fixSpacing(corrected); // 2. 띄어쓰기 교정
+        corrected = SpeechPatternsUtil.correctText(corrected); // 3. 기본 교정
+        corrected = this.removeUnnecessaryWords(corrected); // 4. 군더더기 제거
+        corrected = this.cleanPunctuation(corrected); // 5. 구두점 정리
 
         return corrected.trim();
     }
@@ -146,7 +163,6 @@ export class TextProcessorUtil {
             const isCloseInTime = timeGap < 2.0;
             const isSameSpeaker = nextSpeaker.speakerTag === currentSpeaker.speakerTag;
 
-            // 합치기 조건
             if (isShortSegment && isCloseInTime && isSameSpeaker) {
                 currentSpeaker = {
                     ...currentSpeaker,
