@@ -3,7 +3,6 @@ import {
     Get,
     Param,
     ParseIntPipe,
-    Query,
     HttpException,
     HttpStatus,
     Req,
@@ -11,8 +10,8 @@ import {
 import type { Request } from 'express';
 import {
     UserProfileService,
-    UserProfileInfo,
-    UserProfileDetailResponse,
+    MyProfileInfo,
+    AnotherUserProfileInfo,
 } from '../services/user-profile.service';
 
 interface AuthenticatedRequest extends Request {
@@ -24,23 +23,15 @@ export class UserProfileController {
     constructor(private readonly userProfileService: UserProfileService) {}
 
     /**
-     * 사용자 프로필 정보 조회
-     * GET /social/profile/:userId
+     * 내 정보 조회 (간단한 정보만)
+     * GET /social/profile/me
      */
-    @Get(':userId')
-    async getUserProfile(
-        @Param('userId', ParseIntPipe) userId: number,
-        @Req() req: AuthenticatedRequest,
-    ): Promise<UserProfileInfo> {
+    @Get('me')
+    async getMyProfile(@Req() req: AuthenticatedRequest): Promise<MyProfileInfo> {
         const currentUserId = req.user_idx;
         try {
-            const userProfile = await this.userProfileService.getUserProfileInfo(
-                userId,
-                currentUserId,
-            );
-
-            // 성공 응답 (200 OK)
-            return userProfile;
+            const myProfile = await this.userProfileService.getMyProfileInfo(currentUserId);
+            return myProfile;
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 
@@ -67,30 +58,21 @@ export class UserProfileController {
     }
 
     /**
-     * 사용자 프로필 상세 정보 조회 (프로필 정보 + 포스트 목록)
-     * GET /social/profile/:userId/detail
+     * 다른 사용자 정보 조회 (멘토 정보 포함)
+     * GET /social/profile/:userId
      */
-    @Get(':userId/detail')
-    async getUserProfileDetail(
+    @Get(':userId')
+    async getAnotherUserProfile(
         @Param('userId', ParseIntPipe) userId: number,
         @Req() req: AuthenticatedRequest,
-        @Query('limit') limit?: string,
-        @Query('cursor') cursor?: string,
-    ): Promise<UserProfileDetailResponse> {
+    ): Promise<AnotherUserProfileInfo> {
+        const currentUserId = req.user_idx;
         try {
-            const currentUserId = req.user_idx;
-            const postsLimit = limit ? parseInt(limit, 10) : 10;
-            const postsCursor = cursor ? parseInt(cursor, 10) : undefined;
-
-            const userProfileDetail = await this.userProfileService.getUserProfileDetail(
+            const anotherUserProfile = await this.userProfileService.getAnotherUserProfileInfo(
                 userId,
                 currentUserId,
-                postsLimit,
-                postsCursor,
             );
-
-            // 성공 응답 (200 OK)
-            return userProfileDetail;
+            return anotherUserProfile;
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
 
