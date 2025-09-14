@@ -4,9 +4,10 @@ import { ReportService } from './report.service';
 import { MetricsModule } from '../metrics/metrics.module';
 import { AudioMetricsService } from '../audio-metrics/audio-metrics.service';
 import { DatabaseModule } from '../../database/database.module';
+import { CalibrationModule } from '../calibration/calibration.module';
 
 @Module({
-    imports: [MetricsModule, DatabaseModule],
+    imports: [MetricsModule, DatabaseModule, CalibrationModule],
     controllers: [ReportController],
     providers: [ReportService, AudioMetricsService],
     exports: [ReportService],

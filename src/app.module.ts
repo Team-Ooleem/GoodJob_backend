@@ -33,6 +33,7 @@ import { ReportModule } from './modules/report/report.module';
 import { AudioMetricsModule } from './modules/audio-metrics/audio-metrics.module';
 import { MentoringModule } from './modules/mentoring/mentoring.module';
 import { ResumeFileModule } from './modules/resume-file/resume-file.module';
+import { CalibrationModule } from './modules/calibration/calibration.module';
 
 @Module({
     imports: [
@@ -62,6 +63,7 @@ import { ResumeFileModule } from './modules/resume-file/resume-file.module';
         AudioMetricsModule,
         MentoringModule,
         ResumeFileModule,
+        CalibrationModule,
     ],
     controllers: [AppController],
     providers: [
