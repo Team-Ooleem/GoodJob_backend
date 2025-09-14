@@ -64,9 +64,6 @@ export class GoogleSpeechProvider implements SpeechProvider {
                     enableWordTimeOffsets: true,
                     enableAutomaticPunctuation: true, // 자동 구두점 끄기 - 자연스러운 문장을 위해
 
-                    // 한국어 우선, 영어 보조
-                    alternativeLanguageCodes: ['en-US'],
-
                     // 대화용 성능 최적화
                     maxAlternatives: 1, // 안정적인 결과를 위해 1개로 제한
                     profanityFilter: false,
@@ -114,9 +111,6 @@ export class GoogleSpeechProvider implements SpeechProvider {
             if (!wordSegments || wordSegments.length === 0) {
                 wordSegments = this.createWordsFromTranscript(transcript);
             }
-
-            // text_processor.ts의 교정 로직 적용
-            wordSegments = TextProcessorUtil.processAndCorrectText(wordSegments);
 
             // speech-patterms.ts의 문장 연결성 개선 적용
             wordSegments = TextProcessorUtil.improveKoreanGrammar(wordSegments);
@@ -225,7 +219,10 @@ export class GoogleSpeechProvider implements SpeechProvider {
         const segments: SpeakerSegment[] = [];
         let currentSegment: SpeakerSegment | null = null;
         const minSegmentDuration = 0.5; // 최소 0.5초 세그먼트
-        const maxSegmentDuration = 10.0; // 최대 10초 세그먼트
+        const maxSegmentDuration = 3.0; // 최대 10초 세그먼트
+
+        // 🆕 추가: 문장 길이 기반 분할
+        const maxTextLength = 30; // 최대 30자
 
         for (let i = 0; i < words.length; i++) {
             const word = words[i];
@@ -233,7 +230,6 @@ export class GoogleSpeechProvider implements SpeechProvider {
 
             if (!cleanedText.trim()) continue;
 
-            // �� 실제 Google Speech API 시간 정보 사용
             const startTime = this.convertDurationToSeconds(word.startTime);
             const endTime = this.convertDurationToSeconds(word.endTime);
             const speakerTag = word.speakerTag ?? 0;
@@ -241,13 +237,16 @@ export class GoogleSpeechProvider implements SpeechProvider {
             // 화자 변경 감지
             const isSpeakerChange = currentSegment && currentSegment.speakerTag !== speakerTag;
 
-            // 세그먼트가 너무 길어지면 강제 분할
+            // 세그먼트가 너무 길어지면 강제 분할 (시간 기준)
             const isTooLong =
                 currentSegment && startTime - currentSegment.startTime > maxSegmentDuration;
 
-            if (isSpeakerChange || isTooLong) {
+            // 🆕 세그먼트가 너무 길어지면 강제 분할 (텍스트 길이 기준)
+            const isTextTooLong =
+                currentSegment && currentSegment.text_Content.length > maxTextLength;
+
+            if (isSpeakerChange || isTooLong || isTextTooLong) {
                 if (currentSegment) {
-                    // 현재 세그먼트 완료
                     if (currentSegment.endTime - currentSegment.startTime >= minSegmentDuration) {
                         segments.push(currentSegment);
                     }
@@ -255,21 +254,21 @@ export class GoogleSpeechProvider implements SpeechProvider {
                 // 새 세그먼트 시작
                 currentSegment = {
                     text_Content: cleanedText,
-                    startTime: Math.round(startTime * 100) / 100,
-                    endTime: Math.round(endTime * 100) / 100,
+                    startTime: Math.round(startTime * 10) / 10,
+                    endTime: Math.round(endTime * 10) / 10,
                     speakerTag: speakerTag,
                 };
             } else {
                 if (currentSegment) {
                     // 기존 세그먼트에 텍스트 추가
                     currentSegment.text_Content += ' ' + cleanedText;
-                    currentSegment.endTime = Math.round(endTime * 100) / 100;
+                    currentSegment.endTime = Math.round(endTime * 10) / 10;
                 } else {
                     // 첫 번째 세그먼트
                     currentSegment = {
                         text_Content: cleanedText,
-                        startTime: Math.round(startTime * 100) / 100,
-                        endTime: Math.round(endTime * 100) / 100,
+                        startTime: Math.round(startTime * 10) / 10,
+                        endTime: Math.round(endTime * 10) / 10,
                         speakerTag: speakerTag,
                     };
                 }
@@ -300,8 +299,8 @@ export class GoogleSpeechProvider implements SpeechProvider {
 
         return words.map((word, index) => ({
             text_Content: word,
-            startTime: Math.round(index * segmentDuration * 100) / 100,
-            endTime: Math.round((index + 1) * segmentDuration * 100) / 100,
+            startTime: Math.round(index * segmentDuration * 10) / 10,
+            endTime: Math.round((index + 1) * segmentDuration * 10) / 10,
             speakerTag: 1,
         }));
     }
@@ -336,7 +335,7 @@ export class GoogleSpeechProvider implements SpeechProvider {
 
         const totalSeconds = seconds + nanos / 1000000000;
 
-        // 4. 소수점 정밀도 제한 (소수점 3자리)
-        return Math.round(totalSeconds * 1000) / 1000;
+        // 4. 소수점 정밀도 제한 (소수점 1자리)
+        return Math.round(totalSeconds * 10) / 10;
     }
 }

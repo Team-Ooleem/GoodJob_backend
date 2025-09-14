@@ -51,6 +51,11 @@ export class STTController {
         private readonly audioDurationService: AudioDurationService,
     ) {}
 
+    private logFlags = {
+        requestLogged: false,
+        completionLogged: false,
+        errorLogged: false,
+    };
     // ========================
     // 핵심 STT API
     // =======================
@@ -69,9 +74,11 @@ export class STTController {
             isNewRecordingSession = false,
         } = body;
 
-        this.logger.log(
-            `STT 요청 받음 - canvasIdx: ${canvasId}, isFinalChunk: ${isFinalChunk}, chunkIndex: ${body.chunkIndex}, isNewSession: ${isNewRecordingSession}`,
-        );
+        // 조건부 로깅
+        if (!this.logFlags.requestLogged) {
+            this.logger.log(`STT 요청 받음 - canvasIdx: ${canvasId}`);
+            this.logFlags.requestLogged = true;
+        }
 
         if (!audioData) throw new BadRequestException('오디오 데이터 없음');
         if (!this.utilService.isValidBase64(audioData))
@@ -322,9 +329,10 @@ export class STTController {
 
             const processingTime = Date.now() - startTime;
 
-            this.logger.log(
-                `STT 변환 완료: ${result.transcript} (신뢰도: ${(result.confidence * 100).toFixed(1)}%)`,
-            );
+            if (!this.logFlags.completionLogged && result.confidence > 0.8) {
+                this.logger.log(`STT 변환 완료 (신뢰도: ${(result.confidence * 100).toFixed(1)}%)`);
+                this.logFlags.completionLogged = true;
+            }
             return {
                 success: true,
                 timestamp: new Date().toISOString(),

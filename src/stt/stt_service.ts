@@ -191,15 +191,12 @@ export class STTService {
         };
 
         // 🆕 STT 결과 품질 검증
-        const qualityCheck = this.validateSTTResultQuality(sttResult);
-        if (!qualityCheck.isValid) {
-            this.logger.warn(
-                `STT 결과 품질 경고: ${qualityCheck.issues.join(', ')} (신뢰도: ${(qualityCheck.confidence * 100).toFixed(1)}%)`,
-            );
-        } else {
-            this.logger.log(
-                `STT 결과 품질 양호 (신뢰도: ${(qualityCheck.confidence * 100).toFixed(1)}%)`,
-            );
+        if (result.confidence < 0.7) {
+            // 낮은 신뢰도일 때만 검증
+            const qualityCheck = this.validateSTTResultQuality(sttResult);
+            if (!qualityCheck.isValid) {
+                this.logger.warn(`STT 결과 품질 경고: ${qualityCheck.issues.join(', ')}`);
+            }
         }
 
         return sttResult;
