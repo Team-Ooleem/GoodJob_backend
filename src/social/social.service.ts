@@ -155,4 +155,13 @@ export class SocialService {
     async toggleFollow(request: FollowRequest): Promise<FollowResponse> {
         return this.followService.toggleFollow(request);
     }
+
+    // ==================== Profile Image 관련 메서드 ====================
+
+    /**
+     * 프로필 이미지 업로드 (Facade)
+     */
+    async uploadProfileImage(userId: number, file: Express.Multer.File) {
+        return this.userProfileService.uploadProfileImage(userId, file);
+    }
 }

@@ -1,12 +1,17 @@
 import {
     Controller,
     Get,
+    Post,
     HttpException,
     HttpStatus,
     Req,
     Param,
     ParseIntPipe,
+    UploadedFile,
+    UseInterceptors,
+    BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import {
     UserProfileService,
@@ -88,6 +93,36 @@ export class UserProfileController {
             }
 
             // 기타 서버 오류 (500 Internal Server Error)
+            throw new HttpException(
+                {
+                    status: HttpStatus.INTERNAL_SERVER_ERROR,
+                    error: errorMessage,
+                },
+                HttpStatus.INTERNAL_SERVER_ERROR,
+            );
+        }
+    }
+
+    /**
+     * 내 프로필 이미지 업로드
+     * POST /social/profile/me/image
+     */
+    @Post('me/image')
+    @UseInterceptors(FileInterceptor('file'))
+    async uploadMyProfileImage(
+        @Req() req: AuthenticatedRequest,
+        @UploadedFile() file: Express.Multer.File,
+    ) {
+        if (!file) {
+            throw new BadRequestException('파일이 필요합니다.');
+        }
+
+        const currentUserId = req.user_idx;
+        try {
+            const result = await this.userProfileService.uploadProfileImage(currentUserId, file);
+            return result;
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
             throw new HttpException(
                 {
                     status: HttpStatus.INTERNAL_SERVER_ERROR,

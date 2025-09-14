@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { UserProfileQueries } from '../queries/user-profile.queries';
 import { FollowService } from './follow.service';
+import { uploadFileToS3, validateImageFile, generateS3Key } from '../../lib/s3';
+import { AppConfigService } from '../../config/config.service';
 
 // 내 정보 조회용 (멘토 통계 포함)
 export interface MyProfileInfo {
@@ -56,6 +58,7 @@ export class UserProfileService {
     constructor(
         private readonly databaseService: DatabaseService,
         private readonly followService: FollowService,
+        private readonly configService: AppConfigService,
     ) {}
 
     /**
@@ -206,6 +209,63 @@ export class UserProfileService {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
             console.error(`❌ 사용자 프로필 조회 실패:`, error);
             throw new Error(`사용자 프로필 조회 실패: ${errorMessage}`);
+        }
+    }
+
+    /**
+     * 프로필 이미지 업로드 및 업데이트
+     * @param userId 사용자 ID
+     * @param file 업로드된 파일
+     * @returns 업로드 결과
+     */
+    async uploadProfileImage(userId: number, file: Express.Multer.File) {
+        try {
+            // 사용자 존재 여부 확인
+            const userCheck = await this.databaseService.query(
+                'SELECT idx FROM users WHERE idx = ?',
+                [userId],
+            );
+
+            if (!userCheck || userCheck.length === 0) {
+                throw new Error('사용자를 찾을 수 없습니다.');
+            }
+
+            // 이미지 파일 유효성 검증
+            const validation = validateImageFile(file);
+            if (!validation.isValid) {
+                throw new Error(validation.error);
+            }
+
+            // S3 키 생성
+            const s3Key = generateS3Key(file.originalname || 'profile-image', 'profile-images');
+
+            // S3에 이미지 업로드
+            const uploadResult = await uploadFileToS3(
+                file.buffer,
+                s3Key,
+                file.mimetype,
+                this.configService.aws,
+            );
+
+            if (!uploadResult.success) {
+                throw new Error(`이미지 업로드 실패: ${uploadResult.error}`);
+            }
+
+            // 데이터베이스에 프로필 이미지 URL 업데이트
+            await this.databaseService.query(
+                'UPDATE users SET profile_img = ?, updated_at = NOW() WHERE idx = ?',
+                [uploadResult.url, userId],
+            );
+
+            return {
+                success: true,
+                message: '프로필 이미지가 성공적으로 업로드되었습니다.',
+                profileImageUrl: uploadResult.url,
+            };
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            console.error(`❌ 프로필 이미지 업로드 실패:`, error);
+            throw new Error(`프로필 이미지 업로드 실패: ${errorMessage}`);
         }
     }
 }
