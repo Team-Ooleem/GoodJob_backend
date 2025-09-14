@@ -58,6 +58,10 @@ interface VisualAggQuestionRow {
 
     started_at_ms: number | null;
     ended_at_ms: number | null;
+
+    // 캘리브레이션 관련 추가 필드
+    normalized_score: number | null;
+    calibration_applied: number;
 }
 
 /** DB Row 타입(visual_agg_session) */
@@ -81,6 +85,12 @@ interface VisualAggSessionRow {
 
     started_at_ms: number | null;
     ended_at_ms: number | null;
+}
+
+/** 정규화 점수 조회용 타입 */
+export interface NormalizedScoreResult {
+    score: number;
+    calibrationApplied: boolean;
 }
 
 @Injectable()
@@ -306,6 +316,33 @@ export class MetricsService {
         }
 
         return { perQuestion, overall };
+    }
+
+    /**
+     * 영상 정규화 점수 조회
+     */
+    async getNormalizedVisualScore(
+        sessionId: string,
+        questionId: string,
+    ): Promise<NormalizedScoreResult | null> {
+        const rows = await this.db.query<{
+            normalized_score: number | null;
+            calibration_applied: number;
+        }>(
+            `SELECT normalized_score, calibration_applied 
+             FROM visual_agg_question 
+             WHERE session_id=? AND question_id=?`,
+            [sessionId, questionId],
+        );
+
+        if (rows.length === 0 || rows[0].normalized_score === null) {
+            return null;
+        }
+
+        return {
+            score: rows[0].normalized_score,
+            calibrationApplied: rows[0].calibration_applied === 1,
+        };
     }
 
     // ======= 내부 유틸 =======

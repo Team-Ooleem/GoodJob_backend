@@ -138,3 +138,28 @@ CREATE TABLE IF NOT EXISTS resume_files (
   INDEX idx_user_created (user_id, created_at),
   CONSTRAINT fk_resume_files_user FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- session_calibrations 테이블 생성
+CREATE TABLE IF NOT EXISTS session_calibrations (
+  session_id           VARCHAR(64) PRIMARY KEY,
+  user_id              INT NOT NULL,
+  audio_baseline       JSON NULL COMMENT '이번 세션 음성 기준값',
+  visual_baseline      JSON NULL COMMENT '이번 세션 영상 기준값',
+  calibration_text     VARCHAR(255) NULL COMMENT '캘리브레이션에 사용된 텍스트',
+  duration_ms          INT NOT NULL DEFAULT 0,
+  created_at           TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_session_calibration FOREIGN KEY (session_id) 
+    REFERENCES interview_sessions(session_id) ON DELETE CASCADE,
+  CONSTRAINT fk_session_calibration_user FOREIGN KEY (user_id) 
+    REFERENCES users(idx) ON DELETE CASCADE,
+  INDEX idx_session_calibration_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 기존 테이블에 캘리브레이션 컬럼 추가
+ALTER TABLE audio_metrics_question 
+ADD COLUMN normalized_score DOUBLE NULL COMMENT '캘리브레이션 적용된 정규화 점수' AFTER sr,
+ADD COLUMN calibration_applied TINYINT(1) NOT NULL DEFAULT 0 COMMENT '캘리브레이션 적용 여부' AFTER normalized_score;
+
+ALTER TABLE visual_agg_question
+ADD COLUMN normalized_score DOUBLE NULL COMMENT '캘리브레이션 적용된 정규화 점수' AFTER ended_at_ms,
+ADD COLUMN calibration_applied TINYINT(1) NOT NULL DEFAULT 0 COMMENT '캘리브레이션 적용 여부' AFTER normalized_score;
