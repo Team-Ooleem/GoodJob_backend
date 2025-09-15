@@ -879,7 +879,7 @@ export class MentoringService {
 
     async createMentorApplication(
         dto: CreateMentorApplicationDto,
-        userIdx: number = 1,
+        userIdx: number,
     ): Promise<MentorApplicationCreateResponseDto> {
         try {
             // 먼저 이미 멘토로 등록되어 있는지 확인

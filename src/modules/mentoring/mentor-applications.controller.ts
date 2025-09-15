@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Req } from '@nestjs/common';
+import type { Request } from 'express';
 import { MentoringService } from './mentoring.service';
 import {
     CreateMentorApplicationDto,
@@ -13,8 +14,10 @@ export class MentorApplicationsController {
     @Post()
     async createMentorApplication(
         @Body() body: CreateMentorApplicationDto,
+        @Req() req: Request,
     ): Promise<MentorApplicationCreateResponseDto> {
-        return await this.svc.createMentorApplication(body);
+        const userIdx = req['user_idx'] as number;
+        return await this.svc.createMentorApplication(body, userIdx);
     }
 
     @Get('job-categories')
