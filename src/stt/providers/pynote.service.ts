@@ -9,7 +9,7 @@ export class PynoteService {
     private readonly apiKey: string;
 
     constructor() {
-        this.serviceUrl = 'http://localhost:8081';
+        this.serviceUrl = process.env.PYNOTE_SERVICE_URL || 'http://localhost:8081';
         this.apiKey = process.env.PYNOTE_API_KEY || '';
 
         // 초기화 로그 추가
