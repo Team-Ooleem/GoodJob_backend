@@ -24,6 +24,7 @@ export class SessionGuard implements CanActivate {
             '/api/auth/logout',
             '/api/auth/me',
             '/api/auth/cookie-check',
+            '/api/mentoring-products',
         ];
 
         if (
