@@ -5,3 +5,7 @@ export class MentorDto {
     business_name: string; // e.g., 회사명
 }
 
+export class MyMentorIdxResponseDto {
+    mentor_idx: number | null;
+    is_mentor: boolean;
+}

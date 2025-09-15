@@ -1051,4 +1051,30 @@ export class MentoringService {
             throw new BadRequestException('멘토링 상품 리스트를 조회하는 중 오류가 발생했습니다.');
         }
     }
+
+    async getMyMentorIdx(
+        userIdx: number,
+    ): Promise<{ mentor_idx: number | null; is_mentor: boolean }> {
+        try {
+            const mentorRow = await this.databaseService.queryOne<{ mentor_idx: number }>(
+                'SELECT mentor_idx FROM mentor_profiles WHERE user_idx = ? LIMIT 1',
+                [userIdx],
+            );
+
+            if (!mentorRow) {
+                return {
+                    mentor_idx: null,
+                    is_mentor: false,
+                };
+            }
+
+            return {
+                mentor_idx: mentorRow.mentor_idx,
+                is_mentor: true,
+            };
+        } catch (error) {
+            console.error('멘토 idx 조회 실패:', error);
+            throw new BadRequestException('멘토 정보를 조회하는 중 오류가 발생했습니다.');
+        }
+    }
 }
