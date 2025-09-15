@@ -93,6 +93,11 @@ export class TranscribeChunkRequestDto {
     @IsOptional()
     @IsString()
     url?: string;
+
+    @ApiProperty({ description: 'pynote 화자분리 여부', required: false, default: false })
+    @IsOptional()
+    @IsBoolean()
+    usePynoteDiarization?: boolean;
 }
 
 export class TranscribeRequestDto {

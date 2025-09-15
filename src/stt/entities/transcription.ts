@@ -34,6 +34,7 @@ export interface TranscribeChunkRequest {
     isFinalChunk?: boolean;
     isNewRecordingSession?: boolean; // 새 녹화 세션 여부
     url?: string;
+    usePynoteDiarization?: boolean;
 }
 
 export interface STTWithContextResponse {
@@ -121,4 +122,20 @@ export interface TransformedSession {
         endTime: number;
     }>;
     audioDuration: number;
+}
+
+export interface PynoteDiarizationResult {
+    success: boolean;
+    speaker_segments?: PynoteSegment[];
+}
+
+export interface PynoteSegment {
+    start_time: number;
+    end_time: number;
+    speaker_id: number;
+}
+
+export interface PynoteResponse {
+    success: boolean;
+    speaker_segments?: any[];
 }

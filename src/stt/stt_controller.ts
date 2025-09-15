@@ -13,12 +13,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { STTService } from './stt_service';
-import {
-    STTResponseDto,
-    SampleResponseDto,
-    ConnectionTestResponseDto,
-    STTResultDto,
-} from './dto/transcribe-response';
+import { STTResponseDto, STTResultDto } from './dto/transcribe-response';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { TranscribeBase64RequestDto } from './dto/transcribe-request';
 import { GcsService } from '../lib/gcs';
@@ -72,6 +67,7 @@ export class STTController {
             menteeIdx,
             isFinalChunk = false,
             isNewRecordingSession = false,
+            usePynoteDiarization = true,
         } = body;
 
         // 조건부 로깅
@@ -142,12 +138,19 @@ export class STTController {
             const gcsResult = await this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType);
             if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
 
-            const sttResult: STTResult = await this.sttService.transcribeAudioBuffer(
-                audioBuffer,
-                mimeType,
-                sessionStartOffset, // ✅ sessionStartOffset만 전달
+            // 149번 라인 다음에 추가
+            const sttResult: STTResult = await this.sttService.transcribeAudioFromGcs(
                 gcsResult.url as string,
+                mimeType,
+                sessionStartOffset,
+                usePynoteDiarization,
+                canvasId,
+                mentorIdx,
+                menteeIdx,
             );
+            // 🆕 수정된 코드
+            const gcsUrl = gcsResult.url as string;
+            this.logger.log(`✅ GCS 업로드 완료: ${gcsUrl}`);
 
             // 🎯 STT 시간을 전체 MP4 길이에 정확히 매핑
             let mappedSpeakers = sttResult.speakers || []; // ✅ sttResult.speakers로 수정
@@ -307,7 +310,13 @@ export class STTController {
                 this.logger.warn(`Base64 duration 계산 실패: ${durationError}`);
             }
 
-            const result = await this.sttService.transcribeBase64Audio(audioData, mimeType);
+            const result: STTResult = await this.sttService.transcribeAudioBuffer(
+                Buffer.from(audioData, 'base64'),
+                mimeType,
+                0, // sessionStartOffset
+                undefined, // gcsUrl
+                false, // usePynoteDiarization
+            );
 
             // 🆕 시간 정규화 적용
             if (base64Duration > 0 && result.speakers) {
@@ -399,30 +408,6 @@ export class STTController {
             const msg = e instanceof Error ? e.message : String(e);
             throw new InternalServerErrorException(`STT 변환 실패: ${msg}`);
         }
-    }
-
-    @Get('test')
-    @ApiOperation({ summary: 'STT API 연결 테스트' })
-    async testConnection(): Promise<ConnectionTestResponseDto> {
-        this.logger.log('STT API 연결 상태 확인 요청');
-        const result = await this.sttService.testConnection();
-        this.logger.log(`STT API 상태: ${result.status} - ${result.message}`);
-        return result;
-    }
-
-    @Get('sample')
-    @ApiOperation({ summary: '샘플 STT 결과' })
-    getSample(): SampleResponseDto {
-        const sample = this.sttService.createSampleResult();
-        this.logger.log(
-            `샘플 STT 결과 테스트: ${sample.transcript} (신뢰도: ${(sample.confidence * 100).toFixed(1)}%)`,
-        );
-        sample.speakers?.forEach((wordSegment, i) =>
-            this.logger.log(
-                `단어 ${i + 1}: "${wordSegment.text_Content}" (${wordSegment.startTime}s - ${wordSegment.endTime}s)`,
-            ),
-        );
-        return { success: true, message: '샘플 STT 결과', result: sample as STTResultDto };
     }
 
     // ========================

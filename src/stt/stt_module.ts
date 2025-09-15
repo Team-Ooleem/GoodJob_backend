@@ -8,6 +8,7 @@ import { STTUtilService } from './services/stt-util.service';
 import { DatabaseModule } from '../database/database.module';
 import { AudioDurationService } from './services/audio-duration.service';
 import { GcsService } from '../lib/gcs';
+import { PynoteService } from './providers/pynote.service';
 
 @Module({
     imports: [DatabaseModule],
@@ -20,6 +21,7 @@ import { GcsService } from '../lib/gcs';
         STTUtilService,
         AudioDurationService,
         GcsService,
+        PynoteService,
     ],
     exports: [STTService],
 })

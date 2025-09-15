@@ -52,8 +52,8 @@ export class GoogleSpeechProvider implements SpeechProvider {
                     useEnhanced: true,
 
                     // 화자 분리 설정 (한국어 대화용)
-                    enableSpeakerDiarization: config.enableSpeakerDiarization || true,
-                    diarizationSpeakerCount: config.diarizationSpeakerCount || 2,
+                    enableSpeakerDiarization: config.enableSpeakerDiarization || false, // pynote 사용 시 false
+                    diarizationSpeakerCount: config.diarizationSpeakerCount || 0, // pynote 사용 시 0
                     diarizationConfig: {
                         minSpeakerCount: 2,
                         maxSpeakerCount: 2,
