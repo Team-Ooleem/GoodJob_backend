@@ -19,10 +19,21 @@ import {
     CreateMentoringProductDto,
     MentoringProductCreatedResponseDto,
 } from './dto/product-create.dto';
+import {
+    MentoringProductListResponseDto,
+    MentoringProductListQueryDto,
+} from './dto/product-list.dto';
 
 @Controller('mentoring-products')
 export class MentoringProductsController {
     constructor(private readonly svc: MentoringService) {}
+
+    @Get()
+    async getProductList(
+        @Query() query: MentoringProductListQueryDto,
+    ): Promise<MentoringProductListResponseDto> {
+        return await this.svc.getProductList(query);
+    }
 
     @Post()
     async createProduct(

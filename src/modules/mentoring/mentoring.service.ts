@@ -21,6 +21,11 @@ import {
     MentorApplicationCreateResponseDto,
 } from './dto/mentor-application.dto';
 import { JobCategoryResponseDto } from './dto/job-category.dto';
+import {
+    MentoringProductListResponseDto,
+    MentoringProductListItemDto,
+    MentoringProductListQueryDto,
+} from './dto/product-list.dto';
 import { DatabaseService } from '@/database/database.service';
 
 @Injectable()
@@ -876,7 +881,7 @@ export class MentoringService {
 
     async createMentorApplication(
         dto: CreateMentorApplicationDto,
-        userIdx: number = 1,
+        userIdx: number,
     ): Promise<MentorApplicationCreateResponseDto> {
         try {
             // 먼저 이미 멘토로 등록되어 있는지 확인
@@ -941,6 +946,109 @@ export class MentoringService {
             return {
                 categories: [],
             };
+        }
+    }
+
+    async getProductList(
+        query: MentoringProductListQueryDto,
+    ): Promise<MentoringProductListResponseDto> {
+        try {
+            const limit = 8; // 고정 8개
+            const cursorProductIdx = query.cursor ? parseInt(query.cursor) : null;
+
+            // 기본 정렬 설정 (product_idx 기준으로 최신순)
+            const sortOrder = 'desc';
+
+            // WHERE 조건 구성
+            const whereConditions = ['p.is_active = 1'];
+            const params: any[] = [];
+
+            // 커서 기반 페이징 (product_idx 기준)
+            if (cursorProductIdx !== null && cursorProductIdx > 0) {
+                if (sortOrder === 'desc') {
+                    whereConditions.push('p.product_idx < ?');
+                } else {
+                    whereConditions.push('p.product_idx > ?');
+                }
+                params.push(cursorProductIdx);
+            }
+
+            const whereClause =
+                whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+            // 정렬 조건 구성 (product_idx 기준으로 최신순)
+            const orderBy = `ORDER BY p.product_idx ${sortOrder}`;
+
+            const sql = `
+                SELECT 
+                    p.product_idx,
+                    p.title,
+                    p.price,
+                    u.name AS mentor_nickname,
+                    u.profile_img,
+                    mp.introduction AS mentor_profile,
+                    COALESCE(ROUND(AVG(r.rating), 1), 0) AS rating,
+                    COUNT(DISTINCT CASE WHEN a.application_status = 'approved' THEN a.mentee_idx END) AS participants,
+                    p.created_at
+                FROM mentoring_products p
+                JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
+                JOIN users u ON mp.user_idx = u.idx
+                LEFT JOIN mentoring_reviews r ON p.product_idx = r.product_idx
+                LEFT JOIN mentoring_applications a ON p.product_idx = a.product_idx
+                ${whereClause}
+                GROUP BY p.product_idx, p.title, p.price, u.name, u.profile_img, mp.introduction, p.created_at
+                ${orderBy}
+                LIMIT ${limit + 1}
+            `;
+
+            const rows = await this.databaseService.query(sql, params);
+
+            // 다음 페이지 존재 여부 확인
+            const hasMore = rows.length > limit;
+            const products = hasMore ? rows.slice(0, limit) : rows;
+
+            // 다음 커서 생성 (마지막 상품의 product_idx)
+            const nextCursor =
+                hasMore && products.length > 0
+                    ? products[products.length - 1].product_idx.toString()
+                    : undefined;
+
+            // 응답 데이터 변환
+            const productList: MentoringProductListItemDto[] = products.map((row: any) => ({
+                product_idx: row.product_idx,
+                title: row.title,
+                mentor: {
+                    nickname: row.mentor_nickname,
+                    profile: row.mentor_profile,
+                    profile_img: row.profile_img || 'https://picsum.photos/200?3',
+                    info: [row.mentor_profile], // 멘토 프로필을 info 배열에 포함
+                },
+                rating: row.rating,
+                participants: row.participants,
+                price: row.price,
+            }));
+
+            // 전체 개수 조회 (캐싱을 위해 별도 쿼리)
+            const countSql = `
+                SELECT COUNT(DISTINCT p.product_idx) as total_count
+                FROM mentoring_products p
+                JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
+                JOIN users u ON mp.user_idx = u.idx
+                ${whereClause}
+            `;
+
+            const countResult = await this.databaseService.queryOne(countSql, params);
+            const totalCount = countResult?.total_count || 0;
+
+            return {
+                products: productList,
+                next_cursor: nextCursor,
+                has_more: hasMore,
+                total_count: totalCount,
+            };
+        } catch (error) {
+            console.error('멘토링 상품 리스트 조회 실패:', error);
+            throw new BadRequestException('멘토링 상품 리스트를 조회하는 중 오류가 발생했습니다.');
         }
     }
 }
