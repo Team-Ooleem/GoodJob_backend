@@ -1014,7 +1014,9 @@ INSERT INTO mentoring_products (product_idx, mentor_idx, title, job_category_id,
 (17, 9, '멘토링 상품 17', 2, '데이터 분석 프로젝트 경험을 기반으로 멘토링합니다.', 32933, 1, NOW(), NOW()),
 (18, 9, '멘토링 상품 18', 2, '프론트엔드 개발의 기본기를 확실히 다질 수 있습니다.', 71406, 1, NOW(), NOW()),
 (19, 10, '멘토링 상품 19', 2, '프론트엔드 개발의 기본기를 확실히 다질 수 있습니다.', 91498, 1, NOW(), NOW()),
-(20, 10, '멘토링 상품 20', 2, 'UI/UX 디자인 실무 경험을 바탕으로 합니다.', 72774, 1, NOW(), NOW());
+(20, 10, '멘토링 상품 20', 2, 'UI/UX 디자인 실무 경험을 바탕으로 합니다.', 72774, 1, NOW(), NOW()),
+(21, 11, '프론트엔드 면접 대비', 2, 'React, Vue.js 등 모던 프론트엔드 기술 면접 준비를 위한 멘토링입니다.', 50000, 1, NOW(), NOW()),
+(22, 11, '웹 개발 실무 프로젝트', 2, '실제 프로젝트를 통한 웹 개발 실무 경험을 쌓을 수 있는 멘토링입니다.', 75000, 1, NOW(), NOW());
 
 -- REGULAR SLOTS
 INSERT INTO mentoring_regular_slots (regular_slots_idx, product_idx, day_of_week, hour_slot, created_at, updated_at) VALUES
@@ -1057,7 +1059,9 @@ INSERT INTO mentoring_regular_slots (regular_slots_idx, product_idx, day_of_week
 (192, 19, 2, 14, NOW(), NOW()),
 (194, 19, 4, 19, NOW(), NOW()),
 (202, 20, 2, 14, NOW(), NOW()),
-(204, 20, 4, 12, NOW(), NOW());
+(204, 20, 4, 12, NOW(), NOW()),
+(214, 21, 2, 15, NOW(), NOW()),
+(224, 22, 4, 18, NOW(), NOW());
 
 -- PAYMENTS
 INSERT INTO payments (payment_id, user_idx, product_idx, amount, payment_status, transaction_id, paid_at, created_at, updated_at) VALUES
@@ -1080,7 +1084,9 @@ INSERT INTO payments (payment_id, user_idx, product_idx, amount, payment_status,
 (17, 18, 17, 32933, 'completed', 'txn_17', NOW(), NOW(), NOW()),
 (18, 47, 18, 71406, 'completed', 'txn_18', NOW(), NOW(), NOW()),
 (19, 5, 19, 91498, 'completed', 'txn_19', NOW(), NOW(), NOW()),
-(20, 13, 20, 72774, 'completed', 'txn_20', NOW(), NOW(), NOW());
+(20, 13, 20, 72774, 'completed', 'txn_20', NOW(), NOW(), NOW()),
+(21, 25, 21, 50000, 'completed', 'txn_21', NOW(), NOW(), NOW()),
+(22, 30, 22, 75000, 'completed', 'txn_22', NOW(), NOW(), NOW());
 
 -- APPLICATIONS
 INSERT INTO mentoring_applications (application_id, mentee_idx, product_idx, regular_slots_idx, booked_date, payment_id, message_to_mentor, application_status, rejection_reason, approved_at, rejected_at, completed_at, created_at, updated_at) VALUES
@@ -1103,7 +1109,9 @@ INSERT INTO mentoring_applications (application_id, mentee_idx, product_idx, reg
 (17, 18, 17, 174, CURDATE(), 17, '멘토에게 메시지 17', 'approved', NULL, NOW(), NULL, NULL, NOW(), NOW()),
 (18, 47, 18, 184, CURDATE(), 18, '멘토에게 메시지 18', 'approved', NULL, NOW(), NULL, NULL, NOW(), NOW()),
 (19, 5, 19, 194, CURDATE(), 19, '멘토에게 메시지 19', 'approved', NULL, NOW(), NULL, NULL, NOW(), NOW()),
-(20, 13, 20, 204, CURDATE(), 20, '멘토에게 메시지 20', 'approved', NULL, NOW(), NULL, NULL, NOW(), NOW());
+(20, 13, 20, 204, CURDATE(), 20, '멘토에게 메시지 20', 'approved', NULL, NOW(), NULL, NULL, NOW(), NOW()),
+(21, 25, 21, 214, CURDATE(), 21, '멘토에게 메시지 21', 'approved', NULL, NOW(), NULL, NULL, NOW(), NOW()),
+(22, 30, 22, 224, CURDATE(), 22, '멘토에게 메시지 22', 'pending', NULL, NULL, NULL, NULL, NOW(), NOW());
 
 -- REVIEWS
 INSERT INTO mentoring_reviews (review_idx, application_id, product_idx, mentee_idx, rating, review_content, created_at, updated_at) VALUES
