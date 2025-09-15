@@ -204,17 +204,19 @@ export class MentoringService {
 
     async getProductRegularSlots(productIdx: number): Promise<ProductRegularSlotsResponseDto> {
         const sql = `
-            SELECT day_of_week, hour_slot
+            SELECT regular_slots_idx, day_of_week, hour_slot
               FROM mentoring_regular_slots
              WHERE product_idx = ?
              ORDER BY day_of_week, hour_slot
         `;
         const rows = await this.databaseService.query<{
+            regular_slots_idx: number;
             day_of_week: number;
             hour_slot: number;
         }>(sql, [productIdx]);
 
         const slots = rows.map((r) => ({
+            regular_slots_idx: Number(r.regular_slots_idx),
             day_of_week: Number(r.day_of_week),
             hour_slot: Number(r.hour_slot),
             time_range: `${String(r.hour_slot).padStart(2, '0')}:00-${String(r.hour_slot + 1).padStart(2, '0')}:00`,
