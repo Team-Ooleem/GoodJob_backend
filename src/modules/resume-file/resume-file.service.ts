@@ -11,6 +11,7 @@ import { generateS3Key, uploadFileToS3, s3 } from '@/lib/s3';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import OpenAI from 'openai';
+import { chunkText, mmr } from '@/lib/text';
 
 // Node.js 환경에서 pdfjs-dist 설정
 const pdfjsLib = pdfjs.getDocument;
@@ -240,27 +241,92 @@ export class ResumeFileService {
             const storeText =
                 cleanText.length > MAX_TEXT_STORE ? cleanText.slice(0, MAX_TEXT_STORE) : cleanText;
 
-            // OpenAI로 요약 생성
-            const system =
-                '너는 채용 담당자다. 아래 이력서 텍스트를 8~12문장으로 간결히 요약하라. 핵심 경력/기술/성과/직무 적합성을 강조하라. 불필요한 수식은 배제하라.';
-            const user = `이력서 원문(일부):\n${storeText.slice(0, 12000)}`;
+            // 옵션2: 임베딩 + MMR + Map-Reduce 요약
+            const CHUNK_TARGET_SIZE = 1600; // 권장 기본값
+            const TOP_K = 12; // 권장 기본값
+            const MMR_LAMBDA = 0.7; // 권장 기본값
+            const EMBEDDING_MODEL = 'text-embedding-3-small';
+            const CHAT_MODEL = 'gpt-4o-mini';
 
-            console.log('OpenAI 요약 생성 시작...');
-            const r = await this.openai.chat.completions.create({
-                model: 'gpt-4o-mini',
-                temperature: 0.2,
-                messages: [
-                    { role: 'system', content: system },
-                    { role: 'user', content: user },
-                ],
+            // 1) 청크 분할
+            const chunks = chunkText(cleanText, CHUNK_TARGET_SIZE);
+            console.log(`청크 수: ${chunks.length}`);
+
+            // 2) 임베딩 생성
+            console.log('임베딩 생성 시작...');
+            const embRes = await this.openai.embeddings.create({
+                model: EMBEDDING_MODEL,
+                input: chunks,
             });
+            const docVecs: number[][] = embRes.data.map((d: any) => d.embedding as number[]);
+            const vectorDim = docVecs[0]?.length || 0;
+            console.log(`임베딩 차원: ${vectorDim}`);
 
-            const summary = (r.choices[0]?.message?.content || '').trim();
-            if (!summary) {
-                throw new Error('요약 생성 실패');
+            // 2-2) 요약 목적 쿼리 벡터
+            const qEmb = await this.openai.embeddings.create({
+                model: EMBEDDING_MODEL,
+                input: '핵심 경력/기술/성과/직무적합성을 파악하기 위한 요약',
+            });
+            const qVec = qEmb.data[0].embedding as number[];
+
+            // 2-3) MMR로 Top-K 선별
+            const keepIdx = mmr(qVec, docVecs, Math.min(TOP_K, chunks.length), MMR_LAMBDA);
+            const topChunks = keepIdx.map((i) => chunks[i]);
+            console.log(`MMR로 선별된 청크 수: ${topChunks.length}`);
+
+            // 3) Map 단계: 각 청크 요약(JSON bullets)
+            const mapSystem =
+                '너는 채용 담당자다. 각 청크에서 핵심 경력/기술/성과/직무적합성만 bullet로 JSON 배열로 추출하라.';
+            const mapResults: string[] = [];
+            for (const c of topChunks) {
+                const r = await this.openai.chat.completions.create({
+                    model: CHAT_MODEL,
+                    temperature: 0.2,
+                    messages: [
+                        { role: 'system', content: mapSystem },
+                        { role: 'user', content: `청크:\n${c}\n\nJSON 배열로만 답하라.` },
+                    ],
+                });
+                mapResults.push(r.choices[0]?.message?.content ?? '[]');
             }
 
-            console.log('요약 생성 완료, DB 저장 중...');
+            // 4) Reduce 단계: 최종 요약
+            const reducePrompt = `\n아래 bullet JSON 묶음을 통합해, 중복을 제거하고\n"핵심경력/핵심기술/대표성과/직무적합성"이 한눈에 보이게 8~12문장으로 요약하라.\n불필요한 수식어는 배제하라. 한국어로 작성.`;
+            const r2 = await this.openai.chat.completions.create({
+                model: CHAT_MODEL,
+                temperature: 0.2,
+                messages: [
+                    { role: 'system', content: '너는 채용 담당자다.' },
+                    {
+                        role: 'user',
+                        content: `${reducePrompt}\n\n입력(JSON들):\n${mapResults.join('\n')}`,
+                    },
+                ],
+            });
+            const summary = (r2.choices[0]?.message?.content || '').trim();
+            if (!summary) throw new Error('요약 생성 실패(Map-Reduce)');
+
+            // 5) 청크/임베딩 저장: 기존 청크 삭제 후 재삽입
+            await this.db.query(`DELETE FROM resume_file_chunks WHERE file_id = ?`, [id]);
+            console.log('기존 청크 삭제 완료');
+
+            for (let i = 0; i < chunks.length; i++) {
+                const textChunk = chunks[i];
+                const vec = docVecs[i] || [];
+                const f32 = new Float32Array(vec);
+                const buf = Buffer.from(f32.buffer);
+                // 오프셋 추정: cleanText 내 누적 길이 기준
+                // 간단하게 재계산
+                const startOffset =
+                    i === 0 ? 0 : chunks.slice(0, i).join('\n').length + (i > 0 ? 1 : 0);
+                const endOffset = startOffset + textChunk.length;
+                await this.db.execute(
+                    `INSERT INTO resume_file_chunks (file_id, idx, page, start_offset, end_offset, text, vector, vector_dim) VALUES (?,?,?,?,?,?,?,?)`,
+                    [id, i, null, startOffset, endOffset, textChunk, buf, vectorDim || null],
+                );
+            }
+
+            // 6) 요약/원문 저장 및 상태 업데이트
             await this.db.query(
                 `UPDATE resume_files SET text_content=?, summary=?, parse_status='done', error_message=NULL WHERE id=?`,
                 [storeText, summary, id],

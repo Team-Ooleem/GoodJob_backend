@@ -163,3 +163,36 @@ ADD COLUMN calibration_applied TINYINT(1) NOT NULL DEFAULT 0 COMMENT '캘리브�
 ALTER TABLE visual_agg_question
 ADD COLUMN normalized_score DOUBLE NULL COMMENT '캘리브레이션 적용된 정규화 점수' AFTER ended_at_ms,
 ADD COLUMN calibration_applied TINYINT(1) NOT NULL DEFAULT 0 COMMENT '캘리브레이션 적용 여부' AFTER normalized_score;
+
+-- Resume file chunks with optional embeddings for MMR/RAG
+CREATE TABLE IF NOT EXISTS resume_file_chunks (
+  chunk_id     BIGINT PRIMARY KEY AUTO_INCREMENT,
+  file_id      VARCHAR(64) NOT NULL,
+  idx          INT NOT NULL COMMENT '0-based chunk index within file',
+  page         INT NULL COMMENT 'page number if available',
+  start_offset INT NULL COMMENT 'start char offset in full text',
+  end_offset   INT NULL COMMENT 'end char offset in full text',
+  text         MEDIUMTEXT NOT NULL,
+  vector       MEDIUMBLOB NULL COMMENT 'Float32 vector bytes (embedding)',
+  vector_dim   SMALLINT NULL COMMENT 'embedding dimension (e.g., 1536)',
+  created_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_rfc_file FOREIGN KEY (file_id) REFERENCES resume_files(id) ON DELETE CASCADE,
+  UNIQUE KEY uq_rfc_file_idx (file_id, idx),
+  INDEX idx_rfc_file_page (file_id, page)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Optional: fast text search (MySQL 8+ InnoDB supports FULLTEXT)
+-- ALTER TABLE resume_file_chunks ADD FULLTEXT INDEX ftx_rfc_text (text);
+
+-- 문항별 내용/맥락 분석 저장 테이블
+CREATE TABLE IF NOT EXISTS interview_answer_analyses (
+  session_id VARCHAR(64) NOT NULL,
+  question_id VARCHAR(64) NOT NULL,
+  content_analysis_json JSON NULL,
+  context_analysis_json JSON NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (session_id, question_id),
+  CONSTRAINT fk_iaa_q FOREIGN KEY (session_id, question_id)
+    REFERENCES questions(session_id, question_id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
