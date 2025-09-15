@@ -82,8 +82,13 @@ export class AudioMetricsService {
     }
 
     async getPerQuestion(sessionId: string) {
+        // 숫자형 question_id만 포함하고, 숫자 기준 정렬
         return this.db.query<AudioMetricsQuestionRow>(
-            `SELECT * FROM audio_metrics_question WHERE session_id=? ORDER BY question_id`,
+            `SELECT *
+               FROM audio_metrics_question
+              WHERE session_id = ?
+                AND question_id REGEXP '^[0-9]+$'
+              ORDER BY CAST(question_id AS UNSIGNED), question_id`,
             [sessionId],
         );
     }
@@ -132,10 +137,12 @@ export class AudioMetricsService {
             normalized_score: number | null;
             calibration_applied: number;
         }>(
-            `SELECT question_id, normalized_score, calibration_applied 
-             FROM audio_metrics_question 
-             WHERE session_id=? AND normalized_score IS NOT NULL
-             ORDER BY question_id`,
+            `SELECT question_id, normalized_score, calibration_applied
+               FROM audio_metrics_question
+              WHERE session_id = ?
+                AND normalized_score IS NOT NULL
+                AND question_id REGEXP '^[0-9]+$'
+              ORDER BY CAST(question_id AS UNSIGNED), question_id`,
             [sessionId],
         );
 

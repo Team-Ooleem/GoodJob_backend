@@ -52,6 +52,39 @@ export type InterviewAnalysisResult = {
         }>;
         calibrationCoverage?: number; // 정규화 적용 비율
     };
+    // ===== NEW: 텍스트(내용/맥락) LLM 집계 요약 =====
+    text_analysis_summary?: {
+        content_avg100: number; // 문항별 content_score 평균(0-100)
+        context_avg100: number; // 문항별 context_score 평균(0-100)
+        overall_llm10: number; // LLM 텍스트 종합(0-10)
+        top_reasons?: string[]; // 근거 bullet 상위(중복 제거)
+        top_improvements?: string[]; // 개선 팁 상위(중복 제거)
+    };
+    // 프론트 하이라이트용 근거 링크(상위 N개)
+    evidence_links?: Array<{
+        answer_span: string;
+        resume_ref?: string;
+        similarity?: number;
+        explanation?: string;
+    }>;
+};
+
+// ===== NEW: 문항별 텍스트 분석 로우 타입 =====
+type ContentAnalysisRow = {
+    content_score: number; // 0~100
+    reasoning?: string[];
+    improvements?: string[];
+    star?: { situation?: string; task?: string; action?: string; result?: string };
+};
+type ContextAnalysisRow = {
+    context_score: number; // 0~100
+    links?: Array<{
+        answer_span: string;
+        resume_ref?: string;
+        similarity?: number;
+        explanation?: string;
+    }>;
+    consistency?: { contradiction: boolean; notes?: string };
 };
 
 @Injectable()
@@ -62,6 +95,120 @@ export class ReportService {
         private readonly calibration: CalibrationService,
         private readonly db: DatabaseService,
     ) {}
+
+    // ===== NEW: DB에서 문항별 Content/Context 분석 불러오기 =====
+    private async getPerQuestionTextAnalyses(
+        sessionId: string,
+    ): Promise<
+        Array<{ questionId: string; content?: ContentAnalysisRow; context?: ContextAnalysisRow }>
+    > {
+        // questions와 조인하여 order_no 기준 정렬, 없으면 question_id 정렬 폴백
+        const rows = await this.db.query<any>(
+            `SELECT iaa.question_id, iaa.content_analysis_json, iaa.context_analysis_json, q.order_no
+               FROM interview_answer_analyses iaa
+          LEFT JOIN questions q
+                 ON q.session_id = iaa.session_id AND q.question_id = iaa.question_id
+              WHERE iaa.session_id = ?
+           ORDER BY q.order_no ASC, iaa.question_id ASC`,
+            [sessionId],
+        );
+        const out: Array<{
+            questionId: string;
+            content?: ContentAnalysisRow;
+            context?: ContextAnalysisRow;
+        }> = [];
+        for (const r of rows) {
+            let c: ContentAnalysisRow | undefined;
+            let k: ContextAnalysisRow | undefined;
+            try {
+                if (r.content_analysis_json)
+                    c =
+                        typeof r.content_analysis_json === 'string'
+                            ? JSON.parse(r.content_analysis_json)
+                            : r.content_analysis_json;
+            } catch {}
+            try {
+                if (r.context_analysis_json)
+                    k =
+                        typeof r.context_analysis_json === 'string'
+                            ? JSON.parse(r.context_analysis_json)
+                            : r.context_analysis_json;
+            } catch {}
+            out.push({ questionId: String(r.question_id), content: c, context: k });
+        }
+        return out;
+    }
+
+    // ===== NEW: 텍스트 분석 집계 =====
+    private aggregateTextAnalyses(
+        items: Array<{
+            questionId: string;
+            content?: ContentAnalysisRow;
+            context?: ContextAnalysisRow;
+        }>,
+    ) {
+        const contentScores: number[] = [];
+        const contextScores: number[] = [];
+        const reasons: string[] = [];
+        const improvements: string[] = [];
+        const links: Array<{
+            answer_span: string;
+            resume_ref?: string;
+            similarity?: number;
+            explanation?: string;
+        }> = [];
+        let hasContradiction = false;
+
+        for (const it of items) {
+            if (it.content?.content_score != null && isFinite(it.content.content_score)) {
+                contentScores.push(Math.max(0, Math.min(100, it.content.content_score)));
+            }
+            if (it.content?.reasoning?.length) reasons.push(...it.content.reasoning);
+            if (it.content?.improvements?.length) improvements.push(...it.content.improvements);
+
+            if (it.context?.context_score != null && isFinite(it.context.context_score)) {
+                contextScores.push(Math.max(0, Math.min(100, it.context.context_score)));
+            }
+            if (Array.isArray(it.context?.links)) links.push(...(it.context!.links as any));
+            if (it.context?.consistency?.contradiction) hasContradiction = true;
+        }
+
+        const avg = (arr: number[]) =>
+            arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+        const content_avg100 = Math.round(avg(contentScores));
+        const context_avg100 = Math.round(avg(contextScores));
+        const overall_llm10 = Math.round((content_avg100 * 0.6 + context_avg100 * 0.4) / 10);
+
+        const uniq = (xs: string[], limit = 6) => {
+            const seen = new Set<string>();
+            const out: string[] = [];
+            for (const x of xs) {
+                const k = (x || '').trim();
+                if (!k) continue;
+                if (!seen.has(k)) {
+                    seen.add(k);
+                    out.push(k);
+                    if (out.length >= limit) break;
+                }
+            }
+            return out;
+        };
+
+        const evidence_links = links
+            .filter((l) => l && (l as any).answer_span)
+            .sort((a, b) => (b?.similarity ?? 0) - (a?.similarity ?? 0))
+            .slice(0, 10);
+
+        return {
+            content_avg100,
+            context_avg100,
+            overall_llm10,
+            top_reasons: uniq(reasons, 6),
+            top_improvements: uniq(improvements, 6),
+            evidence_links,
+            contradiction: hasContradiction,
+        };
+    }
 
     // ===== Text Analysis (unchanged) =====
 
@@ -451,6 +598,10 @@ export class ReportService {
         const visualScore10 = visual_summary.overallScore10;
         const impression10 = Math.round(audioScore10 * 0.6 + visualScore10 * 0.4);
 
+        // 2.5) ===== NEW: LLM 텍스트(내용/맥락) 집계 =====
+        const perQs = await this.getPerQuestionTextAnalyses(sessionId);
+        const tAgg = this.aggregateTextAnalyses(perQs);
+
         // 3) 전체 점수
         const overall = Math.round(
             completeness10 * 2.5 + specificity10 * 2.5 + logic10 * 2.0 + impression10 * 3.0,
@@ -491,6 +642,15 @@ export class ReportService {
             if (visualScore10 >= 8) strengths.push('자신감 있는 표정과 시선을 유지했습니다.');
         }
 
+        // 5.5) ===== NEW: LLM 텍스트 집계 기반 피드백 보강 =====
+        if (tAgg.content_avg100 >= 80)
+            strengths.push('답변 내용이 질문 의도에 맞고 구조화가 잘 되어 있습니다.');
+        else improvements.push('STAR 구조(상황-과제-행동-결과)로 핵심을 간결히 정리해보세요.');
+        if (tAgg.context_avg100 >= 80) strengths.push('이력서/경력과 답변의 연결이 명확합니다.');
+        else improvements.push('경력/성과와 직접 연결되는 문장을 1~2개 포함하세요.');
+        if (tAgg.contradiction)
+            improvements.push('이전 답변과의 모순을 점검하고 일관된 스토리라인을 유지하세요.');
+
         // 6) 문항별 상세 피드백
         const detailed_feedback: InterviewAnalysisResult['detailed_feedback'] = {};
         for (let i = 0; i < qa.length; i++) {
@@ -529,6 +689,11 @@ export class ReportService {
             recommendations.push('캘리브레이션 대비 음성/영상 품질 개선 필요');
         }
         recommendations.push('핵심 문장을 1~2개로 요약해 마무리');
+        // (선택) LLM 텍스트 요약 기반 권장사항 보강
+        if (tAgg.content_avg100 < 80)
+            recommendations.push('STAR 요소 중 결과(수치)를 명시적으로 포함');
+        if (tAgg.context_avg100 < 80)
+            recommendations.push('이력서의 특정 경험/성과를 직접 인용하여 연결');
 
         return {
             overall_score: Math.max(40, Math.min(98, overall)),
@@ -546,6 +711,15 @@ export class ReportService {
             calibration_info: calibrationInfo,
             audio_summary,
             visual_summary,
+            // ===== NEW: LLM 텍스트 집계 결과를 리포트에 포함 =====
+            text_analysis_summary: {
+                content_avg100: tAgg.content_avg100,
+                context_avg100: tAgg.context_avg100,
+                overall_llm10: tAgg.overall_llm10,
+                top_reasons: tAgg.top_reasons,
+                top_improvements: tAgg.top_improvements,
+            },
+            evidence_links: tAgg.evidence_links,
         };
     }
 
