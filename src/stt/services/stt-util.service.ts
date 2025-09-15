@@ -22,7 +22,7 @@ export class STTUtilService {
     ): MappedSpeakerSegment[] {
         if (!speakers) return [];
         return speakers.map((seg) => ({
-            userId: seg.speakerTag === 1 ? mentorIdx : menteeIdx,
+            userId: seg.speakerTag === 0 ? mentorIdx : menteeIdx,
             text_Content: seg.text_Content,
             startTime: seg.startTime,
             endTime: seg.endTime,

@@ -2,207 +2,201 @@ import { Injectable, Logger } from '@nestjs/common';
 import { GoogleSpeechProvider } from './providers/google-speech';
 import { AudioProcessorUtil } from './utils/audio-processer';
 import { TextProcessorUtil } from './utils/text_processor';
-import { TranscriptionResult, ConnectionTestResult, STTResult } from './entities/transcription';
+import { TranscriptionResult, STTResult } from './entities/transcription';
 import { SpeechPatternsUtil } from './utils/speech-patterms';
+import { PynoteService } from './providers/pynote.service';
 
 @Injectable()
 export class STTService {
     private readonly logger = new Logger(STTService.name);
 
-    constructor(private readonly googleSpeechProvider: GoogleSpeechProvider) {}
+    constructor(
+        private readonly googleSpeechProvider: GoogleSpeechProvider,
+        private readonly pynoteService: PynoteService,
+    ) {}
 
     async transcribeAudioBuffer(
         audioBuffer: Buffer,
         mimeType = 'audio/mp4',
         sessionStartTimeOffset = 0,
         gcsUrl?: string,
+        usePynoteDiarization = false,
     ): Promise<STTResult> {
+        if (usePynoteDiarization && gcsUrl) {
+            return await this.transcribeAudioFromGcs(
+                gcsUrl,
+                mimeType,
+                sessionStartTimeOffset,
+                true,
+            );
+        }
+
+        // 기존 방식
         const base64Data = audioBuffer.toString('base64');
-        return this.transcribeBase64Audio(base64Data, mimeType, sessionStartTimeOffset, gcsUrl);
+        const audioData = this.prepareAudioData(base64Data, gcsUrl);
+        const config = this.createAudioConfig(mimeType);
+        const result = await this.googleSpeechProvider.transcribe(audioData, config, gcsUrl);
+
+        return this.adjustTimings(result, sessionStartTimeOffset);
     }
 
-    async transcribeBase64Audio(
-        base64Data: string,
-        mimeType = 'audio/mp4',
-        sessionStartTimeOffset = 0,
-        gcsUrl?: string,
+    private async transcribeWithPynoteDiarizationFromGcs(
+        gcsUrl: string,
+        mimeType: string,
+        sessionStartTimeOffset: number,
+        canvasId: string,
+        mentorIdx?: number,
+        menteeIdx?: number,
     ): Promise<STTResult> {
         try {
-            const audioData = this.prepareAudioData(base64Data, gcsUrl);
+            this.logger.log('�� pynote GCS 세그먼트 분리 + 세그먼트별 STT 시작');
+
+            // 1. pynote에서 GCS URL로 세그먼트 분리
+            const segmentResult = await this.pynoteService.getSegmentsFromGcs(
+                gcsUrl,
+                canvasId, // 임시 캔버스 ID
+                mentorIdx || 1,
+                menteeIdx || 2,
+                sessionStartTimeOffset,
+            );
+
+            if (!segmentResult.success || segmentResult.segments.length === 0) {
+                throw new Error('pynote 세그먼트 분리 실패');
+            }
+
+            this.logger.log(
+                `✅ pynote 세그먼트 분리 완료: ${segmentResult.segments.length}개 세그먼트`,
+            );
+
+            // 2. 각 세그먼트 버퍼로 STT 실행
+            const allSpeakers: Array<{
+                text_Content: string;
+                startTime: number;
+                endTime: number;
+                speakerTag: number;
+                confidence?: number;
+            }> = [];
+
+            for (let i = 0; i < segmentResult.segments.length; i++) {
+                const segment = segmentResult.segments[i];
+                this.logger.log(
+                    `�� 세그먼트 ${i + 1}/${segmentResult.segments.length} STT 처리 시작`,
+                );
+
+                try {
+                    const audioBuffer = Buffer.from(segment.audioBuffer, 'base64');
+
+                    // Google Speech로 세그먼트 STT 실행
+                    const base64Data = audioBuffer.toString('base64');
+                    const audioData = this.prepareAudioData(base64Data, '');
+                    const config = this.createAudioConfigWithoutDiarization(mimeType);
+                    const sttResult = await this.googleSpeechProvider.transcribe(audioData, config);
+
+                    // 세그먼트 결과를 전체 결과에 추가
+                    if (sttResult.speakers && sttResult.speakers.length > 0) {
+                        for (const speaker of sttResult.speakers) {
+                            allSpeakers.push({
+                                ...speaker,
+                                speakerTag: segment.speakerTag,
+                                startTime:
+                                    sessionStartTimeOffset + segment.startTime + speaker.startTime,
+                                endTime:
+                                    sessionStartTimeOffset + segment.startTime + speaker.endTime,
+                            });
+                        }
+                    } else if (sttResult.transcript) {
+                        // STT 결과가 있지만 speakers가 없는 경우
+                        allSpeakers.push({
+                            text_Content: sttResult.transcript,
+                            speakerTag: segment.speakerTag,
+                            startTime: sessionStartTimeOffset + segment.startTime,
+                            endTime: sessionStartTimeOffset + segment.endTime,
+                            confidence: sttResult.confidence || 0.9,
+                        });
+                    }
+
+                    this.logger.log(`✅ 세그먼트 ${i + 1} STT 완료: "${sttResult.transcript}"`);
+                } catch (segmentError) {
+                    this.logger.error(
+                        `❌ 세그먼트 ${i + 1} STT 실패: ${segmentError instanceof Error ? segmentError.message : String(segmentError)}`,
+                    );
+                    // 실패한 세그먼트는 건너뛰고 계속 진행
+                }
+            }
+
+            this.logger.log(
+                `✅ pynote 세그먼트 분리 + STT 처리 완료: ${allSpeakers.length}개 세그먼트`,
+            );
+
+            return {
+                transcript: allSpeakers.map((s) => s.text_Content).join(' '),
+                confidence: 0.9,
+                speakers: allSpeakers,
+            };
+        } catch (error: unknown) {
+            this.logger.error(
+                `pynote GCS 세그먼트 분리 + STT 처리 실패: ${error instanceof Error ? error.message : String(error)}`,
+            );
+
+            // fallback to Google Speech
+            return await this.transcribeWithGoogleSpeech(gcsUrl, mimeType);
+        }
+    }
+
+    // �� Google Speech 직접 사용 (fallback용)
+    private async transcribeWithGoogleSpeech(gcsUrl: string, mimeType: string): Promise<STTResult> {
+        try {
+            this.logger.log('🔄 Google Speech 직접 사용 (fallback)');
+
+            const audioData = this.prepareAudioData('', gcsUrl);
             const config = this.createAudioConfig(mimeType);
             const result = await this.googleSpeechProvider.transcribe(audioData, config, gcsUrl);
 
-            return this.adjustTimings(result, sessionStartTimeOffset);
-        } catch (error: unknown) {
-            const msg = error instanceof Error ? error.message : String(error);
-            this.logger.error(`STT 변환 실패: ${msg}`);
-            throw new Error(`STT 변환 실패: ${msg}`);
+            return this.adjustTimings(result, 0);
+        } catch (error) {
+            this.logger.error(
+                `Google Speech fallback 실패: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            throw error;
         }
     }
 
-    // 🆕 개선된 시간 정규화 (검증 포함)
-    normalizeTimingsWithValidation(
-        speakers: Array<{
-            text_Content: string;
-            startTime: number;
-            endTime: number;
-            speakerTag: number;
-        }>,
-        actualDuration: number,
-        audioBufferLength?: number,
-    ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
-        if (speakers.length === 0) return speakers;
-
-        const maxSttTime = Math.max(...speakers.map((s) => s.endTime));
-        const scaleFactor = actualDuration / maxSttTime;
-
-        // �� 스케일링 검증
-        if (scaleFactor < 0.1 || scaleFactor > 10.0) {
-            this.logger.warn(
-                `비정상적인 스케일 팩터: ${scaleFactor.toFixed(1)} (duration: ${actualDuration.toFixed(1)}s, maxSttTime: ${maxSttTime.toFixed(1)}s)`,
+    async transcribeAudioFromGcs(
+        gcsUrl: string,
+        mimeType = 'audio/mp4',
+        sessionStartTimeOffset = 0,
+        usePynoteDiarization = true,
+        canvasId?: string,
+        mentorIdx?: number,
+        menteeIdx?: number,
+    ): Promise<STTResult> {
+        if (usePynoteDiarization) {
+            return await this.transcribeWithPynoteDiarizationFromGcs(
+                gcsUrl,
+                mimeType,
+                sessionStartTimeOffset,
+                canvasId || 'resume-room',
+                mentorIdx,
+                menteeIdx,
             );
         }
 
-        // 🆕 파일 크기 기반 추정과 비교 (MP4인 경우)
-        if (audioBufferLength) {
-            const estimatedDuration = audioBufferLength / 16000; // 기본 추정
-            const durationRatio = actualDuration / estimatedDuration;
+        // 기존 방식 (GCS URL 사용)
+        const audioData = this.prepareAudioData('', gcsUrl);
+        const config = this.createAudioConfig(mimeType);
+        const result = await this.googleSpeechProvider.transcribe(audioData, config, gcsUrl);
 
-            if (durationRatio < 0.5 || durationRatio > 2.0) {
-                this.logger.warn(
-                    `Duration 비율 이상: ${durationRatio.toFixed(1)} (실제: ${actualDuration.toFixed(1)}s, 추정: ${estimatedDuration.toFixed(1)}s)`,
-                );
-            }
-        }
-
-        const normalizedSpeakers = speakers.map((speaker) => ({
-            ...speaker,
-            startTime: Math.round(speaker.startTime * scaleFactor * 10) / 10, // 소수점 첫째자리
-            endTime: Math.round(speaker.endTime * scaleFactor * 10) / 10, // 소수점 첫째자리
-        }));
-
-        // 🆕 정규화 결과 검증
-        const normalizedMaxTime = Math.max(...normalizedSpeakers.map((s) => s.endTime));
-        const timeDifference = Math.abs(normalizedMaxTime - actualDuration);
-
-        if (timeDifference > 1.0) {
-            // 1초 이상 차이
-            this.logger.warn(
-                `정규화 후 시간 불일치: ${timeDifference.toFixed(1)}초 (목표: ${actualDuration.toFixed(1)}s, 실제: ${normalizedMaxTime.toFixed(1)}s)`,
-            );
-        }
-
-        this.logger.log(
-            `시간 정규화 완료: ${speakers.length}개 세그먼트, 스케일 팩터: ${scaleFactor.toFixed(1)}`,
-        );
-
-        return normalizedSpeakers;
+        return this.adjustTimings(result, sessionStartTimeOffset);
     }
 
-    // 기존 normalizeTimings 메서드도 유지 (호환성)
-    normalizeTimings(
-        speakers: Array<{
-            text_Content: string;
-            startTime: number;
-            endTime: number;
-            speakerTag: number;
-        }>,
-        actualDuration: number,
-    ): Array<{ text_Content: string; startTime: number; endTime: number; speakerTag: number }> {
-        if (speakers.length === 0) return speakers;
-
-        const maxSttTime = Math.max(...speakers.map((s) => s.endTime));
-        const scaleFactor = actualDuration / maxSttTime;
-
-        // �� 기본 검증 추가
-        if (scaleFactor < 0.1 || scaleFactor > 10.0) {
-            this.logger.warn(`비정상적인 스케일 팩터: ${scaleFactor.toFixed(1)}`);
-        }
-
-        const normalizedSpeakers = speakers.map((speaker) => ({
-            ...speaker,
-            startTime: Math.round(speaker.startTime * scaleFactor * 10) / 10, // 소수점 첫째자리
-            endTime: Math.round(speaker.endTime * scaleFactor * 10) / 10, // 소수점 첫째자리
-        }));
-
-        this.logger.log(
-            `시간 정규화 완료: ${speakers.length}개 세그먼트, 스케일 팩터: ${scaleFactor.toFixed(1)}`,
-        );
-
-        return normalizedSpeakers;
-    }
-
-    // 🆕 STT 결과 품질 검증
-    validateSTTResultQuality(
-        result: STTResult,
-        expectedDuration?: number,
-    ): {
-        isValid: boolean;
-        confidence: number;
-        issues: string[];
-    } {
-        const issues: string[] = [];
-        let confidence = 1.0;
-
-        // 1. 기본 신뢰도 검증
-        if (result.confidence < 0.5) {
-            issues.push(`낮은 STT 신뢰도: ${(result.confidence * 100).toFixed(1)}%`);
-            confidence *= 0.5;
-        }
-
-        // 2. 스피커 세그먼트 검증
-        if (result.speakers && result.speakers.length > 0) {
-            // 시간 순서 검증
-            for (let i = 1; i < result.speakers.length; i++) {
-                if (result.speakers[i].startTime < result.speakers[i - 1].endTime) {
-                    issues.push(`시간 순서 문제: 세그먼트 ${i}가 이전 세그먼트와 겹침`);
-                    confidence *= 0.8;
-                }
-            }
-
-            // 예상 duration과 비교
-            if (expectedDuration && expectedDuration > 0) {
-                const maxTime = Math.max(...result.speakers.map((s) => s.endTime));
-                const timeDifference = Math.abs(maxTime - expectedDuration);
-                const timeRatio = timeDifference / expectedDuration;
-
-                if (timeRatio > 0.2) {
-                    issues.push(
-                        `시간 불일치: STT 최대시간 ${maxTime.toFixed(1)}s vs 예상 ${expectedDuration.toFixed(1)}s`,
-                    );
-                    confidence *= 0.7;
-                }
-            }
-
-            // 스피커 태그 검증
-            const speakerTags = new Set(result.speakers.map((s) => s.speakerTag));
-            if (speakerTags.size > 2) {
-                issues.push(`스피커 수 이상: ${speakerTags.size}명 감지됨`);
-                confidence *= 0.9;
-            }
-        }
-
+    // 🆕 화자분리 비활성화된 설정 생성
+    private createAudioConfigWithoutDiarization(mimeType: string) {
+        const baseConfig = this.createAudioConfig(mimeType);
         return {
-            isValid: confidence > 0.6,
-            confidence,
-            issues,
-        };
-    }
-
-    async testConnection(): Promise<ConnectionTestResult> {
-        return this.googleSpeechProvider.testConnection();
-    }
-
-    createSampleResult(): STTResult {
-        return {
-            transcript: '안녕하세요. 구글 STT 테스트입니다.',
-            confidence: 0.95,
-            speakers: [
-                { text_Content: '안녕하세요', startTime: 0.5, endTime: 1.2, speakerTag: 1 },
-                { text_Content: '구글', startTime: 2.0, endTime: 2.3, speakerTag: 1 },
-                { text_Content: 'STT', startTime: 2.4, endTime: 2.7, speakerTag: 2 },
-                { text_Content: '테스트입니다', startTime: 2.8, endTime: 3.5, speakerTag: 2 },
-            ],
+            ...baseConfig,
+            enableSpeakerDiarization: false, // 화자분리 비활성화
+            diarizationSpeakerCount: 0,
+            enableWordTimeOffsets: true, // ← 이 줄 추가!
         };
     }
 
@@ -245,7 +239,11 @@ export class STTService {
             languageCode: 'ko-KR',
             enableSpeakerDiarization: true,
             diarizationSpeakerCount: 2,
-            enableAutomaticPunctuation: false,
+            enableAutomaticPunctuation: true,
+            minSpeakerCount: 2,
+            maxSpeakerCount: 2,
+            enableWordTimeOffsets: true, // 🆕 추가
+            useEnhanced: true,
             maxAlternatives: 1,
             speechContexts: SpeechPatternsUtil.SPEECH_CONTEXTS,
         };
@@ -277,18 +275,6 @@ export class STTService {
             confidence: result.confidence,
             speakers: speakers,
         };
-
-        // 🆕 STT 결과 품질 검증
-        const qualityCheck = this.validateSTTResultQuality(sttResult);
-        if (!qualityCheck.isValid) {
-            this.logger.warn(
-                `STT 결과 품질 경고: ${qualityCheck.issues.join(', ')} (신뢰도: ${(qualityCheck.confidence * 100).toFixed(1)}%)`,
-            );
-        } else {
-            this.logger.log(
-                `STT 결과 품질 양호 (신뢰도: ${(qualityCheck.confidence * 100).toFixed(1)}%)`,
-            );
-        }
 
         return sttResult;
     }

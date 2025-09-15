@@ -45,4 +45,21 @@ export default registerAs('app', () => ({
         secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
         bucketName: process.env.AWS_BUCKET_NAME || '',
     },
+
+    // Pynote 설정
+    pynote: {
+        apiKey: process.env.PYNOTE_API_KEY || '',
+        serviceUrl: process.env.AUDIO_API_BASE || 'http://localhost:8081',
+    },
+
+    // STT 설정
+    stt: {
+        apiKey: process.env.GOOGLE_APPLICATION_CREDENTIALS || '',
+    },
+
+    // GCP 설정
+    gcp: {
+        credentials: process.env.GOOGLE_APPLICATION_CREDENTIALS || '',
+        bucketName: process.env.GCP_BUCKET_NAME || '',
+    },
 }));

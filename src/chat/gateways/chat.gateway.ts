@@ -17,6 +17,7 @@ import { ChatService } from '../services/chat.service';
             'http://localhost:3000',
             'http://localhost:4000',
             'https://localhost:3443',
+            'http://172.21.101.139:3000',
         ],
         credentials: true,
     },
@@ -176,5 +177,19 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
      */
     broadcastToAll(event: string, data: any) {
         this.server.emit(event, data);
+    }
+
+    @SubscribeMessage('recordingStatus')
+    handleRecordingStatus(
+        client: Socket,
+        payload: { room: string; isRecording: boolean; userId: number },
+    ) {
+        const { room, isRecording, userId } = payload;
+        console.log(
+            `🎤 녹음 상태 변경: User ${userId} - ${isRecording ? '시작' : '중지'} in ${room}`,
+        );
+
+        // 같은 방의 다른 사용자들에게 전달
+        client.to(room).emit('recordingStatus', { isRecording, userId });
     }
 }
