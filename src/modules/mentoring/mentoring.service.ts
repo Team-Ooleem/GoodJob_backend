@@ -27,11 +27,78 @@ import {
     MentoringProductListQueryDto,
 } from './dto/product-list.dto';
 import { MentorProductsResponseDto } from './dto/mentor-products.dto';
+import { MentorScopedProductResponseDto } from './dto/mentor-product.dto';
 import { DatabaseService } from '@/database/database.service';
 
 @Injectable()
 export class MentoringService {
     constructor(private readonly databaseService: DatabaseService) {}
+    async getMentorProduct(
+        mentorIdx: number,
+        productIdx: number,
+    ): Promise<MentorScopedProductResponseDto> {
+        // 멘토 + 상품 단건 조회 (멘토 소유 검증 포함)
+        const row = await this.databaseService.queryOne<{
+            mentor_idx: number;
+            mentor_name: string;
+            business_name: string;
+            mentor_job_category: string;
+            product_idx: number;
+            title: string;
+            description: string;
+            product_job_category: string;
+            price: any;
+            is_active: number;
+            created_at: Date;
+            updated_at: Date;
+        }>(
+            `SELECT 
+                 mp.mentor_idx,
+                 u.name AS mentor_name,
+                 mp.business_name,
+                 jc_m.name AS mentor_job_category,
+                 p.product_idx,
+                 p.title,
+                 p.description,
+                 jc_p.name AS product_job_category,
+                 p.price,
+                 p.is_active,
+                 p.created_at,
+                 p.updated_at
+               FROM mentoring_products p
+               JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
+               JOIN users u ON mp.user_idx = u.idx
+               JOIN job_category jc_m ON mp.preferred_field_id = jc_m.id
+               JOIN job_category jc_p ON p.job_category_id = jc_p.id
+              WHERE p.mentor_idx = ?
+                AND p.product_idx = ?
+              LIMIT 1`,
+            [mentorIdx, productIdx],
+        );
+
+        if (!row) {
+            throw new NotFoundException('멘토 또는 상품을 찾을 수 없습니다.');
+        }
+
+        return {
+            mentor: {
+                mentor_idx: row.mentor_idx,
+                mentor_name: row.mentor_name,
+                business_name: row.business_name,
+                job_category: row.mentor_job_category,
+            },
+            product: {
+                product_idx: row.product_idx,
+                title: row.title,
+                description: row.description,
+                job_category: row.product_job_category,
+                price: Number(row.price),
+                is_active: Number(row.is_active) === 1,
+                created_at: row.created_at ? new Date(row.created_at).toISOString() : '',
+                updated_at: row.updated_at ? new Date(row.updated_at).toISOString() : '',
+            },
+        };
+    }
     async getMentorProducts(mentorIdx: number): Promise<MentorProductsResponseDto> {
         // 1) 멘토 정보 조회
         const mentorRow = await this.databaseService.queryOne<{
