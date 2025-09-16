@@ -38,43 +38,75 @@ export class GoogleSpeechProvider implements SpeechProvider {
         if (!this.speechClient) return this.createSampleResult();
 
         try {
+            // 동적으로 sampleRateHertz를 포함/제외하기 위한 구성
+            const baseConfig: any = {
+                // 기본 오디오 설정
+                encoding: config.encoding as 'LINEAR16' | 'MP3' | 'WEBM_OPUS' | 'FLAC',
+                languageCode: 'ko-KR', // 한국어 고정
+                audioChannelCount: 1,
+
+                // 2시간 연결을 위한 긴 오디오 모델
+                model: 'latest_long',
+                useEnhanced: true,
+
+                // 화자 분리 설정 (한국어 대화용)
+                enableSpeakerDiarization: config.enableSpeakerDiarization || false, // pynote 사용 시 false
+                diarizationSpeakerCount: config.diarizationSpeakerCount || 0, // pynote 사용 시 0
+                diarizationConfig: {
+                    minSpeakerCount: 2,
+                    maxSpeakerCount: 2,
+                },
+
+                // 한국어 인식 개선
+                enableWordConfidence: true,
+                enableWordTimeOffsets: true,
+                enableAutomaticPunctuation: true,
+
+                // 대화용 성능 최적화
+                maxAlternatives: 1, // 안정적인 결과를 위해 1개로 제한
+                profanityFilter: false,
+                enableSeparateRecognitionPerChannel: false,
+
+                // speech-patterms.ts의 사전 사용
+                speechContexts: [
+                    ...SpeechPatternsUtil.SPEECH_CONTEXTS,
+                    ...(config.speechContexts || []),
+                ],
+            };
+
+            // sampleRateHertz 처리 규칙:
+            // - LINEAR16(WAV/RAW)인 경우만 설정 시도
+            // - base64 콘텐츠가 있고 WAV 헤더에서 추출 가능한 경우 헤더 값을 사용
+            // - 그 외(웹m/opus, mp3, flac, GCS URI)는 명시하지 않음 → 헤더/메타에서 자동 추론
+            if (baseConfig.encoding === 'LINEAR16') {
+                let detectedSampleRate: number | undefined;
+                if (!gcsUrl && audioData) {
+                    try {
+                        const buf = Buffer.from(audioData, 'base64');
+                        // 간단한 WAV 헤더 파싱: 24~27 바이트에 sampleRate (리틀엔디언)
+                        if (
+                            buf.length >= 28 &&
+                            buf.slice(0, 4).toString('ascii') === 'RIFF' &&
+                            buf.slice(8, 12).toString('ascii') === 'WAVE'
+                        ) {
+                            detectedSampleRate = buf.readUInt32LE(24);
+                        }
+                    } catch {
+                        // 무시하고 config 값 사용/혹은 생략
+                    }
+
+                    if (detectedSampleRate && detectedSampleRate > 0) {
+                        baseConfig.sampleRateHertz = detectedSampleRate;
+                    } else if (config.sampleRate && config.sampleRate > 0) {
+                        baseConfig.sampleRateHertz = config.sampleRate;
+                    }
+                }
+                // gcsUrl인 경우는 sampleRateHertz를 명시하지 않음 (서버가 헤더에서 추론)
+            }
+
             const request = {
                 audio: gcsUrl ? { uri: this.convertToGcsUri(gcsUrl) } : { content: audioData },
-                config: {
-                    // 기본 오디오 설정
-                    encoding: config.encoding as 'LINEAR16' | 'MP3' | 'WEBM_OPUS' | 'FLAC',
-                    sampleRateHertz: config.sampleRate,
-                    languageCode: 'ko-KR', // 한국어 고정
-                    audioChannelCount: 1,
-
-                    // 2시간 연결을 위한 긴 오디오 모델
-                    model: 'latest_long',
-                    useEnhanced: true,
-
-                    // 화자 분리 설정 (한국어 대화용)
-                    enableSpeakerDiarization: config.enableSpeakerDiarization || false, // pynote 사용 시 false
-                    diarizationSpeakerCount: config.diarizationSpeakerCount || 0, // pynote 사용 시 0
-                    diarizationConfig: {
-                        minSpeakerCount: 2,
-                        maxSpeakerCount: 2,
-                    },
-
-                    // 한국어 인식 개선
-                    enableWordConfidence: true,
-                    enableWordTimeOffsets: true,
-                    enableAutomaticPunctuation: true, // 자동 구두점 끄기 - 자연스러운 문장을 위해
-
-                    // 대화용 성능 최적화
-                    maxAlternatives: 1, // 안정적인 결과를 위해 1개로 제한
-                    profanityFilter: false,
-                    enableSeparateRecognitionPerChannel: false,
-
-                    // speech-patterms.ts의 사전 사용
-                    speechContexts: [
-                        ...SpeechPatternsUtil.SPEECH_CONTEXTS,
-                        ...(config.speechContexts || []),
-                    ],
-                },
+                config: baseConfig,
             };
 
             const operation = await this.speechClient.longRunningRecognize(request);

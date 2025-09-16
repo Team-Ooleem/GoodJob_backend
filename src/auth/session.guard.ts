@@ -24,6 +24,7 @@ export class SessionGuard implements CanActivate {
             '/api/auth/logout',
             '/api/auth/me',
             '/api/auth/cookie-check',
+            '/api/mentoring-products',
         ];
 
         if (
@@ -38,8 +39,9 @@ export class SessionGuard implements CanActivate {
             (req.path as string).startsWith('/api/mentors/') ||
             // TODO: mentees 엔드포인트(신청 조회) 임시 공개. 인증 연동 후 제거할 것.
             (req.path as string).startsWith('/api/mentees/') ||
-            // TODO: mentoring-applications 임시 공개. 인증 연동 후 제거할 것.
-            (req.path as string).startsWith('/api/mentoring-applications/')
+            // mentoring-applications 중 my/mentor-idx는 인증 필요, 나머지만 공개
+            ((req.path as string).startsWith('/api/mentoring-applications/') &&
+                !(req.path as string).includes('/my/mentor-idx'))
         ) {
             // 비로그인 접근 시, 의존 로직을 위해 guest 사용자 idx를 0으로 설정
             if (!req.user_idx) {
