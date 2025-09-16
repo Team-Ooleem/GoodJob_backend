@@ -13,9 +13,9 @@ export class SessionGuard implements CanActivate {
         console.log('🔍 [SessionGuard] 요청 정보:');
         console.log('  - Path:', req.path);
         console.log('  - Method:', req.method);
-        console.log('  - Headers:', JSON.stringify(req.headers, null, 2));
-        console.log('  - Cookies:', JSON.stringify(req.cookies, null, 2));
-        console.log('  - Raw Headers:', req.rawHeaders);
+        // console.log('  - Headers:', JSON.stringify(req.headers, null, 2));
+        // console.log('  - Cookies:', JSON.stringify(req.cookies, null, 2));
+        // console.log('  - Raw Headers:', req.rawHeaders);
 
         // 인증이 필요하지 않은 경로들
         const publicPaths = [

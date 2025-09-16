@@ -10,7 +10,7 @@ export class PynoteService {
 
     constructor() {
         this.serviceUrl = process.env.PYNOTE_SERVICE_URL || 'http://localhost:8081';
-        this.apiKey = process.env.PYNOTE_API_KEY || '';
+        this.apiKey = process.env.HF_TOKEN || '';
 
         // 초기화 로그 추가
         this.logger.log(`PynoteService 초기화 완료 - URL: ${this.serviceUrl}`);
