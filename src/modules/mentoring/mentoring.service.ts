@@ -26,11 +26,66 @@ import {
     MentoringProductListItemDto,
     MentoringProductListQueryDto,
 } from './dto/product-list.dto';
+import { MentorProductsResponseDto } from './dto/mentor-products.dto';
 import { DatabaseService } from '@/database/database.service';
 
 @Injectable()
 export class MentoringService {
     constructor(private readonly databaseService: DatabaseService) {}
+    async getMentorProducts(mentorIdx: number): Promise<MentorProductsResponseDto> {
+        // 1) 멘토 정보 조회
+        const mentorRow = await this.databaseService.queryOne<{
+            mentor_idx: number;
+            mentor_name: string;
+        }>(
+            `SELECT mp.mentor_idx, u.name AS mentor_name
+               FROM mentor_profiles mp
+               JOIN users u ON mp.user_idx = u.idx
+              WHERE mp.mentor_idx = ?
+              LIMIT 1`,
+            [mentorIdx],
+        );
+
+        if (!mentorRow) {
+            throw new NotFoundException('해당 멘토를 찾을 수 없습니다.');
+        }
+
+        // 2) 멘토의 멘토링 상품 목록 조회
+        const productRows = await this.databaseService.query<{
+            product_idx: number;
+            title: string;
+            job_category: string;
+            price: any;
+            is_active: number;
+            created_at: Date;
+        }>(
+            `SELECT 
+                 p.product_idx,
+                 p.title,
+                 jc.name AS job_category,
+                 p.price,
+                 p.is_active,
+                 p.created_at
+               FROM mentoring_products p
+               JOIN job_category jc ON p.job_category_id = jc.id
+              WHERE p.mentor_idx = ?
+              ORDER BY p.created_at DESC`,
+            [mentorIdx],
+        );
+
+        return {
+            mentor_idx: mentorRow.mentor_idx,
+            mentor_name: mentorRow.mentor_name,
+            products: productRows.map((r) => ({
+                product_idx: r.product_idx,
+                title: r.title,
+                job_category: r.job_category,
+                price: Number(r.price),
+                is_active: Number(r.is_active) === 1,
+                created_at: r.created_at ? new Date(r.created_at).toISOString() : '',
+            })),
+        };
+    }
     async getProduct(productIdx: number): Promise<MentoringProductDto> {
         /*
         SELECT 
