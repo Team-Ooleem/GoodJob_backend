@@ -1,4 +1,4 @@
-import { IsArray, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QADto {
@@ -14,4 +14,13 @@ export class AnalyzeReportDto {
     @ValidateNested({ each: true })
     @Type(() => QADto)
     qa!: QADto[];
+
+    // LLM 기반 내용/맥락 점수(0~100), 선택 전달
+    @IsOptional()
+    @IsNumber()
+    llmContentScore?: number;
+
+    @IsOptional()
+    @IsNumber()
+    llmContextScore?: number;
 }
