@@ -37,8 +37,12 @@ export class ResumeFileController {
     async parse(@Param('id') id: string, @Req() req: any) {
         const userId = Number(req.user_idx ?? req.user?.idx);
         if (!userId) throw new BadRequestException('unauthorized');
-        await this.svc.parseAndSummarizeAsync(id, userId);
-        return { accepted: true };
+        const result = await this.svc.parseAndSummarize(id, userId);
+        return {
+            accepted: true,
+            textLength: result.textLen,
+            summary: result.summary,
+        };
     }
 
     // List my uploaded resume files
