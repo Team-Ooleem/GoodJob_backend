@@ -5,9 +5,10 @@ import { MetricsModule } from '../metrics/metrics.module';
 import { AudioMetricsService } from '../audio-metrics/audio-metrics.service';
 import { DatabaseModule } from '../../database/database.module';
 import { CalibrationModule } from '../calibration/calibration.module';
+import { OpenAIModule } from '../openai/openai.module';
 
 @Module({
-    imports: [MetricsModule, DatabaseModule, CalibrationModule],
+    imports: [MetricsModule, DatabaseModule, CalibrationModule, OpenAIModule],
     controllers: [ReportController],
     providers: [ReportService, AudioMetricsService],
     exports: [ReportService],

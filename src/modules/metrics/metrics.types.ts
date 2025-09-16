@@ -25,13 +25,6 @@ export type QuestionVisualAggregate = {
     // level 분포
     level_dist: Record<'ok' | 'info' | 'warning' | 'critical', number>;
 
-    // 랜드마크 평균(존재하는 것만)
-    landmarks_mean?: {
-        leftEye?: { x: number; y: number };
-        rightEye?: { x: number; y: number };
-        nose?: { x: number; y: number };
-    };
-
     // 샘플 시간 범위(선택)
     startedAt?: number;
     endedAt?: number;
@@ -39,7 +32,5 @@ export type QuestionVisualAggregate = {
 
 export type SessionVisualAggregate = {
     perQuestion: Record<string, QuestionVisualAggregate>;
-    overall: Omit<QuestionVisualAggregate, 'landmarks_mean'> & {
-        // 전체는 랜드마크 평균은 생략(질문별에만 보관), 필요 시 가중 평균으로 계산 가능
-    };
+    overall: QuestionVisualAggregate;
 };

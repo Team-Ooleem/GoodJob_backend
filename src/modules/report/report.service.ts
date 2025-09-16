@@ -3,22 +3,30 @@ import { MetricsService, SessionVisualAggregate } from '../metrics/metrics.servi
 import { AudioMetricsService, AudioFeatures } from '../audio-metrics/audio-metrics.service';
 import { CalibrationService } from '../calibration/calibration.service';
 import { DatabaseService } from '../../database/database.service';
-
-type QAPair = { question: string; answer: string };
+import { AnalyzeReportDto } from './dto/analyze-report.dto';
+import { OpenAIService } from '@/modules/openai/openai.service';
 
 export type InterviewAnalysisResult = {
-    overall_score: number;
+    overall_score: number; // 0~100 (내용30 + 맥락30 + 표현40)
     detailed_scores: {
-        completeness: number;
-        specificity: number;
-        logic: number;
-        impression: number;
+        content30: number;
+        context30: number;
+        expression40: number;
     };
-    strengths: string[];
-    improvements: string[];
-    detailed_feedback: Record<string, { score: number; feedback: string }>;
-    overall_evaluation: string;
-    recommendations: string[];
+    expression_indices: {
+        confidence: number;
+        clarity: number;
+        engagement: number;
+        composure: number;
+        professionalism: number;
+        consistency: number;
+        reliabilityWeight?: number;
+    };
+    strengths?: string[];
+    improvements?: string[];
+    detailed_feedback?: Record<string, { score: number; feedback: string; question?: string }>;
+    overall_evaluation?: string;
+    recommendations?: string[];
     calibration_info?: {
         audio_calibrated: boolean;
         visual_calibrated: boolean;
@@ -67,6 +75,8 @@ export type InterviewAnalysisResult = {
         similarity?: number;
         explanation?: string;
     }>;
+    // ===== NEW: 이력서 요약 기반 1분 자기소개 대본 =====
+    self_intro_script?: string;
 };
 
 // ===== NEW: 문항별 텍스트 분석 로우 타입 =====
@@ -94,6 +104,7 @@ export class ReportService {
         private readonly audio: AudioMetricsService,
         private readonly calibration: CalibrationService,
         private readonly db: DatabaseService,
+        private readonly openai: OpenAIService,
     ) {}
 
     // ===== NEW: DB에서 문항별 Content/Context 분석 불러오기 =====
@@ -210,50 +221,85 @@ export class ReportService {
         };
     }
 
-    // ===== Text Analysis (unchanged) =====
+    // ===== NEW: 세션 사용자 이력서 요약 조회 =====
+    private async getResumeSummaryForSession(sessionId: string): Promise<string | null> {
+        try {
+            const sess = await this.db.queryOne<any>(
+                `SELECT user_id FROM interview_sessions WHERE session_id = ?`,
+                [sessionId],
+            );
+            const userId = sess?.user_id as number | undefined;
+            if (!userId) return null;
 
-    private countConnectors(text: string) {
-        const connectors = [
-            '그래서',
-            '따라서',
-            '왜냐하면',
-            '때문에',
-            '하지만',
-            '그러나',
-            '또한',
-            '그리고',
-            '결과적으로',
-            '먼저',
-            '다음으로',
-            '마지막으로',
-        ];
-        let n = 0;
-        for (const c of connectors) {
-            const re = new RegExp(c, 'g');
-            n += (text.match(re) || []).length;
+            const bySummary = await this.db.queryOne<any>(
+                `SELECT summary FROM resume_files 
+                 WHERE user_id = ? AND summary IS NOT NULL AND CHAR_LENGTH(summary) >= 10
+                 ORDER BY created_at DESC LIMIT 1`,
+                [userId],
+            );
+            if (bySummary?.summary && String(bySummary.summary).trim().length >= 10) {
+                return String(bySummary.summary).trim();
+            }
+
+            const byText = await this.db.queryOne<any>(
+                `SELECT text_content FROM resume_files 
+                 WHERE user_id = ? AND text_content IS NOT NULL AND CHAR_LENGTH(text_content) >= 50
+                 ORDER BY created_at DESC LIMIT 1`,
+                [userId],
+            );
+            if (byText?.text_content) {
+                return String(byText.text_content).trim();
+            }
+            return null;
+        } catch {
+            return null;
         }
-        return n;
     }
 
-    private wordStats(text: string) {
-        const tokens = (text || '').trim().split(/\s+/).filter(Boolean);
-        const total = tokens.length;
-        const unique = new Set(tokens).size;
-        const longWords = tokens.filter((w) => w.length >= 4).length;
-        const digitCount = ((text || '').match(/[0-9]/g) || []).length;
-        return {
-            total,
-            unique,
-            longWords,
-            digitCount,
-            connectors: this.countConnectors(text || ''),
-        };
+    // ===== NEW: OpenAI 기반 1분 자기소개 대본 생성 =====
+    private async generateSelfIntroWithOpenAI(summary: string): Promise<string> {
+        const sys =
+            '너는 지원자의 이력서 요약을 토대로 1분 자기소개 대본을 작성하는 코치다. ' +
+            '한국어 정중체 1인칭으로, 불릿 없이 자연스러운 단락 문장만 출력한다. ' +
+            '출력은 순수 본문만, JSON/머리말/주석 금지.';
+        const user =
+            `이력서 요약:\n${summary}\n\n` +
+            '요구사항:\n' +
+            '- 분량: 한국어 250~700자 내외(약 45~60초)\n' +
+            '- 구성: 인사→강점/핵심역량→정량 성과(있으면)→기술/도메인 역량→입사 후 기여→맺음말\n' +
+            '- 톤: 명료하고 간결, 구체적 수치 포함 선호, 회사명/직무명 특정 금지\n' +
+            '- 출력: 본문만. 불릿/제목/따옴표/코드블록 금지';
+
+        const content = await this.openai.chat([
+            { role: 'system', content: sys },
+            { role: 'user', content: user },
+        ]);
+        const cleaned = String(content || '')
+            .replace(/^\s*```[\s\S]*?```\s*$/g, '')
+            .replace(/^\s*"|"\s*$/g, '')
+            .replace(/^[\s\uFEFF\u200B]+|[\s\uFEFF\u200B]+$/g, '')
+            .trim();
+        return cleaned;
     }
 
-    private scale01(x: number, a: number, b: number) {
-        if (b <= a) return 0;
-        const t = (x - a) / (b - a);
-        return Math.max(0, Math.min(1, t));
+    // ===== Helpers =====
+    private clamp(x: number, a: number, b: number) {
+        return Math.max(a, Math.min(b, x));
+    }
+    private toPct01(x: number | null | undefined) {
+        if (x == null || !isFinite(x)) return 0;
+        return this.clamp(x, 0, 1) * 100;
+    }
+
+    // Legacy helper stubs kept for compatibility (not used in new scoring)
+    private countConnectors(_text: string) {
+        return 0;
+    }
+    private wordStats(_text: string) {
+        return { total: 0, unique: 0, longWords: 0, digitCount: 0, connectors: 0 } as any;
+    }
+    private scale01(_x: number, _a: number, _b: number) {
+        return 0;
     }
 
     // ===== NEW: Calibration-aware scoring =====
@@ -565,153 +611,287 @@ export class ReportService {
 
     private async computeEnhancedReport(
         sessionId: string,
-        qa: QAPair[],
+        qa: any[],
     ): Promise<InterviewAnalysisResult> {
-        // 1) 텍스트 기반 점수 (기존 로직 유지)
-        const stats = qa.map((q) => this.wordStats(q.answer || ''));
-        const avgWords = stats.length ? stats.reduce((a, s) => a + s.total, 0) / stats.length : 0;
-        const avgUniqueRatio = stats.length
-            ? stats.reduce((a, s) => a + (s.total ? s.unique / s.total : 0), 0) / stats.length
-            : 0;
-        const avgConnectors = stats.length
-            ? stats.reduce((a, s) => a + s.connectors, 0) / stats.length
-            : 0;
-        const avgDigits = stats.length
-            ? stats.reduce((a, s) => a + s.digitCount, 0) / stats.length
-            : 0;
+        // 사용 중단된 레거시 진입점: 신규 점수 체계로 위임
+        return this.computeNewReport(sessionId);
 
-        const completeness10 = Math.round(4 + this.scale01(avgWords, 30, 120) * 6);
-        const specificity10 = Math.round(
-            Math.min(
-                10,
-                2 + avgDigits * 1.5 + avgUniqueRatio * 5 + this.scale01(avgWords, 40, 100) * 2,
-            ),
-        );
-        const logic10 = Math.round(
-            Math.min(10, 3 + avgConnectors * 2 + this.scale01(avgWords, 40, 100) * 3),
-        );
+        // // 1) 텍스트 기반 점수 (기존 로직 유지)
+        // const stats = qa.map((q) => this.wordStats(q.answer || ''));
+        // const avgWords = stats.length ? stats.reduce((a, s) => a + s.total, 0) / stats.length : 0;
+        // const avgUniqueRatio = stats.length
+        //     ? stats.reduce((a, s) => a + (s.total ? s.unique / s.total : 0), 0) / stats.length
+        //     : 0;
+        // const avgConnectors = stats.length
+        //     ? stats.reduce((a, s) => a + s.connectors, 0) / stats.length
+        //     : 0;
+        // const avgDigits = stats.length
+        //     ? stats.reduce((a, s) => a + s.digitCount, 0) / stats.length
+        //     : 0;
 
-        // 2) 캘리브레이션 기반 인상 점수 + 음성/영상 요약(서브점수 포함)
-        const audio_summary = await this.getAudioSummary(sessionId);
-        const visual_summary = await this.getVisualSummary(sessionId);
-        const audioScore10 = audio_summary.overallScore10;
-        const visualScore10 = visual_summary.overallScore10;
-        const impression10 = Math.round(audioScore10 * 0.6 + visualScore10 * 0.4);
+        // const completeness10 = Math.round(4 + this.scale01(avgWords, 30, 120) * 6);
+        // const specificity10 = Math.round(
+        //     Math.min(
+        //         10,
+        //         2 + avgDigits * 1.5 + avgUniqueRatio * 5 + this.scale01(avgWords, 40, 100) * 2,
+        //     ),
+        // );
+        // const logic10 = Math.round(
+        //     Math.min(10, 3 + avgConnectors * 2 + this.scale01(avgWords, 40, 100) * 3),
+        // );
 
-        // 2.5) ===== NEW: LLM 텍스트(내용/맥락) 집계 =====
+        // // 2) 캘리브레이션 기반 인상 점수 + 음성/영상 요약(서브점수 포함)
+        // const audio_summary = await this.getAudioSummary(sessionId);
+        // const visual_summary = await this.getVisualSummary(sessionId);
+        // const audioScore10 = audio_summary.overallScore10;
+        // const visualScore10 = visual_summary.overallScore10;
+        // const impression10 = Math.round(audioScore10 * 0.6 + visualScore10 * 0.4);
+
+        // // 2.5) ===== NEW: LLM 텍스트(내용/맥락) 집계 =====
+        // const perQs = await this.getPerQuestionTextAnalyses(sessionId);
+        // const tAgg = this.aggregateTextAnalyses(perQs);
+
+        // // 3) 전체 점수
+        // const overall = Math.round(
+        //     completeness10 * 2.5 + specificity10 * 2.5 + logic10 * 2.0 + impression10 * 3.0,
+        // );
+
+        // // 4) 캘리브레이션 정보
+        // const calibrationInfo = await this.getCalibrationInfo(sessionId);
+
+        // // 5) 강점/개선사항 (캘리브레이션 고려)
+        // const strengths: string[] = [];
+        // const improvements: string[] = [];
+
+        // if (completeness10 >= 8) strengths.push('답변 길이와 구성의 균형이 좋습니다.');
+        // else improvements.push('핵심-근거-사례 순서로 내용을 조금 더 확장하세요.');
+
+        // if (specificity10 >= 8) strengths.push('수치·사례 등 구체적 근거가 잘 나타납니다.');
+        // else improvements.push('숫자(성과, 지표)나 구체 사례를 1개 이상 포함하세요.');
+
+        // if (logic10 >= 8) strengths.push('접속어 활용이 적절해 논리 전개가 매끄럽습니다.');
+        // else improvements.push('따라서/왜냐하면 등 연결어로 흐름을 명확히 하세요.');
+
+        // // 캘리브레이션 기반 피드백
+        // if (calibrationInfo.calibration_applied) {
+        //     if (audioScore10 >= 8) {
+        //         strengths.push('평상시보다 음성이 안정적이고 명확했습니다.');
+        //     } else if (audioScore10 <= 6) {
+        //         improvements.push('캘리브레이션 대비 음성 품질 개선이 필요합니다.');
+        //     }
+
+        //     if (visualScore10 >= 8) {
+        //         strengths.push('평상시보다 자신감 있고 집중된 모습을 보였습니다.');
+        //     } else if (visualScore10 <= 6) {
+        //         improvements.push('캘리브레이션 대비 표정/자세 개선이 필요합니다.');
+        //     }
+        // } else {
+        //     // 폴백 피드백
+        //     if (audioScore10 >= 8) strengths.push('목소리 톤과 속도가 적절합니다.');
+        //     if (visualScore10 >= 8) strengths.push('자신감 있는 표정과 시선을 유지했습니다.');
+        // }
+
+        // // 5.5) ===== NEW: LLM 텍스트 집계 기반 피드백 보강 =====
+        // if (tAgg.content_avg100 >= 80)
+        //     strengths.push('답변 내용이 질문 의도에 맞고 구조화가 잘 되어 있습니다.');
+        // else improvements.push('STAR 구조(상황-과제-행동-결과)로 핵심을 간결히 정리해보세요.');
+        // if (tAgg.context_avg100 >= 80) strengths.push('이력서/경력과 답변의 연결이 명확합니다.');
+        // else improvements.push('경력/성과와 직접 연결되는 문장을 1~2개 포함하세요.');
+        // if (tAgg.contradiction)
+        //     improvements.push('이전 답변과의 모순을 점검하고 일관된 스토리라인을 유지하세요.');
+
+        // // 6) 문항별 상세 피드백
+        // const detailed_feedback: InterviewAnalysisResult['detailed_feedback'] = {};
+        // for (let i = 0; i < qa.length; i++) {
+        //     const s = this.wordStats(qa[i].answer || '');
+        //     const parts: string[] = [];
+
+        //     if (s.total < 30) parts.push('답변 길이가 짧습니다.');
+        //     if (s.digitCount < 1) parts.push('구체적 수치를 포함해보세요.');
+        //     if (s.connectors < 1) parts.push('연결어로 흐름을 명확히 해주세요.');
+
+        //     // 개별 문항 점수 (간소화)
+        //     const baseScore = Math.round(
+        //         (this.scale01(s.total, 30, 120) * 0.4 +
+        //             (s.digitCount >= 1 ? 0.3 : 0) +
+        //             (s.connectors >= 1 ? 0.3 : 0)) *
+        //             10,
+        //     );
+
+        //     detailed_feedback[`question_${i + 1}`] = {
+        //         score: Math.max(1, Math.min(10, baseScore)),
+        //         feedback: parts.length ? parts.join(' ') : '답변이 적절합니다.',
+        //     };
+        // }
+
+        // // 7) 전체 평가 및 권장사항
+        // const calibrationNote = calibrationInfo.calibration_applied
+        //     ? '개인 캘리브레이션이 적용되어 평상시 대비 향상도를 반영했습니다.'
+        //     : '캘리브레이션이 없어 일반 기준으로 평가되었습니다.';
+
+        // const overall_evaluation = `완성도 ${completeness10}/10, 구체성 ${specificity10}/10, 논리성 ${logic10}/10, 인상 ${impression10}/10로 평가됩니다. ${calibrationNote}`;
+
+        // const recommendations: string[] = [];
+        // if (specificity10 < 8) recommendations.push('모든 답변에 최소 1개의 수치/지표/사례를 포함');
+        // if (logic10 < 8) recommendations.push('결론-근거-사례-요약의 4단 구조 유지');
+        // if (impression10 < 8 && calibrationInfo.calibration_applied) {
+        //     recommendations.push('캘리브레이션 대비 음성/영상 품질 개선 필요');
+        // }
+        // recommendations.push('핵심 문장을 1~2개로 요약해 마무리');
+        // // (선택) LLM 텍스트 요약 기반 권장사항 보강
+        // if (tAgg.content_avg100 < 80)
+        //     recommendations.push('STAR 요소 중 결과(수치)를 명시적으로 포함');
+        // if (tAgg.context_avg100 < 80)
+        //     recommendations.push('이력서의 특정 경험/성과를 직접 인용하여 연결');
+
+        // return {
+        //     overall_score: Math.max(40, Math.min(98, overall)),
+        //     detailed_scores: {
+        //         completeness: Math.max(1, Math.min(10, completeness10)),
+        //         specificity: Math.max(1, Math.min(10, specificity10)),
+        //         logic: Math.max(1, Math.min(10, logic10)),
+        //         impression: Math.max(1, Math.min(10, impression10)),
+        //     },
+        //     strengths,
+        //     improvements,
+        //     detailed_feedback,
+        //     overall_evaluation,
+        //     recommendations,
+        //     calibration_info: calibrationInfo,
+        //     audio_summary,
+        //     visual_summary,
+        //     // ===== NEW: LLM 텍스트 집계 결과를 리포트에 포함 =====
+        //     text_analysis_summary: {
+        //         content_avg100: tAgg.content_avg100,
+        //         context_avg100: tAgg.context_avg100,
+        //         overall_llm10: tAgg.overall_llm10,
+        //         top_reasons: tAgg.top_reasons,
+        //         top_improvements: tAgg.top_improvements,
+        //     },
+        //     evidence_links: tAgg.evidence_links,
+        // };
+    }
+
+    // ===== New Main Report Computation =====
+    private async computeNewReport(sessionId: string): Promise<InterviewAnalysisResult> {
+        // 텍스트 분석 집계
         const perQs = await this.getPerQuestionTextAnalyses(sessionId);
         const tAgg = this.aggregateTextAnalyses(perQs);
+        const content30 = Math.round((Math.max(0, Math.min(100, tAgg.content_avg100)) / 100) * 30);
+        const context30 = Math.round((Math.max(0, Math.min(100, tAgg.context_avg100)) / 100) * 30);
 
-        // 3) 전체 점수
-        const overall = Math.round(
-            completeness10 * 2.5 + specificity10 * 2.5 + logic10 * 2.0 + impression10 * 3.0,
+        // 음성/영상 요약
+        const audio_summary = await this.getAudioSummary(sessionId);
+        const visual_summary = await this.getVisualSummary(sessionId);
+
+        // 표현 지표 계산
+        const tone = Math.max(0, Math.min(100, audio_summary.toneScore));
+        const vibrato = Math.max(0, Math.min(100, audio_summary.vibratoScore));
+        const pace = Math.max(0, Math.min(100, audio_summary.paceScore));
+        const ov: any = visual_summary.overall || {};
+        const confidencePct = visual_summary.confidenceScore;
+        const eyePct = this.toPct01(ov?.eye_contact_mean);
+        const gazePct = this.toPct01(ov?.gaze_stability);
+        const attentionPct = this.toPct01(ov?.attention_mean);
+        const engagementPct = this.toPct01(ov?.engagement_mean);
+        const blinkMean =
+            typeof ov?.blink_mean === 'number' ? Math.max(0, Math.min(1, ov.blink_mean)) : 0.25;
+        const nervousPct = this.toPct01(ov?.nervousness_mean);
+        const behaviorPct = visual_summary.behaviorScore;
+        const alertPct = visual_summary.alertRatioPercent;
+
+        const visualC = 0.6 * confidencePct + 0.25 * eyePct + 0.15 * gazePct;
+        const audioC = 0.6 * tone + 0.4 * vibrato;
+        const confidenceIndex = Math.max(0, Math.min(100, 0.6 * visualC + 0.4 * audioC));
+
+        const clarityIndex = Math.max(0, Math.min(100, 0.5 * vibrato + 0.3 * tone + 0.2 * pace));
+
+        const visualE = 0.5 * attentionPct + 0.25 * eyePct + 0.25 * engagementPct;
+        const audioE = pace;
+        const engagementIndex = Math.max(0, Math.min(100, 0.7 * visualE + 0.3 * audioE));
+
+        const blinkScore01 = 1 - Math.min(1, Math.abs(blinkMean - 0.25) / 0.25);
+        const blinkPct = blinkScore01 * 100;
+        const visualCalm = 0.7 * (100 - nervousPct) + 0.3 * blinkPct;
+        const audioCalm = 0.7 * vibrato + 0.3 * pace;
+        const composureIndex = Math.max(0, Math.min(100, 0.5 * visualCalm + 0.5 * audioCalm));
+
+        const visualP = 0.6 * behaviorPct + 0.25 * (100 - alertPct) + 0.15 * gazePct;
+        const audioP = tone;
+        const professionalismRaw = Math.max(0, Math.min(100, 0.7 * visualP + 0.3 * audioP));
+
+        const audioScores = (audio_summary.questionScores || []).map((x) => x.score);
+        const visualScores = (visual_summary.questionScores || []).map((x) => x.score);
+        const std = (arr: number[]) => {
+            if (!arr || arr.length < 2) return NaN;
+            const m = arr.reduce((a, b) => a + b, 0) / arr.length;
+            const v = arr.reduce((a, b) => a + (b - m) * (b - m), 0) / (arr.length - 1);
+            return Math.sqrt(v);
+        };
+        const stdA = std(audioScores);
+        const stdV = std(visualScores);
+        const valids = [stdA, stdV].filter((x) => isFinite(x));
+        const stdMix = valids.length ? valids.reduce((a, b) => a + b, 0) / valids.length : NaN;
+        const consistency = isFinite(stdMix)
+            ? Math.max(0, Math.min(100, 100 - Math.max(0, Math.min(100, (stdMix / 25) * 100))))
+            : 50;
+
+        const covA =
+            typeof audio_summary.calibrationCoverage === 'number'
+                ? audio_summary.calibrationCoverage
+                : 0;
+        const covV =
+            typeof visual_summary.calibrationCoverage === 'number'
+                ? visual_summary.calibrationCoverage
+                : 0;
+        const reliabilityWeight = 0.75 + 0.25 * ((covA + covV) / 2);
+
+        const alertPenalty = Math.min(6, alertPct * 0.06);
+        const points = (x: number, cap: number) =>
+            Math.round((Math.max(0, Math.min(100, x)) / 100) * cap);
+        const confidencePts = points(confidenceIndex, 8);
+        const clarityPts = points(clarityIndex, 8);
+        const engagementPts = points(engagementIndex, 8);
+        const composurePts = points(composureIndex, 6);
+        const professionalismPts = Math.max(
+            0,
+            points(professionalismRaw, 6) - Math.round(alertPenalty),
         );
+        const consistencyCap = Math.max(audioScores.length, visualScores.length) < 3 ? 2 : 4;
+        const consistencyPts = points(consistency, consistencyCap);
+        const base40 =
+            confidencePts +
+            clarityPts +
+            engagementPts +
+            composurePts +
+            professionalismPts +
+            consistencyPts;
+        const expression40 = Math.round(Math.max(0, Math.min(40, base40 * reliabilityWeight)));
 
-        // 4) 캘리브레이션 정보
+        const overall_score = content30 + context30 + expression40;
         const calibrationInfo = await this.getCalibrationInfo(sessionId);
 
-        // 5) 강점/개선사항 (캘리브레이션 고려)
-        const strengths: string[] = [];
-        const improvements: string[] = [];
-
-        if (completeness10 >= 8) strengths.push('답변 길이와 구성의 균형이 좋습니다.');
-        else improvements.push('핵심-근거-사례 순서로 내용을 조금 더 확장하세요.');
-
-        if (specificity10 >= 8) strengths.push('수치·사례 등 구체적 근거가 잘 나타납니다.');
-        else improvements.push('숫자(성과, 지표)나 구체 사례를 1개 이상 포함하세요.');
-
-        if (logic10 >= 8) strengths.push('접속어 활용이 적절해 논리 전개가 매끄럽습니다.');
-        else improvements.push('따라서/왜냐하면 등 연결어로 흐름을 명확히 하세요.');
-
-        // 캘리브레이션 기반 피드백
-        if (calibrationInfo.calibration_applied) {
-            if (audioScore10 >= 8) {
-                strengths.push('평상시보다 음성이 안정적이고 명확했습니다.');
-            } else if (audioScore10 <= 6) {
-                improvements.push('캘리브레이션 대비 음성 품질 개선이 필요합니다.');
-            }
-
-            if (visualScore10 >= 8) {
-                strengths.push('평상시보다 자신감 있고 집중된 모습을 보였습니다.');
-            } else if (visualScore10 <= 6) {
-                improvements.push('캘리브레이션 대비 표정/자세 개선이 필요합니다.');
-            }
-        } else {
-            // 폴백 피드백
-            if (audioScore10 >= 8) strengths.push('목소리 톤과 속도가 적절합니다.');
-            if (visualScore10 >= 8) strengths.push('자신감 있는 표정과 시선을 유지했습니다.');
-        }
-
-        // 5.5) ===== NEW: LLM 텍스트 집계 기반 피드백 보강 =====
-        if (tAgg.content_avg100 >= 80)
-            strengths.push('답변 내용이 질문 의도에 맞고 구조화가 잘 되어 있습니다.');
-        else improvements.push('STAR 구조(상황-과제-행동-결과)로 핵심을 간결히 정리해보세요.');
-        if (tAgg.context_avg100 >= 80) strengths.push('이력서/경력과 답변의 연결이 명확합니다.');
-        else improvements.push('경력/성과와 직접 연결되는 문장을 1~2개 포함하세요.');
-        if (tAgg.contradiction)
-            improvements.push('이전 답변과의 모순을 점검하고 일관된 스토리라인을 유지하세요.');
-
-        // 6) 문항별 상세 피드백
-        const detailed_feedback: InterviewAnalysisResult['detailed_feedback'] = {};
-        for (let i = 0; i < qa.length; i++) {
-            const s = this.wordStats(qa[i].answer || '');
-            const parts: string[] = [];
-
-            if (s.total < 30) parts.push('답변 길이가 짧습니다.');
-            if (s.digitCount < 1) parts.push('구체적 수치를 포함해보세요.');
-            if (s.connectors < 1) parts.push('연결어로 흐름을 명확히 해주세요.');
-
-            // 개별 문항 점수 (간소화)
-            const baseScore = Math.round(
-                (this.scale01(s.total, 30, 120) * 0.4 +
-                    (s.digitCount >= 1 ? 0.3 : 0) +
-                    (s.connectors >= 1 ? 0.3 : 0)) *
-                    10,
-            );
-
-            detailed_feedback[`question_${i + 1}`] = {
-                score: Math.max(1, Math.min(10, baseScore)),
-                feedback: parts.length ? parts.join(' ') : '답변이 적절합니다.',
-            };
-        }
-
-        // 7) 전체 평가 및 권장사항
-        const calibrationNote = calibrationInfo.calibration_applied
-            ? '개인 캘리브레이션이 적용되어 평상시 대비 향상도를 반영했습니다.'
-            : '캘리브레이션이 없어 일반 기준으로 평가되었습니다.';
-
-        const overall_evaluation = `완성도 ${completeness10}/10, 구체성 ${specificity10}/10, 논리성 ${logic10}/10, 인상 ${impression10}/10로 평가됩니다. ${calibrationNote}`;
-
-        const recommendations: string[] = [];
-        if (specificity10 < 8) recommendations.push('모든 답변에 최소 1개의 수치/지표/사례를 포함');
-        if (logic10 < 8) recommendations.push('결론-근거-사례-요약의 4단 구조 유지');
-        if (impression10 < 8 && calibrationInfo.calibration_applied) {
-            recommendations.push('캘리브레이션 대비 음성/영상 품질 개선 필요');
-        }
-        recommendations.push('핵심 문장을 1~2개로 요약해 마무리');
-        // (선택) LLM 텍스트 요약 기반 권장사항 보강
-        if (tAgg.content_avg100 < 80)
-            recommendations.push('STAR 요소 중 결과(수치)를 명시적으로 포함');
-        if (tAgg.context_avg100 < 80)
-            recommendations.push('이력서의 특정 경험/성과를 직접 인용하여 연결');
+        // 이력서 요약 기반 1분 자기소개 생성
+        const resumeSummary = await this.getResumeSummaryForSession(sessionId);
+        const selfIntro = resumeSummary
+            ? await this.generateSelfIntroWithOpenAI(resumeSummary)
+            : undefined;
 
         return {
-            overall_score: Math.max(40, Math.min(98, overall)),
-            detailed_scores: {
-                completeness: Math.max(1, Math.min(10, completeness10)),
-                specificity: Math.max(1, Math.min(10, specificity10)),
-                logic: Math.max(1, Math.min(10, logic10)),
-                impression: Math.max(1, Math.min(10, impression10)),
+            overall_score,
+            detailed_scores: { content30, context30, expression40 },
+            expression_indices: {
+                confidence: Math.round(confidenceIndex),
+                clarity: Math.round(clarityIndex),
+                engagement: Math.round(engagementIndex),
+                composure: Math.round(composureIndex),
+                professionalism: Math.round(professionalismRaw),
+                consistency: Math.round(consistency),
+                reliabilityWeight: Number(reliabilityWeight.toFixed(3)),
             },
-            strengths,
-            improvements,
-            detailed_feedback,
-            overall_evaluation,
-            recommendations,
             calibration_info: calibrationInfo,
             audio_summary,
             visual_summary,
-            // ===== NEW: LLM 텍스트 집계 결과를 리포트에 포함 =====
             text_analysis_summary: {
                 content_avg100: tAgg.content_avg100,
                 context_avg100: tAgg.context_avg100,
@@ -720,6 +900,7 @@ export class ReportService {
                 top_improvements: tAgg.top_improvements,
             },
             evidence_links: tAgg.evidence_links,
+            self_intro_script: selfIntro,
         };
     }
 
@@ -774,24 +955,21 @@ export class ReportService {
     }
 
     // ===== Public API =====
-    async computeOnTheFly(sessionId: string, qa: QAPair[]): Promise<InterviewAnalysisResult> {
-        return this.computeEnhancedReport(sessionId, qa);
+    async computeOnTheFly(
+        sessionId: string,
+        _dto?: AnalyzeReportDto,
+    ): Promise<InterviewAnalysisResult> {
+        return this.computeNewReport(sessionId);
     }
 
-    async computeAndMaybeSave(sessionId: string, qa: QAPair[]): Promise<InterviewAnalysisResult> {
-        const result = await this.computeEnhancedReport(sessionId, qa);
+    async computeAndMaybeSave(
+        sessionId: string,
+        _dto?: AnalyzeReportDto,
+    ): Promise<InterviewAnalysisResult> {
+        const result = await this.computeNewReport(sessionId);
 
         // 질문 텍스트 포함하여 저장
-        await this.saveReport(sessionId, {
-            ...result,
-            detailed_feedback: Object.fromEntries(
-                Object.entries(result.detailed_feedback).map(([k, v], i) => {
-                    const q = qa[i]?.question ?? undefined;
-                    (v as any).question = q;
-                    return [k, v];
-                }),
-            ),
-        } as InterviewAnalysisResult);
+        await this.saveReport(sessionId, result as InterviewAnalysisResult);
 
         return result;
     }

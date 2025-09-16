@@ -8,7 +8,7 @@ export class ReportController {
 
     @Post(':sessionId/analyze')
     async analyze(@Param('sessionId') sessionId: string, @Body() dto: AnalyzeReportDto) {
-        const data = await this.svc.computeAndMaybeSave(sessionId, dto.qa);
+        const data = await this.svc.computeAndMaybeSave(sessionId, dto);
         return { success: true, data };
     }
 
@@ -16,8 +16,8 @@ export class ReportController {
     async get(@Param('sessionId') sessionId: string) {
         const saved = await this.svc.getSavedReport(sessionId);
         if (saved) return { success: true, data: saved };
-        // if not saved, try to compute on-the-fly with empty QA
-        const data = await this.svc.computeOnTheFly(sessionId, []);
+        // if not saved, try to compute on-the-fly
+        const data = await this.svc.computeOnTheFly(sessionId, { qa: [] } as any);
         return { success: true, data };
     }
 
