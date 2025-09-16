@@ -901,69 +901,62 @@ export class MentoringService {
         page = 1,
         limit = 10,
     ): Promise<MentoringApplicationsResponseDto> {
-        const mentorRow = await this.databaseService.queryOne<{ mentor_idx: number }>(
-            'SELECT mentor_idx FROM mentor_profiles WHERE user_idx = ? LIMIT 1',
-            [userIdx],
-        );
-
-        if (!mentorRow) {
-            return {
-                applications: [],
-                page_info: { page, limit, total: 0, has_next: false },
-            } as MentoringApplicationsResponseDto;
-        }
-
-        const mentorIdx = mentorRow.mentor_idx;
-
+        // 전체 개수
         const countSql = `
             SELECT COUNT(*) AS total
-              FROM mentoring_applications a
-              JOIN mentoring_products p ON a.product_idx = p.product_idx
-             WHERE p.mentor_idx = ?
+            FROM mentoring_applications a
+            WHERE a.mentee_idx = ?
         `;
         const countRow = await this.databaseService.queryOne<{ total: number }>(countSql, [
-            mentorIdx,
+            userIdx,
         ]);
         const total = Number(countRow?.total ?? 0);
 
-        const offset = (Number(page) - 1) * Number(limit);
+        const offset = (page - 1) * limit;
+
+        // 멘티 본인이 예약한 상품 리스트 조회
         const listSql = `
             SELECT 
                 a.application_id,
-                a.product_idx,
-                p.title AS product_title,
                 a.booked_date,
                 a.application_status,
-                mpu.idx AS mentee_idx,
-                mpu.name AS mentee_name,
-                mpu.profile_img AS mentee_profile_img,
+
+                -- 멘티 정보
+                u.idx AS mentee_user_idx,
+                u.name AS mentee_name,
+                u.profile_img AS mentee_profile_img,
+
+                -- 상품 정보
+                p.product_idx,
+                p.title AS product_title,
+
+                -- 멘토 정보
                 mp.mentor_idx,
                 mp.business_name,
                 jc.name AS mentor_job_category
             FROM mentoring_applications a
-            JOIN mentoring_products p ON a.product_idx = p.product_idx
-            JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
-            JOIN job_category jc ON mp.preferred_field_id = jc.id
-            JOIN users mpu ON a.mentee_idx = mpu.idx
-            WHERE p.mentor_idx = ?
+            JOIN users u ON a.mentee_idx = u.idx
+            LEFT JOIN mentoring_products p ON a.product_idx = p.product_idx
+            LEFT JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
+            LEFT JOIN job_category jc ON p.job_category_id = jc.id
+            WHERE a.mentee_idx = ?
             ORDER BY a.created_at DESC
             LIMIT ? OFFSET ?
         `;
-        const rows = await this.databaseService.query<any>(listSql, [
-            mentorIdx,
-            Number(limit),
-            offset,
-        ]);
+
+        const rows = await this.databaseService.query<any>(listSql, [userIdx, limit, offset]);
 
         return {
             applications: rows.map((r: any) => ({
                 application_id: r.application_id,
                 product_idx: r.product_idx,
                 product_title: r.product_title,
-                booked_date: new Date(r.booked_date).toISOString().slice(0, 10),
+                booked_date: r.booked_date
+                    ? new Date(r.booked_date).toISOString().slice(0, 10)
+                    : null,
                 application_status: r.application_status,
                 mentee: {
-                    user_idx: r.mentee_idx,
+                    user_idx: r.mentee_user_idx,
                     name: r.mentee_name,
                     profile_img: r.mentee_profile_img ?? '',
                 },
@@ -974,10 +967,10 @@ export class MentoringService {
                 },
             })),
             page_info: {
-                page: Number(page),
-                limit: Number(limit),
+                page,
+                limit,
                 total,
-                has_next: offset + Number(limit) < total,
+                has_next: offset + limit < total,
             },
         };
     }
