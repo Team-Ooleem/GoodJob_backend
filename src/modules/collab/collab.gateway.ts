@@ -65,7 +65,6 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         }
 
         client.join(room);
-
         console.log(`🖱️ (Cursor) ${clientUUID} joined ${room}`);
     }
 
@@ -105,6 +104,7 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 
         if (callback) callback(size);
     }
+
     // --- WebRTC 시그널링 ---
     @SubscribeMessage('offer')
     handleOffer(client: Socket, payload: { room: string; sdp: RTCSessionDescriptionInit }) {
@@ -142,5 +142,31 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         const { room, clientUUID } = payload;
         client.to(room).emit('cursor-leave', clientUUID);
         console.log(`👋 cursor hidden: ${clientUUID} in ${room}`);
+    }
+
+    // --- FreeDrawing 실시간 스트리밍 ---
+    @SubscribeMessage('drawing:start')
+    handleDrawingStart(client: Socket, payload: { room: string; id: string; brush?: any }) {
+        client.to(payload.room).emit('drawing:start', {
+            id: payload.id,
+            brush: payload.brush, // 🆕 brush도 relay
+        });
+    }
+
+    @SubscribeMessage('drawing:progress')
+    handleDrawingProgress(
+        client: Socket,
+        payload: { room: string; id: string; points: number[][]; brush?: any },
+    ) {
+        client.to(payload.room).emit('drawing:progress', {
+            id: payload.id,
+            points: payload.points,
+            brush: payload.brush, // 🆕 brush도 relay
+        });
+    }
+
+    @SubscribeMessage('drawing:end')
+    handleDrawingEnd(client: Socket, payload: { room: string; id: string }) {
+        client.to(payload.room).emit('drawing:end', { id: payload.id });
     }
 }
