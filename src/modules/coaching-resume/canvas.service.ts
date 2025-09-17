@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { CreateCanvasDto } from './dto/create-canvas.dto';
 import { v4 as uuidv4 } from 'uuid';
@@ -82,5 +82,94 @@ export class CanvasService {
         }
 
         return { url: (put as any).url as string };
+    }
+
+    /**
+     * 캔버스 상세 조회: mentor(owner), mentee(editor/viewer) 정보 포함
+     * 접근 권한: 요청자가 해당 캔버스의 참여자(mentor/mentee)여야 함
+     */
+    async getCanvasDetail(canvasId: string, requesterId: number) {
+        if (!canvasId) {
+            throw new BadRequestException('canvasId is required');
+        }
+        if (typeof requesterId !== 'number') {
+            throw new ForbiddenException('Unauthorized');
+        }
+
+        // 1) 캔버스 기본 정보
+        const canvas = await this.db.queryOne<{
+            canvas_id: string;
+            name: string | null;
+            created_by: number;
+            created_at: any;
+        }>(
+            `
+            SELECT c.id AS canvas_id, c.name, c.created_by, c.created_at
+            FROM canvas c
+            WHERE c.id = ?
+            `,
+            [canvasId],
+        );
+
+        if (!canvas) {
+            throw new NotFoundException('Canvas not found');
+        }
+
+        // 2) 참여자 + 사용자 정보 조회
+        const participants = await this.db.query<{
+            user_id: number;
+            cp_role: 'owner' | 'editor' | 'viewer';
+            name: string | null;
+            profile_img: string | null;
+        }>(
+            `
+            SELECT cp.user_id, cp.role AS cp_role, u.name, u.profile_img
+            FROM canvas_participant cp
+            JOIN users u ON u.idx = cp.user_id
+            WHERE cp.canvas_id = ?
+            `,
+            [canvasId],
+        );
+
+        // 3) 권한 검사: 요청자가 참여자인지 확인
+        const me = participants.find((p) => p.user_id === requesterId);
+        if (!me) {
+            throw new ForbiddenException('Forbidden');
+        }
+
+        // 4) mentor/mentee 매핑 (owner → mentor, others → mentee)
+        const mentorRaw = participants.find((p) => p.cp_role === 'owner') || null;
+        // 멘티가 여러 명일 수 있으므로 첫 번째 비-owner를 대표로 선택
+        const menteeRaw = participants.find((p) => p.cp_role !== 'owner') || null;
+
+        const mentor = mentorRaw
+            ? {
+                  user_id: mentorRaw.user_id,
+                  name: mentorRaw.name,
+                  profile_img: mentorRaw.profile_img,
+                  role: 'mentor' as const,
+              }
+            : null;
+
+        const mentee = menteeRaw
+            ? {
+                  user_id: menteeRaw.user_id,
+                  name: menteeRaw.name,
+                  profile_img: menteeRaw.profile_img,
+                  role: 'mentee' as const,
+              }
+            : null;
+
+        const myRole = me.cp_role === 'owner' ? 'mentor' : 'mentee';
+
+        return {
+            canvas_id: String(canvas.canvas_id),
+            name: canvas.name,
+            created_by: canvas.created_by,
+            created_at: canvas.created_at,
+            role: myRole,
+            mentor,
+            mentee,
+        };
     }
 }
