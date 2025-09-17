@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+    BadRequestException,
+    ForbiddenException,
+    Injectable,
+    NotFoundException,
+} from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { CreateCanvasDto } from './dto/create-canvas.dto';
 import { v4 as uuidv4 } from 'uuid';
@@ -96,18 +101,28 @@ export class CanvasService {
             throw new ForbiddenException('Unauthorized');
         }
 
-        // 1) 캔버스 기본 정보
+        // 1) 캔버스 + 예약 정보 조회
         const canvas = await this.db.queryOne<{
             canvas_id: string;
             name: string | null;
             created_by: number;
             created_at: any;
+            booked_date: string | null;
+            hour_slot: number | null;
         }>(
             `
-            SELECT c.id AS canvas_id, c.name, c.created_by, c.created_at
-            FROM canvas c
-            WHERE c.id = ?
-            `,
+        SELECT 
+            c.id AS canvas_id,
+            c.name,
+            c.created_by,
+            c.created_at,
+            a.booked_date,
+            rs.hour_slot
+        FROM canvas c
+        JOIN mentoring_applications a ON a.application_id = c.application_id
+        JOIN mentoring_regular_slots rs ON a.regular_slots_idx = rs.regular_slots_idx
+        WHERE c.id = ?
+        `,
             [canvasId],
         );
 
@@ -115,7 +130,7 @@ export class CanvasService {
             throw new NotFoundException('Canvas not found');
         }
 
-        // 2) 참여자 + 사용자 정보 조회
+        // 2) 참여자 조회
         const participants = await this.db.query<{
             user_id: number;
             cp_role: 'owner' | 'editor' | 'viewer';
@@ -123,23 +138,20 @@ export class CanvasService {
             profile_img: string | null;
         }>(
             `
-            SELECT cp.user_id, cp.role AS cp_role, u.name, u.profile_img
-            FROM canvas_participant cp
-            JOIN users u ON u.idx = cp.user_id
-            WHERE cp.canvas_id = ?
-            `,
+        SELECT cp.user_id, cp.role AS cp_role, u.name, u.profile_img
+        FROM canvas_participant cp
+        JOIN users u ON u.idx = cp.user_id
+        WHERE cp.canvas_id = ?
+        `,
             [canvasId],
         );
 
-        // 3) 권한 검사: 요청자가 참여자인지 확인
         const me = participants.find((p) => p.user_id === requesterId);
         if (!me) {
             throw new ForbiddenException('Forbidden');
         }
 
-        // 4) mentor/mentee 매핑 (owner → mentor, others → mentee)
         const mentorRaw = participants.find((p) => p.cp_role === 'owner') || null;
-        // 멘티가 여러 명일 수 있으므로 첫 번째 비-owner를 대표로 선택
         const menteeRaw = participants.find((p) => p.cp_role !== 'owner') || null;
 
         const mentor = mentorRaw
@@ -162,11 +174,20 @@ export class CanvasService {
 
         const myRole = me.cp_role === 'owner' ? 'mentor' : 'mentee';
 
+        // 3) 예약 시간(scheduled_at) 계산
+        let scheduled_at: string | null = null;
+        if (canvas.booked_date && canvas.hour_slot !== null) {
+            const d = new Date(canvas.booked_date);
+            d.setUTCHours(canvas.hour_slot, 0, 0, 0);
+            scheduled_at = d.toISOString();
+        }
+
         return {
             canvas_id: String(canvas.canvas_id),
             name: canvas.name,
             created_by: canvas.created_by,
             created_at: canvas.created_at,
+            scheduled_at, // ISO 8601
             role: myRole,
             mentor,
             mentee,
