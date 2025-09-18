@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { AppConfigService } from '@/config/config.service';
+import { JobExtractService } from './job-extract.service';
 
 /** ===== Public DTOs (컨트롤러/다른 서비스에서 재사용 가능) ===== */
 export interface QuestionDto {
@@ -147,8 +148,39 @@ const ContextAnalysisSchema = z.object({
 export class AiService {
     private client: OpenAI;
     private readonly logger = new Logger(AiService.name);
+    // 세션별 채용공고 컨텍스트 캐시 (프로세스 메모리)
+    private readonly sessionJobCtx = new Map<
+        string,
+        {
+            url?: string;
+            title?: string;
+            company?: string;
+            content?: string;
+            summary?: string;
+            ts: number;
+        }
+    >();
 
-    constructor(private readonly configService: AppConfigService) {
+    // 외부에서 세션 채용공고 요약을 주입할 수 있도록 공개 메서드 제공
+    setJobContext(
+        sessionId: string,
+        ctx: {
+            url?: string;
+            title?: string;
+            company?: string;
+            content?: string;
+            summary?: string;
+        },
+    ) {
+        if (!sessionId) return;
+        if (!ctx?.summary && !ctx?.content) return;
+        this.sessionJobCtx.set(sessionId, { ...ctx, ts: Date.now() });
+    }
+
+    constructor(
+        private readonly configService: AppConfigService,
+        private readonly jobExtract?: JobExtractService,
+    ) {
         this.client = new OpenAI({ apiKey: this.configService.openai.apiKey });
         const key = this.configService.openai.apiKey || '';
         this.logger.log(`OpenAI 초기화: apiKey set=${key ? 'yes' : 'no'}, len=${key.length}`);
@@ -203,18 +235,97 @@ export class AiService {
         return result;
     }
 
+    // summarizeJobPost는 JobExtractService로 이동되었습니다.
+
+    // 질문 1개 생성 (+ 채용공고 URL 반영 옵션)
+    async createQuestionWithJobPost(
+        resumeSummary: string,
+        opts?: { jobPostUrl?: string; sessionId?: string },
+    ): Promise<QuestionResult> {
+        const jobUrl = opts?.jobPostUrl?.trim();
+        const sid = opts?.sessionId?.trim();
+        const summarize = (s: string, limit = 1200) => {
+            if (!s) return '';
+            const t = s.replace(/\s+/g, ' ').trim();
+            return t.length > limit ? t.slice(0, limit) + '…' : t;
+        };
+
+        // 1) 캐시 우선 사용 (LLM 요약만 사용)
+        let jobSection = '';
+        const cached = sid ? this.sessionJobCtx.get(sid) : undefined;
+        if (cached?.summary) {
+            jobSection = cached.summary;
+        }
+
+        this.logger.log(
+            `createQuestionWithJobPost: resumeLen=${resumeSummary.length}, jobTextLen=${jobSection.length}`,
+            `jobSection: ${jobSection}`,
+        );
+
+        const baseSystem =
+            '너는 채용 면접관이다. 반드시 {"question":{"id","text"}} 형식의 JSON 한 개만 출력해라. ' +
+            '불필요한 말/주석/설명 금지. id는 문자열, text는 한국어 질문 문장 하나.';
+        const system = jobSection
+            ? `${baseSystem}\n\n면접 맥락에 참고할 채용공고 요약:\n${jobSection}`
+            : baseSystem;
+        const user =
+            `이력서 요약:\n${resumeSummary}\n` +
+            `\n\n요구사항:\n- 질문 1개만 출력\n- 너무 일반적인 질문 금지\n- 직무/경험/성과 기반\n- 채용공고 요구역량과의 정합성을 우선 고려`;
+
+        let r;
+        try {
+            r = await this.client.chat.completions.create({
+                model: 'gpt-4o-mini',
+                temperature: 0.2,
+                response_format: { type: 'json_object' },
+                messages: [
+                    { role: 'system', content: system },
+                    { role: 'user', content: user },
+                ],
+            });
+        } catch (e: any) {
+            this.logger.error(`createQuestionWithJobPost OpenAI 오류: ${e?.message}`, e?.stack);
+            throw e;
+        }
+
+        const content: string = r.choices[0]?.message?.content ?? '{}';
+        const parsed = QuestionJsonSchema.safeParse(safeJsonParse(content));
+        if (!parsed.success) {
+            throw new Error(`AI 응답 JSON 형식 오류: ${parsed.error.message}`);
+        }
+        const dto: QuestionDto = {
+            id: parsed.data.question.id,
+            text: parsed.data.question.text,
+        };
+        return { question: dto, requestId: r.id, usage: r.usage ?? null };
+    }
+
     // 꼬리질문 1개 생성
-    async createFollowups(params: CreateFollowupsParams): Promise<FollowupsResult> {
+    async createFollowups(
+        params: CreateFollowupsParams,
+        opts?: { sessionId?: string },
+    ): Promise<FollowupsResult> {
         const { originalQuestion, answer } = params;
         this.logger.log(
             `createFollowups 시작: qid=${originalQuestion?.id}, qLen=${originalQuestion?.text?.length ?? 0}, aLen=${answer?.length ?? 0}`,
         );
 
-        const system =
+        let jobCtx = '';
+        if (opts?.sessionId) {
+            const cached2 = this.sessionJobCtx.get(opts.sessionId);
+            if (cached2?.summary) {
+                jobCtx = cached2.summary;
+            }
+        }
+
+        const baseSystem =
             '너는 까다롭지만 공정한 면접관이다. 반드시 {"followups":[{ "id","parentId","text","reason" }]} 형식의 JSON만 출력해라. ' +
             '항목 수는 정확히 1개여야 한다. 각 필드는 문자열이며 한국어로 작성하라. ' +
             '답변의 빈틈/가정/근거 부족/정량적 수치 검증 포인트를 파고들어라. ' +
             'parentId는 원 질문의 id와 동일하게 설정해라. 불필요한 말/주석/설명 금지.';
+        const system = jobCtx
+            ? `${baseSystem}\n\n면접 맥락에 참고할 채용공고 요약:\n${jobCtx}`
+            : baseSystem;
 
         const user = `원 질문: "${originalQuestion.text}" (id: ${originalQuestion.id})
 지원자 답변: "${answer}"
@@ -222,7 +333,7 @@ export class AiService {
 요구사항:
 - 후속 질문 1개만 출력(정확히 1개)
 - 각 항목: {id, parentId, text, reason}
-- text는 구체적이고 검증가능한 팩트를 요구할 것`;
+- text는 채용공고 요구역량과의 정합성 또는 답변의 근거 부족을 파고들 것`;
 
         let r;
         try {
