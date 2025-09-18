@@ -415,6 +415,18 @@ export class MentoringService {
         if (Number(reserved?.cnt ?? 0) > 0) {
             throw new BadRequestException('이미 예약된 시간입니다. 다른 슬롯을 선택해주세요.');
         }
+
+        // 🔥 중복 방지: 같은 transaction_id로 이미 신청이 있는지 확인
+        const existingPayment = await this.databaseService.queryOne<{ payment_id: number }>(
+            'SELECT payment_id FROM payments WHERE transaction_id = ? LIMIT 1',
+            [dto.payment.transaction_id],
+        );
+
+        if (existingPayment) {
+            throw new BadRequestException(
+                '이미 처리된 결제입니다. 같은 transaction_id로 중복 신청할 수 없습니다.',
+            );
+        }
         /* 결제 정보 저장 */
         /*
         INSERT INTO payments (user_idx, product_idx, amount, payment_status, transaction_id, paid_at)

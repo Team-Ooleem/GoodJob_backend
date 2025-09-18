@@ -61,54 +61,40 @@ export class STTController {
     ): Promise<STTWithContextResponse> {
         const {
             audioData,
-            mimeType = 'audio/mp4',
+            mimeType = 'audio/wav',
             canvasId,
             mentorIdx,
             menteeIdx,
             isFinalChunk = false,
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
             isNewRecordingSession = false,
             usePynoteDiarization = true,
         } = body;
 
-        const participants = (await this.databaseService.execute(
-            `
-            SELECT 
-                cp.user_id,
-                mp.mentor_idx,
-                mp.is_approved
-            FROM canvas_participant cp
-            LEFT JOIN mentor_profiles mp ON cp.user_id = mp.user_idx
-            WHERE cp.canvas_id = ?
-        `,
-            [canvasId],
-        )) as Array<{ user_id: number; mentor_idx: number | null; is_approved: number | null }>;
-
-        const mentorUser = participants.find((p) => p.mentor_idx && p.is_approved === 1) || null;
-        const menteeUser = participants.find((p) => !p.mentor_idx || p.is_approved !== 1) || null;
-
-        const actualMentorIdx = mentorUser?.user_id || mentorIdx;
-        const actualMenteeIdx = menteeUser?.user_id || menteeIdx;
-
-        if (!this.logFlags.requestLogged) {
-            this.logger.log(`STT 요청 받음 - canvasIdx: ${canvasId}`);
-            this.logFlags.requestLogged = true;
+        // canvasId 유효성 검사
+        if (!canvasId) {
+            throw new BadRequestException('canvasId가 필요합니다');
         }
 
-        // 🆕 최종 청크가 아닌 경우에만 오디오 데이터 검증
-        if (!isFinalChunk && !audioData) {
-            throw new BadRequestException('오디오 데이터 없음');
-        }
-        if (!isFinalChunk && !this.utilService.isValidBase64(audioData)) {
-            throw new BadRequestException('유효하지 않은 Base64');
+        // 참가자 정보 조회
+        const participants = await this.getParticipants(canvasId);
+        const actualMentorIdx = participants.mentor?.user_id || mentorIdx;
+        const actualMenteeIdx = participants.mentee?.user_id || menteeIdx;
+
+        this.logger.log(`STT 요청 받음 - canvasId: ${canvasId}, isFinalChunk: ${isFinalChunk}`);
+
+        // 오디오 데이터가 있는 경우에만 검증
+        if (audioData) {
+            if (!this.utilService.isValidBase64(audioData)) {
+                throw new BadRequestException('유효하지 않은 Base64');
+            }
         }
 
         const startTime = Date.now();
 
         try {
-            // 🆕 최종 청크가 아닌 경우에만 오디오 처리
-            if (!isFinalChunk) {
-                return await this.processAudioChunk(
+            // 🔧 수정: 마지막 청크도 오디오 데이터가 있으면 처리
+            if (audioData) {
+                const chunkResult = await this.processAudioChunk(
                     body,
                     audioData,
                     mimeType,
@@ -118,23 +104,123 @@ export class STTController {
                     usePynoteDiarization,
                     startTime,
                 );
-            } else {
-                // �� 최종 청크 처리 (이중처리 방지)
+
+                // 🔧 수정: 최종 청크일 때만 병합 (자동 병합 비활성화)
+                const shouldMerge = isFinalChunk;
+
+                if (shouldMerge) {
+                    this.logger.log('병합 처리 시작 (최종 청크 또는 60초 미만)');
+                    return await this.handleFinalChunk(
+                        canvasId,
+                        actualMentorIdx,
+                        actualMenteeIdx,
+                        startTime,
+                    );
+                }
+
+                return chunkResult;
+            } else if (isFinalChunk) {
+                // 오디오 데이터 없이 최종 청크만 온 경우
+                this.logger.log('최종 청크 신호 수신 (오디오 데이터 없음), 병합 처리 시작');
                 return await this.handleFinalChunk(
                     canvasId,
                     actualMentorIdx,
                     actualMenteeIdx,
                     startTime,
                 );
+            } else {
+                throw new BadRequestException('오디오 데이터가 필요합니다');
             }
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             this.logger.error(`STT 실패: ${errorMessage}`);
-            throw new InternalServerErrorException('STT 처리 실패');
+            throw new InternalServerErrorException(`STT 처리 실패: ${errorMessage}`);
         }
     }
 
-    // �� 오디오 청크 처리 함수 (기존 로직 분리)
+    // 참가자 정보 조회 헬퍼 함수
+    private async getParticipants(canvasId: string) {
+        const participants = (await this.databaseService.execute(
+            `
+            SELECT 
+                cp.user_id,
+                mp.mentor_idx,
+                mp.is_approved
+            FROM canvas_participant cp
+            LEFT JOIN mentor_profiles mp ON cp.user_id = mp.mentor_idx
+            WHERE cp.canvas_id = ?
+        `,
+            [canvasId],
+        )) as Array<{ user_id: number; mentor_idx: number | null; is_approved: number | null }>;
+
+        const mentor = participants.find((p) => p.mentor_idx && p.is_approved === 1) || null;
+        const mentee = participants.find((p) => !p.mentor_idx || p.is_approved !== 1) || null;
+
+        return { mentor, mentee };
+    }
+
+    // 세그먼트 인덱스 생성
+    private getNextSegmentIndex(canvasId: string): number {
+        return this.sessionService.getMaxSegmentIndex(canvasId) + 1;
+    }
+
+    // 세션 키 생성
+    private generateSessionKey(canvasId: string, segmentIndex: number): string {
+        const timestamp = Date.now();
+        const randomId = Math.random().toString(36).substring(2, 8);
+        return `${canvasId}_${timestamp}_${randomId}`;
+    }
+
+    // 🆕 60초 미만 체크 함수 추가
+    private async shouldMergeImmediately(
+        canvasId: string,
+        audioData: string,
+        mimeType: string,
+    ): Promise<boolean> {
+        try {
+            // 현재 오디오 길이 체크
+            const audioBuffer = Buffer.from(audioData, 'base64');
+            const currentDuration = await this.audioDurationService.getExactDuration(
+                audioBuffer,
+                mimeType,
+            );
+
+            // 기존 청크들의 총 길이 계산
+            const sessionKeys = this.sessionService.findAllActiveSessionKeys(canvasId);
+            let totalDuration = 0;
+
+            for (const sessionKey of sessionKeys) {
+                const cached = this.sessionService.getCached(sessionKey);
+                if (cached && cached.chunks.length > 0) {
+                    for (const chunk of cached.chunks) {
+                        if (chunk.duration && chunk.duration > 0) {
+                            totalDuration += chunk.duration;
+                        }
+                    }
+                }
+            }
+
+            const finalDuration = totalDuration + currentDuration;
+            this.logger.log(
+                `총 오디오 길이: ${finalDuration.toFixed(2)}초 (기존: ${totalDuration.toFixed(2)}초 + 현재: ${currentDuration.toFixed(2)}초)`,
+            );
+
+            // 60초 미만이면 병합 처리
+            if (finalDuration < 60) {
+                this.logger.log(`60초 미만 감지 (${finalDuration.toFixed(2)}초), 즉시 병합 처리`);
+                return true;
+            }
+
+            return false;
+        } catch (error) {
+            this.logger.warn(
+                `60초 미만 체크 실패: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return false; // 에러 시 병합하지 않음
+        }
+    }
+
+    // 오디오 청크 처리 함수
     private async processAudioChunk(
         body: TranscribeChunkRequest,
         audioData: string,
@@ -146,29 +232,47 @@ export class STTController {
         startTime: number,
     ): Promise<STTWithContextResponse> {
         const audioBuffer = Buffer.from(audioData, 'base64');
-        const sessionKey = canvasId;
+
+        // 🔧 수정: 기존 세션 키 찾기 우선
+        let sessionKey = this.sessionService.findActiveSessionKey(canvasId);
+        let segmentIndex = 1;
+
+        if (!sessionKey) {
+            // 새로운 세션인 경우에만 새 인덱스 생성
+            segmentIndex = this.getNextSegmentIndex(canvasId);
+            sessionKey = this.generateSessionKey(canvasId, segmentIndex);
+            this.logger.log(`새 세션 시작 - canvasId: ${canvasId}, segmentIndex: ${segmentIndex}`);
+        } else {
+            // 기존 세션 사용
+            this.logger.log(`기존 세션 사용 - canvasId: ${canvasId}, sessionKey: ${sessionKey}`);
+        }
 
         // 캐시에서 기존 데이터 가져오기 또는 새로 생성
         let cached = this.sessionService.getCached(sessionKey);
-
-        if (body.isNewRecordingSession || !cached) {
-            const existingSegmentIndex = cached?.segmentIndex || 0;
+        if (!cached) {
+            // 새로운 세션 생성
             cached = {
                 mentorIdx: actualMentorIdx,
                 menteeIdx: actualMenteeIdx,
                 chunks: [],
-                segmentIndex: body.isNewRecordingSession
-                    ? existingSegmentIndex + 1 // ✅ 새 세션일 때 인덱스 증가
-                    : existingSegmentIndex,
+                segmentIndex,
                 lastActivity: Date.now(),
                 sessionStartTime: Date.now(),
             };
+        } else if (body.isNewRecordingSession) {
+            // 기존 세션에 새 세그먼트 추가
+            cached.segmentIndex += 1;
+            cached.lastActivity = Date.now();
             this.logger.log(
                 `새 세그먼트 시작 - canvasId: ${canvasId}, segmentIndex: ${cached.segmentIndex}`,
             );
+        } else {
+            // 기존 세션 계속
+            cached.lastActivity = Date.now();
         }
-        // MP4 파일의 정확한 총 길이 추출
-        const exactMP4Duration = await this.audioDurationService.getExactDuration(
+
+        // WAV 파일의 정확한 총 길이 추출
+        const exactWavDuration = await this.audioDurationService.getExactDuration(
             audioBuffer,
             mimeType,
         );
@@ -181,25 +285,25 @@ export class STTController {
             }
         }
 
-        this.logger.log(`정확한 시간 매핑 시작:`);
-        this.logger.log(`  - MP4 총 길이: ${exactMP4Duration.toFixed(3)}초`);
-        this.logger.log(`  - 세션 오프셋: ${sessionStartOffset.toFixed(3)}초`);
-
-        // 활동 시간 업데이트
-        cached.lastActivity = Date.now();
+        this.logger.log(
+            `시간 매핑 - WAV 길이: ${exactWavDuration.toFixed(3)}초, 오프셋: ${sessionStartOffset.toFixed(3)}초`,
+        );
 
         // GCS 업로드
         const gcsKey = this.gcsService.generateGcsKey(
-            `voice_chunk_${cached.segmentIndex}_${body.chunkIndex}.wav`, // .mp4 → .wav
+            `voice_chunk_${cached.segmentIndex}_${body.chunkIndex}.wav`,
             canvasId,
             actualMentorIdx,
             actualMenteeIdx,
         );
 
         const gcsResult = await this.gcsService.uploadChunk(audioBuffer, gcsKey, mimeType);
-        if (!gcsResult?.success) throw new Error('오디오 업로드 실패');
 
-        // STT + pynote 화자 분리 처리
+        if (!gcsResult?.success) {
+            throw new Error('오디오 업로드 실패');
+        }
+
+        // STT + 화자 분리 처리
         const sttResult: STTResult = await this.sttService.transcribeAudioFromGcs(
             gcsResult.url as string,
             mimeType,
@@ -211,33 +315,33 @@ export class STTController {
         );
 
         const gcsUrl = gcsResult.url as string;
-        this.logger.log(`✅ GCS 업로드 완료: ${gcsUrl}`);
+        this.logger.log(`GCS 업로드 완료: ${gcsUrl}`);
 
+        // 화자 데이터 처리
         let mappedSpeakers = sttResult.speakers || [];
         if (usePynoteDiarization) {
-            // pyannote 시간은 이미 정확하므로 그대로 사용
-            this.logger.log(`✅ pyannote 시간 사용: ${mappedSpeakers.length}개 세그먼트`);
+            this.logger.log(`pyannote 시간 사용: ${mappedSpeakers.length}개 세그먼트`);
         } else {
-            // 기존 Google STT만 사용할 때만 정규화 적용
-            if (exactMP4Duration > 0 && mappedSpeakers.length > 0) {
+            // Google STT만 사용할 때 정규화 적용
+            if (exactWavDuration > 0 && mappedSpeakers.length > 0) {
                 const sttDuration = Math.max(...mappedSpeakers.map((speaker) => speaker.endTime));
                 mappedSpeakers = this.audioDurationService.mapSTTTimingsToFullDuration(
                     mappedSpeakers,
                     sttDuration,
-                    exactMP4Duration,
+                    exactWavDuration,
                     sessionStartOffset,
                 );
             }
         }
 
-        // 캐시에 임시 저장
+        // 캐시에 저장
         cached.chunks.push({
             audioUrl: gcsResult.url || '',
             speakers: mappedSpeakers.map((speaker) => ({
                 ...speaker,
                 text_content: speaker.text_Content,
             })),
-            duration: exactMP4Duration,
+            duration: exactWavDuration,
         });
         this.sessionService.addToCache(sessionKey, cached);
 
@@ -245,19 +349,18 @@ export class STTController {
             success: true,
             timestamp: new Date().toISOString(),
             processingTime: Date.now() - startTime,
-            sttSessionIdx: 0, // 중간 청크는 0
+            sttSessionIdx: 0, // 임시 값
             contextText: '',
-            audioUrl: gcsResult.url || '',
+            audioUrl: gcsUrl,
             segmentIndex: cached.segmentIndex,
-            speakers: mappedSpeakers.map((segment) => ({
-                speakerTag: segment.speakerTag,
-                text_content: segment.text_Content,
-                startTime: segment.startTime,
-                endTime: segment.endTime,
+            speakers: mappedSpeakers.map((speaker) => ({
+                ...speaker,
+                text_content: speaker.text_Content,
             })),
         };
     }
 
+    // 오디오 청크 병합
     private async mergeAudioChunks(
         chunks: Array<{
             audioUrl: string;
@@ -266,71 +369,111 @@ export class STTController {
         }>,
     ): Promise<string> {
         try {
-            this.logger.log(` ${chunks.length}개 청크 합치기 시작`);
+            this.logger.log(`${chunks.length}개 청크 병합 시작`);
 
-            // 방법 1: GCS에서 오디오 파일들을 다운로드하여 합치기
-            const audioBuffers: Buffer[] = [];
+            if (!chunks || chunks.length === 0) {
+                throw new Error('병합할 청크가 없습니다');
+            }
 
-            for (const chunk of chunks) {
-                if (chunk.audioUrl) {
-                    try {
-                        // GCS에서 파일 다운로드 (실제 구현 필요)
-                        const response = await fetch(chunk.audioUrl);
-                        if (response.ok) {
-                            const buffer = Buffer.from(await response.arrayBuffer());
-                            audioBuffers.push(buffer);
-                        } else {
-                            this.logger.warn(
-                                `청크 다운로드 실패: ${chunk.audioUrl} - HTTP ${response.status}`,
-                            );
-                        }
-                    } catch (error) {
-                        this.logger.warn(`청크 다운로드 실패: ${chunk.audioUrl}`, error);
-                        // 실패한 청크는 건너뛰고 계속 진행
+            if (chunks.length === 1) {
+                this.logger.log('단일 청크, 병합 생략');
+                return chunks[0].audioUrl;
+            }
+
+            // 청크 다운로드 (병렬 처리)
+            const downloadResults = await Promise.allSettled(
+                chunks.map(async (chunk, index) => {
+                    if (!chunk.audioUrl) {
+                        throw new Error(`청크 ${index}: URL 없음`);
                     }
-                }
+
+                    const response = await fetch(chunk.audioUrl);
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const buffer = Buffer.from(await response.arrayBuffer());
+                    return { index, buffer, url: chunk.audioUrl };
+                }),
+            );
+
+            // 성공한 다운로드만 필터링
+            const successfulChunks = downloadResults
+                .map((result, index) => {
+                    if (result.status === 'fulfilled') {
+                        return result.value;
+                    } else {
+                        this.logger.error(`청크 ${index} 다운로드 실패:`, result.reason);
+                        return null;
+                    }
+                })
+                .filter((chunk): chunk is NonNullable<typeof chunk> => chunk !== null)
+                .sort((a, b) => a.index - b.index);
+
+            if (successfulChunks.length === 0) {
+                throw new Error('모든 청크 다운로드 실패');
             }
 
-            // 오디오 파일들 합치기 (ffmpeg 등 사용)
-            let mergedBuffer: Buffer;
-            try {
-                const result = AudioProcessorUtil.mergeAudioBuffers(audioBuffers);
-                if (result && Buffer.isBuffer(result)) {
-                    mergedBuffer = result;
-                } else {
-                    throw new Error('잘못된 합쳐진 버퍼');
-                }
-            } catch (error) {
-                this.logger.error('오디오 합치기 실패:', error);
-                // fallback: 첫 번째 청크 URL 반환
-                return chunks[0]?.audioUrl || '';
+            this.logger.log(`${successfulChunks.length}/${chunks.length}개 청크 다운로드 성공`);
+
+            // 오디오 병합
+            const buffers = successfulChunks.map((chunk) => chunk.buffer);
+            const mergedBuffer = AudioProcessorUtil.mergeAudioBuffers(buffers);
+
+            if (!mergedBuffer || mergedBuffer.length === 0) {
+                throw new Error('병합 결과가 비어있음');
             }
 
-            // 311라인 수정 - merged_session 파일명
+            this.logger.log(`오디오 병합 완료: ${mergedBuffer.length} bytes`);
+
+            // GCS에 병합된 파일 업로드
             const mergedGcsKey = this.gcsService.generateGcsKey(
-                `merged_session_${Date.now()}.wav`, // .mp4 → .wav
+                `merged_session_${Date.now()}.wav`,
                 'merged',
-                undefined,
-                undefined,
-                undefined,
             );
 
             const uploadResult = await this.gcsService.uploadChunk(
                 mergedBuffer,
                 mergedGcsKey,
-                'audio/mp4',
+                'audio/wav',
             );
 
-            this.logger.log(`✅ 청크 합치기 완료: ${uploadResult.url}`);
+            if (!uploadResult.success) {
+                throw new Error('병합 파일 업로드 실패');
+            }
+
+            this.logger.log(`청크 병합 완료: ${uploadResult.url}`);
+
+            // 개별 청크 파일들 삭제
+            try {
+                const chunkUrls = successfulChunks.map((chunk) => chunk.url);
+                const deleteResult = await this.gcsService.deleteMultipleFiles(chunkUrls);
+
+                if (deleteResult.success) {
+                    this.logger.log(`${deleteResult.deletedCount}개 청크 파일 삭제 완료`);
+                } else {
+                    this.logger.warn(`청크 파일 삭제 실패:`, deleteResult.errors);
+                }
+            } catch (deleteError) {
+                this.logger.error('청크 파일 삭제 중 오류:', deleteError);
+            }
+
             return uploadResult.url as string;
         } catch (error) {
-            this.logger.error('오디오 청크 합치기 실패:', error);
-            // fallback: 첫 번째 청크 URL 반환
-            return chunks[0]?.audioUrl || '';
+            this.logger.error('청크 병합 실패:', error);
+
+            // fallback: 첫 번째 유효한 청크 반환
+            const validChunk = chunks.find((chunk) => chunk.audioUrl);
+            if (validChunk) {
+                this.logger.warn('Fallback: 첫 번째 청크 사용');
+                return validChunk.audioUrl;
+            }
+
+            throw new Error('병합 및 fallback 모두 실패');
         }
     }
 
-    // 🆕 최종 청크 처리 함수 (이중처리 방지) - any 타입 제거
+    // 최종 청크 처리 함수
     private async handleFinalChunk(
         canvasId: string,
         mentorIdx: number,
@@ -338,74 +481,98 @@ export class STTController {
         startTime: number,
     ): Promise<STTWithContextResponse> {
         try {
-            this.logger.log(`✅ 최종 청크 처리 시작 - canvasIdx: ${canvasId}`);
+            this.logger.log(`최종 청크 처리 시작 - canvasId: ${canvasId}`);
 
-            // 1. 캐시에서 모든 청크 데이터 가져오기 (여러 키 시도)
-            let cached = this.sessionService.getCached(canvasId);
-            let sessionKey = canvasId;
+            // 🔧 수정: 더 강력한 캐시 대기 로직
+            let sessionKeys = this.sessionService.findAllActiveSessionKeys(canvasId);
+            this.logger.log(`활성 세션 키 발견: ${sessionKeys.length}개`);
 
-            if (!cached || cached.chunks.length === 0) {
-                // 다른 가능한 세션 키들을 직접 시도
-                const possibleKeys = [canvasId, `${canvasId}_undefined`, `${canvasId}_null`];
+            // 캐시가 없으면 더 긴 대기 후 재시도
+            if (sessionKeys.length === 0) {
+                this.logger.log('캐시 데이터 없음, 대기 중...');
 
-                for (const key of possibleKeys) {
-                    const testCached = this.sessionService.getCached(key);
-                    if (testCached && testCached.chunks.length > 0) {
-                        cached = testCached;
-                        sessionKey = key;
-                        this.logger.log(`대체 세션 키 사용: ${key}`);
+                // 최대 10초간 대기 (0.2초 간격으로 50번)
+                for (let i = 0; i < 50; i++) {
+                    await new Promise((resolve) => setTimeout(resolve, 200));
+
+                    sessionKeys = this.sessionService.findAllActiveSessionKeys(canvasId);
+                    if (sessionKeys.length > 0) {
+                        this.logger.log(`대기 후 활성 세션 발견: ${sessionKeys.length}개`);
                         break;
+                    }
+
+                    // 2초마다 진행 상황 로그
+                    if (i % 10 === 9) {
+                        this.logger.log(`대기 중... ${(i + 1) * 0.2}초 경과`);
                     }
                 }
             }
 
-            if (!cached || cached.chunks.length === 0) {
-                this.logger.error(
-                    `캐시 데이터 없음 - canvasId: ${canvasId}, sessionKey: ${sessionKey}`,
-                );
-                throw new Error('캐시된 청크 데이터 없음');
+            // 여전히 캐시가 없으면
+            if (sessionKeys.length === 0) {
+                this.logger.warn(`캐시 데이터 없음 - canvasId: ${canvasId}`);
+
+                // 🔧 수정: 캐시가 없어도 성공 응답 반환 (에러 방지)
+                return {
+                    success: true,
+                    timestamp: new Date().toISOString(),
+                    processingTime: Date.now() - startTime,
+                    sttSessionIdx: 0,
+                    contextText: '',
+                    audioUrl: '',
+                    segmentIndex: 0,
+                    speakers: [],
+                };
             }
 
-            this.logger.log(`캐시 데이터 확인: ${cached.chunks.length}개 청크 발견`);
+            this.logger.log(`캐시 데이터 확인: ${sessionKeys.length}개 세션 발견`);
 
-            // 2. 모든 청크를 하나의 오디오로 합치기
-            const mergedAudioUrl = await this.mergeAudioChunks(cached.chunks);
+            // 모든 청크를 하나의 오디오로 합치기
+            const mergedAudioUrl = await this.mergeAudioChunks(
+                sessionKeys.flatMap((key) => {
+                    const cached = this.sessionService.getCached(key);
+                    return cached?.chunks || [];
+                }),
+            );
 
-            // 3. 최종 세션 생성 (통합 오디오 URL 포함)
+            // 최종 세션 생성
             const insertResult = await this.databaseService.execute(
                 'INSERT INTO stt_transcriptions (canvas_id, mentor_idx, mentee_idx, audio_url) VALUES (?, ?, ?, ?)',
-                [canvasId, mentorIdx, menteeIdx, mergedAudioUrl], // ✅ 통합 오디오 URL
+                [canvasId, mentorIdx, menteeIdx, mergedAudioUrl],
             );
 
             const finalSessionIdx = (insertResult as DatabaseQueryResult)?.insertId;
-
             if (!finalSessionIdx) {
                 throw new Error('최종 세션 생성 실패');
             }
 
-            // 4. 모든 세그먼트를 한 번에 저장
+            // 모든 세그먼트를 한 번에 저장
             const allSegments: Array<[number, number, string, number, number]> = [];
-
-            for (const chunk of cached.chunks) {
-                for (const speaker of chunk.speakers) {
-                    if (speaker.startTime >= 0 && speaker.endTime > speaker.startTime) {
-                        allSegments.push([
-                            finalSessionIdx, // 최종 세션 ID
-                            speaker.speakerTag, // 0=멘토, 1=멘티 (pynote에서 고정된 값)
-                            speaker.text_content,
-                            speaker.startTime,
-                            speaker.endTime,
-                        ]);
+            for (const sessionKey of sessionKeys) {
+                const cached = this.sessionService.getCached(sessionKey);
+                if (cached && cached.chunks.length > 0) {
+                    for (const chunk of cached.chunks) {
+                        for (const speaker of chunk.speakers) {
+                            if (speaker.startTime >= 0 && speaker.endTime > speaker.startTime) {
+                                allSegments.push([
+                                    Number(finalSessionIdx),
+                                    Number(speaker.speakerTag),
+                                    speaker.text_content,
+                                    speaker.startTime,
+                                    speaker.endTime,
+                                ]);
+                            }
+                        }
                     }
                 }
             }
 
-            // 5. 배치로 모든 세그먼트 저장
+            // 배치로 모든 세그먼트 저장
             if (allSegments.length > 0) {
                 await this.sessionService.batchInsertSegments(allSegments);
             }
 
-            // 6. 컨텍스트 텍스트 추출 (기존 함수 활용)
+            // 컨텍스트 텍스트 추출
             const contextText = this.utilService.extractContextText(
                 allSegments.map(([, speakerTag, text, startTime, endTime]) => ({
                     speakerTag,
@@ -416,29 +583,30 @@ export class STTController {
                 })),
             );
 
-            // 7. 캐시 정리
-            this.sessionService.deleteFromCache(sessionKey);
+            // 캐시 정리
+            for (const sessionKey of sessionKeys) {
+                this.sessionService.deleteFromCache(sessionKey);
+            }
 
-            this.logger.log(
-                `✅ 최종 세션 생성 완료 - sessionIdx: ${finalSessionIdx}, 오디오: ${mergedAudioUrl}`,
-            );
+            this.logger.log(`최종 세션 생성 완료 - sessionIdx: ${finalSessionIdx}`);
 
             return {
                 success: true,
                 timestamp: new Date().toISOString(),
                 processingTime: Date.now() - startTime,
-                sttSessionIdx: finalSessionIdx,
+                sttSessionIdx: Number(finalSessionIdx),
                 contextText,
-                audioUrl: mergedAudioUrl, // ✅ 통합 오디오 URL 반환
+                audioUrl: mergedAudioUrl,
                 segmentIndex: 0,
                 speakers: [],
             };
         } catch (error) {
             this.logger.error('최종 청크 처리 실패:', error);
-            throw new InternalServerErrorException('최종 청크 처리 실패');
+            throw new InternalServerErrorException(
+                `최종 청크 처리 실패: ${error instanceof Error ? error.message : String(error)}`,
+            );
         }
     }
-
     @Post('transcribe-base64')
     @ApiOperation({ summary: 'Base64 오디오 변환' })
     async transcribeBase64(@Body() body: TranscribeBase64RequestDto): Promise<STTResponseDto> {

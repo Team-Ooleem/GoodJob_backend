@@ -13,20 +13,25 @@ export interface QuestionVisualAggregate {
     confidence_max: number | null;
     smile_mean: number | null;
     smile_max: number | null;
+    // 추가 지표 평균/최대치(프론트 RealMediaPipeAnalyzer 연동)
+    eye_contact_mean?: number | null;
+    blink_mean?: number | null;
+    gaze_stability?: number | null;
+    attention_mean?: number | null;
+    attention_max?: number | null;
+    engagement_mean?: number | null;
+    engagement_max?: number | null;
+    nervousness_mean?: number | null;
+    nervousness_max?: number | null;
     presence_dist: Record<PresenceKey, number>;
     level_dist: Record<LevelKey, number>;
-    landmarks_mean?: {
-        leftEye?: { x: number; y: number };
-        rightEye?: { x: number; y: number };
-        nose?: { x: number; y: number };
-    };
     startedAt?: number;
     endedAt?: number;
 }
 
 export interface SessionVisualAggregate {
     perQuestion: Record<string, QuestionVisualAggregate>;
-    overall: Omit<QuestionVisualAggregate, 'landmarks_mean'>;
+    overall: QuestionVisualAggregate;
 }
 
 /** DB Row 타입(visual_agg_question) */
@@ -40,6 +45,16 @@ interface VisualAggQuestionRow {
     smile_mean: number | null;
     smile_max: number | null;
 
+    eye_contact_mean: number | null;
+    blink_mean: number | null;
+    gaze_stability: number | null;
+    attention_mean: number | null;
+    attention_max: number | null;
+    engagement_mean: number | null;
+    engagement_max: number | null;
+    nervousness_mean: number | null;
+    nervousness_max: number | null;
+
     presence_good: number;
     presence_average: number;
     presence_needs_improvement: number;
@@ -48,13 +63,6 @@ interface VisualAggQuestionRow {
     level_info: number;
     level_warning: number;
     level_critical: number;
-
-    left_eye_x_mean: number | null;
-    left_eye_y_mean: number | null;
-    right_eye_x_mean: number | null;
-    right_eye_y_mean: number | null;
-    nose_x_mean: number | null;
-    nose_y_mean: number | null;
 
     started_at_ms: number | null;
     ended_at_ms: number | null;
@@ -73,6 +81,16 @@ interface VisualAggSessionRow {
     confidence_max: number | null;
     smile_mean: number | null;
     smile_max: number | null;
+
+    eye_contact_mean?: number | null;
+    blink_mean?: number | null;
+    gaze_stability?: number | null;
+    attention_mean?: number | null;
+    attention_max?: number | null;
+    engagement_mean?: number | null;
+    engagement_max?: number | null;
+    nervousness_mean?: number | null;
+    nervousness_max?: number | null;
 
     presence_good: number;
     presence_average: number;
@@ -133,17 +151,27 @@ export class MetricsService {
         await this.db.execute(
             `INSERT INTO visual_agg_question
         (session_id, question_id, sample_count, confidence_mean, confidence_max, smile_mean, smile_max,
+         eye_contact_mean, blink_mean, gaze_stability,
+         attention_mean, attention_max, engagement_mean, engagement_max, nervousness_mean, nervousness_max,
          presence_good, presence_average, presence_needs_improvement,
          level_ok, level_info, level_warning, level_critical,
-         left_eye_x_mean, left_eye_y_mean, right_eye_x_mean, right_eye_y_mean, nose_x_mean, nose_y_mean,
          started_at_ms, ended_at_ms)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE
          sample_count=VALUES(sample_count),
          confidence_mean=VALUES(confidence_mean),
          confidence_max=VALUES(confidence_max),
          smile_mean=VALUES(smile_mean),
          smile_max=VALUES(smile_max),
+         eye_contact_mean=VALUES(eye_contact_mean),
+         blink_mean=VALUES(blink_mean),
+         gaze_stability=VALUES(gaze_stability),
+         attention_mean=VALUES(attention_mean),
+         attention_max=VALUES(attention_max),
+         engagement_mean=VALUES(engagement_mean),
+         engagement_max=VALUES(engagement_max),
+         nervousness_mean=VALUES(nervousness_mean),
+         nervousness_max=VALUES(nervousness_max),
          presence_good=VALUES(presence_good),
          presence_average=VALUES(presence_average),
          presence_needs_improvement=VALUES(presence_needs_improvement),
@@ -151,12 +179,6 @@ export class MetricsService {
          level_info=VALUES(level_info),
          level_warning=VALUES(level_warning),
          level_critical=VALUES(level_critical),
-         left_eye_x_mean=VALUES(left_eye_x_mean),
-         left_eye_y_mean=VALUES(left_eye_y_mean),
-         right_eye_x_mean=VALUES(right_eye_x_mean),
-         right_eye_y_mean=VALUES(right_eye_y_mean),
-         nose_x_mean=VALUES(nose_x_mean),
-         nose_y_mean=VALUES(nose_y_mean),
          started_at_ms=VALUES(started_at_ms),
          ended_at_ms=VALUES(ended_at_ms)`,
             [
@@ -167,6 +189,15 @@ export class MetricsService {
                 a.confidence_max ?? null,
                 a.smile_mean ?? null,
                 a.smile_max ?? null,
+                a.eye_contact_mean ?? null,
+                a.blink_mean ?? null,
+                a.gaze_stability ?? null,
+                a.attention_mean ?? null,
+                a.attention_max ?? null,
+                a.engagement_mean ?? null,
+                a.engagement_max ?? null,
+                a.nervousness_mean ?? null,
+                a.nervousness_max ?? null,
                 a.presence_good,
                 a.presence_average,
                 a.presence_needs_improvement,
@@ -174,12 +205,6 @@ export class MetricsService {
                 a.level_info,
                 a.level_warning,
                 a.level_critical,
-                a.left_eye_x_mean ?? null,
-                a.left_eye_y_mean ?? null,
-                a.right_eye_x_mean ?? null,
-                a.right_eye_y_mean ?? null,
-                a.nose_x_mean ?? null,
-                a.nose_y_mean ?? null,
                 a.started_at_ms ?? null,
                 a.ended_at_ms ?? null,
             ],
@@ -208,16 +233,27 @@ export class MetricsService {
         await this.db.execute(
             `INSERT INTO visual_agg_session
         (session_id, sample_count, confidence_mean, confidence_max, smile_mean, smile_max,
+         eye_contact_mean, blink_mean, gaze_stability,
+         attention_mean, attention_max, engagement_mean, engagement_max, nervousness_mean, nervousness_max,
          presence_good, presence_average, presence_needs_improvement,
          level_ok, level_info, level_warning, level_critical,
          started_at_ms, ended_at_ms)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE
          sample_count=VALUES(sample_count),
          confidence_mean=VALUES(confidence_mean),
          confidence_max=VALUES(confidence_max),
          smile_mean=VALUES(smile_mean),
          smile_max=VALUES(smile_max),
+         eye_contact_mean=VALUES(eye_contact_mean),
+         blink_mean=VALUES(blink_mean),
+         gaze_stability=VALUES(gaze_stability),
+         attention_mean=VALUES(attention_mean),
+         attention_max=VALUES(attention_max),
+         engagement_mean=VALUES(engagement_mean),
+         engagement_max=VALUES(engagement_max),
+         nervousness_mean=VALUES(nervousness_mean),
+         nervousness_max=VALUES(nervousness_max),
          presence_good=VALUES(presence_good),
          presence_average=VALUES(presence_average),
          presence_needs_improvement=VALUES(presence_needs_improvement),
@@ -234,6 +270,15 @@ export class MetricsService {
                 overall.confidence_max,
                 overall.smile_mean,
                 overall.smile_max,
+                (overall as any).eye_contact_mean ?? null,
+                (overall as any).blink_mean ?? null,
+                (overall as any).gaze_stability ?? null,
+                (overall as any).attention_mean ?? null,
+                (overall as any).attention_max ?? null,
+                (overall as any).engagement_mean ?? null,
+                (overall as any).engagement_max ?? null,
+                (overall as any).nervousness_mean ?? null,
+                (overall as any).nervousness_max ?? null,
                 overall.presence_dist.good,
                 overall.presence_dist.average,
                 overall.presence_dist.needs_improvement,
@@ -296,6 +341,15 @@ export class MetricsService {
                 confidence_max: s.confidence_max,
                 smile_mean: s.smile_mean,
                 smile_max: s.smile_max,
+                eye_contact_mean: (s as any).eye_contact_mean ?? null,
+                blink_mean: (s as any).blink_mean ?? null,
+                gaze_stability: (s as any).gaze_stability ?? null,
+                attention_mean: (s as any).attention_mean ?? null,
+                attention_max: (s as any).attention_max ?? null,
+                engagement_mean: (s as any).engagement_mean ?? null,
+                engagement_max: (s as any).engagement_max ?? null,
+                nervousness_mean: (s as any).nervousness_mean ?? null,
+                nervousness_max: (s as any).nervousness_max ?? null,
                 presence_dist: {
                     good: s.presence_good,
                     average: s.presence_average,
@@ -348,24 +402,21 @@ export class MetricsService {
     // ======= 내부 유틸 =======
 
     private mapQuestionRowToAggregate(r: VisualAggQuestionRow): QuestionVisualAggregate {
-        const landmarks: QuestionVisualAggregate['landmarks_mean'] = {};
-
-        if (r.left_eye_x_mean != null && r.left_eye_y_mean != null) {
-            landmarks.leftEye = { x: r.left_eye_x_mean, y: r.left_eye_y_mean };
-        }
-        if (r.right_eye_x_mean != null && r.right_eye_y_mean != null) {
-            landmarks.rightEye = { x: r.right_eye_x_mean, y: r.right_eye_y_mean };
-        }
-        if (r.nose_x_mean != null && r.nose_y_mean != null) {
-            landmarks.nose = { x: r.nose_x_mean, y: r.nose_y_mean };
-        }
-
         const agg: QuestionVisualAggregate = {
             count: r.sample_count,
             confidence_mean: r.confidence_mean,
             confidence_max: r.confidence_max,
             smile_mean: r.smile_mean,
             smile_max: r.smile_max,
+            eye_contact_mean: r.eye_contact_mean,
+            blink_mean: r.blink_mean,
+            gaze_stability: r.gaze_stability,
+            attention_mean: r.attention_mean,
+            attention_max: r.attention_max,
+            engagement_mean: r.engagement_mean,
+            engagement_max: r.engagement_max,
+            nervousness_mean: r.nervousness_mean,
+            nervousness_max: r.nervousness_max,
             presence_dist: {
                 good: r.presence_good,
                 average: r.presence_average,
@@ -380,10 +431,6 @@ export class MetricsService {
             startedAt: r.started_at_ms ?? undefined,
             endedAt: r.ended_at_ms ?? undefined,
         };
-
-        if (Object.keys(landmarks).length > 0) {
-            agg.landmarks_mean = landmarks;
-        }
         return agg;
     }
 
@@ -398,6 +445,25 @@ export class MetricsService {
         let smileW = 0;
         let smileMaxSum = 0;
         let smileMaxW = 0;
+
+        let eyeContactSum = 0;
+        let eyeContactW = 0;
+        let blinkSum = 0;
+        let blinkW = 0;
+        let gazeStabSum = 0;
+        let gazeStabW = 0;
+        let attSum = 0;
+        let attW = 0;
+        let attMaxSum = 0;
+        let attMaxW = 0;
+        let engSum = 0;
+        let engW = 0;
+        let engMaxSum = 0;
+        let engMaxW = 0;
+        let nervSum = 0;
+        let nervW = 0;
+        let nervMaxSum = 0;
+        let nervMaxW = 0;
 
         let presGood = 0;
         let presAvg = 0;
@@ -434,6 +500,43 @@ export class MetricsService {
                 smileMaxW += w;
             }
 
+            if (r.eye_contact_mean != null) {
+                eyeContactSum += r.eye_contact_mean * w;
+                eyeContactW += w;
+            }
+            if (r.blink_mean != null) {
+                blinkSum += r.blink_mean * w;
+                blinkW += w;
+            }
+            if (r.gaze_stability != null) {
+                gazeStabSum += r.gaze_stability * w;
+                gazeStabW += w;
+            }
+            if (r.attention_mean != null) {
+                attSum += r.attention_mean * w;
+                attW += w;
+            }
+            if (r.attention_max != null) {
+                attMaxSum += r.attention_max * w;
+                attMaxW += w;
+            }
+            if (r.engagement_mean != null) {
+                engSum += r.engagement_mean * w;
+                engW += w;
+            }
+            if (r.engagement_max != null) {
+                engMaxSum += r.engagement_max * w;
+                engMaxW += w;
+            }
+            if (r.nervousness_mean != null) {
+                nervSum += r.nervousness_mean * w;
+                nervW += w;
+            }
+            if (r.nervousness_max != null) {
+                nervMaxSum += r.nervousness_max * w;
+                nervMaxW += w;
+            }
+
             presGood += r.presence_good;
             presAvg += r.presence_average;
             presNeed += r.presence_needs_improvement;
@@ -455,6 +558,15 @@ export class MetricsService {
             confidence_max: confMaxW ? confMaxSum / confMaxW : null,
             smile_mean: smileW ? smileSum / smileW : null,
             smile_max: smileMaxW ? smileMaxSum / smileMaxW : null,
+            eye_contact_mean: eyeContactW ? eyeContactSum / eyeContactW : null,
+            blink_mean: blinkW ? blinkSum / blinkW : null,
+            gaze_stability: gazeStabW ? gazeStabSum / gazeStabW : null,
+            attention_mean: attW ? attSum / attW : null,
+            attention_max: attMaxW ? attMaxSum / attMaxW : null,
+            engagement_mean: engW ? engSum / engW : null,
+            engagement_max: engMaxW ? engMaxSum / engMaxW : null,
+            nervousness_mean: nervW ? nervSum / nervW : null,
+            nervousness_max: nervMaxW ? nervMaxSum / nervMaxW : null,
             presence_dist: {
                 good: presGood,
                 average: presAvg,

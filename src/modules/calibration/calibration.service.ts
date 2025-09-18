@@ -328,12 +328,6 @@ export class CalibrationService {
             level_info: 8,
             level_warning: 2,
             level_critical: 0,
-            left_eye_x_mean: 0.3,
-            left_eye_y_mean: 0.4,
-            right_eye_x_mean: 0.7,
-            right_eye_y_mean: 0.4,
-            nose_x_mean: 0.5,
-            nose_y_mean: 0.6,
             started_at_ms: 0,
             ended_at_ms: 15000,
         } as VisualAggregateDto;

@@ -1,6 +1,8 @@
-import { Body, Controller, Get, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Post, Req } from '@nestjs/common';
+
 import { CanvasService } from './canvas.service';
 import { CreateCanvasDto } from './dto/create-canvas.dto';
+import { UploadCanvasDto } from './dto/upload-canvas.dto';
 
 @Controller('coaching-resume/canvas')
 export class CanvasController {
@@ -36,4 +38,12 @@ export class CanvasController {
 
     //     return participants;
     // }
+
+    // 캔버스에서 전송된 dataURL 이미지를 S3에 업로드
+    @Post('upload')
+    async uploadCanvas(@Body() body: UploadCanvasDto) {
+        const { dataUrl, fileName } = body;
+        const result = await this.canvasService.uploadCanvasImage(dataUrl, fileName);
+        return { url: result.url };
+    }
 }

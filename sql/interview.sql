@@ -30,6 +30,15 @@ CREATE TABLE IF NOT EXISTS visual_agg_question (
   confidence_max   DOUBLE NULL,
   smile_mean       DOUBLE NULL,
   smile_max        DOUBLE NULL,
+  eye_contact_mean DOUBLE NULL,
+  blink_mean       DOUBLE NULL,
+  gaze_stability   DOUBLE NULL,
+  attention_mean   DOUBLE NULL,
+  attention_max    DOUBLE NULL,
+  engagement_mean  DOUBLE NULL,
+  engagement_max   DOUBLE NULL,
+  nervousness_mean DOUBLE NULL,
+  nervousness_max  DOUBLE NULL,
   presence_good    INT NOT NULL DEFAULT 0,
   presence_average INT NOT NULL DEFAULT 0,
   presence_needs_improvement INT NOT NULL DEFAULT 0,
@@ -37,14 +46,10 @@ CREATE TABLE IF NOT EXISTS visual_agg_question (
   level_info       INT NOT NULL DEFAULT 0,
   level_warning    INT NOT NULL DEFAULT 0,
   level_critical   INT NOT NULL DEFAULT 0,
-  left_eye_x_mean  DOUBLE NULL,
-  left_eye_y_mean  DOUBLE NULL,
-  right_eye_x_mean DOUBLE NULL,
-  right_eye_y_mean DOUBLE NULL,
-  nose_x_mean      DOUBLE NULL,
-  nose_y_mean      DOUBLE NULL,
   started_at_ms    BIGINT NULL,
   ended_at_ms      BIGINT NULL,
+  normalized_score DOUBLE NULL COMMENT '캘리브레이션 적용된 정규화 점수',
+  calibration_applied TINYINT(1) NOT NULL DEFAULT 0 COMMENT '캘리브레이션 적용 여부',
   updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (session_id, question_id),
   CONSTRAINT fk_vqa_q FOREIGN KEY (session_id, question_id) REFERENCES questions(session_id, question_id) ON DELETE CASCADE
@@ -58,6 +63,15 @@ CREATE TABLE IF NOT EXISTS visual_agg_session (
   confidence_max   DOUBLE NULL,
   smile_mean       DOUBLE NULL,
   smile_max        DOUBLE NULL,
+  eye_contact_mean DOUBLE NULL,
+  blink_mean       DOUBLE NULL,
+  gaze_stability   DOUBLE NULL,
+  attention_mean   DOUBLE NULL,
+  attention_max    DOUBLE NULL,
+  engagement_mean  DOUBLE NULL,
+  engagement_max   DOUBLE NULL,
+  nervousness_mean DOUBLE NULL,
+  nervousness_max  DOUBLE NULL,
   presence_good    INT NOT NULL DEFAULT 0,
   presence_average INT NOT NULL DEFAULT 0,
   presence_needs_improvement INT NOT NULL DEFAULT 0,
@@ -85,6 +99,8 @@ CREATE TABLE IF NOT EXISTS audio_metrics_question (
   shimmer_like      DOUBLE NULL,
   silence_ratio     DOUBLE NULL,
   sr                INT NULL,
+  normalized_score DOUBLE NULL COMMENT '캘리브레이션 적용된 정규화 점수',
+  calibration_applied TINYINT(1) NOT NULL DEFAULT 0 COMMENT '캘리브레이션 적용 여부',
   updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (session_id, question_id),
   CONSTRAINT fk_amq_q FOREIGN KEY (session_id, question_id) REFERENCES questions(session_id, question_id) ON DELETE CASCADE
@@ -155,14 +171,7 @@ CREATE TABLE IF NOT EXISTS session_calibrations (
   INDEX idx_session_calibration_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 기존 테이블에 캘리브레이션 컬럼 추가
-ALTER TABLE audio_metrics_question 
-ADD COLUMN normalized_score DOUBLE NULL COMMENT '캘리브레이션 적용된 정규화 점수' AFTER sr,
-ADD COLUMN calibration_applied TINYINT(1) NOT NULL DEFAULT 0 COMMENT '캘리브레이션 적용 여부' AFTER normalized_score;
-
-ALTER TABLE visual_agg_question
-ADD COLUMN normalized_score DOUBLE NULL COMMENT '캘리브레이션 적용된 정규화 점수' AFTER ended_at_ms,
-ADD COLUMN calibration_applied TINYINT(1) NOT NULL DEFAULT 0 COMMENT '캘리브레이션 적용 여부' AFTER normalized_score;
+-- 기존 테이블 증설용 ALTER 구문은 초기 스키마에 반영되어 제거됨
 
 -- Resume file chunks with optional embeddings for MMR/RAG
 CREATE TABLE IF NOT EXISTS resume_file_chunks (

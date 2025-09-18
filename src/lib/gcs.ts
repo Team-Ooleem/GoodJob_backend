@@ -108,7 +108,7 @@ export class GcsService {
             const file = bucket.file(gcsKey);
 
             // 한 번에 업로드 (40MB 이하 청크 기준)
-            await file.save(buffer, { metadata: { contentType }, resumable: false });
+            await file.save(buffer, { metadata: { contentType }, resumable: true });
 
             const publicUrl = `https://storage.googleapis.com/${this.bucketName}/${gcsKey}`;
             console.log(`[GCS] 업로드 성공: ${publicUrl}`);
@@ -125,5 +125,82 @@ export class GcsService {
                 error: error instanceof Error ? error.message : 'Unknown error',
             };
         }
+    }
+    /** -------------------------------
+     * GCS에서 파일 삭제
+     * -------------------------------- */
+    async deleteFile(gcsKey: string): Promise<{ success: boolean; error?: string }> {
+        try {
+            console.log(`[GCS] 파일 삭제 시작: ${gcsKey}`);
+
+            const bucket = this.storage.bucket(this.bucketName);
+            const file = bucket.file(gcsKey);
+
+            await file.delete();
+
+            console.log(`[GCS] 파일 삭제 성공: ${gcsKey}`);
+            return { success: true };
+        } catch (error: unknown) {
+            console.error(`[GCS] 파일 삭제 실패: ${gcsKey}`);
+            console.error(`[GCS] 오류 상세:`, error);
+
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error',
+            };
+        }
+    }
+
+    /** -------------------------------
+     * URL에서 GCS 키 추출
+     * -------------------------------- */
+    extractGcsKeyFromUrl(url: string): string | null {
+        try {
+            // https://storage.googleapis.com/bucket-name/path/file.ext 형태에서
+            // path/file.ext 부분 추출
+            const match = url.match(/storage\.googleapis\.com\/[^/]+\/(.+)/);
+            return match ? match[1] : null;
+        } catch (error) {
+            console.error(`[GCS] URL에서 키 추출 실패: ${url}`, error);
+            return null;
+        }
+    }
+
+    /** -------------------------------
+     * 여러 파일 일괄 삭제
+     * -------------------------------- */
+    async deleteMultipleFiles(
+        urls: string[],
+    ): Promise<{ success: boolean; deletedCount: number; errors: string[] }> {
+        const results = await Promise.allSettled(
+            urls.map(async (url) => {
+                const gcsKey = this.extractGcsKeyFromUrl(url);
+                if (!gcsKey) {
+                    throw new Error(`유효하지 않은 URL: ${url}`);
+                }
+                return await this.deleteFile(gcsKey);
+            }),
+        );
+
+        let deletedCount = 0;
+        const errors: string[] = [];
+
+        results.forEach((result, index) => {
+            if (result.status === 'fulfilled' && result.value.success) {
+                deletedCount++;
+            } else {
+                const error =
+                    result.status === 'rejected'
+                        ? result.reason
+                        : result.value.error || 'Unknown error';
+                errors.push(`파일 ${index + 1}: ${error}`);
+            }
+        });
+
+        return {
+            success: deletedCount > 0,
+            deletedCount,
+            errors,
+        };
     }
 }

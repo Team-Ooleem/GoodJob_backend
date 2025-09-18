@@ -152,7 +152,25 @@ export class AuthController {
     // 로그아웃 엔드포인트, 세션 쿠키 삭제
     @Get('logout')
     logout(@Res() res: Response) {
-        res.clearCookie('session', { path: '/' });
+        const isProd = this.configService.isProduction;
+
+        // 로그인 시와 동일한 쿠키 옵션으로 삭제
+        const cookieOptions = {
+            path: '/',
+            // 프로덕션 환경 (HTTPS, 크로스 도메인)
+            ...(isProd && {
+                secure: true,
+                sameSite: 'none' as const,
+                domain: '.good-job.shop',
+            }),
+            // 로컬 환경 (HTTP, 같은 도메인)
+            ...(!isProd && {
+                secure: false,
+                sameSite: 'lax' as const,
+            }),
+        };
+
+        res.clearCookie('session', cookieOptions);
         return res.status(204).send();
     }
 
