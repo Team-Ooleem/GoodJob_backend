@@ -86,7 +86,12 @@ export class AiController {
 
     // POST /api/ai/job-extract (프런트 사전 검증/프리뷰용)
     @Post('job-extract')
-    async extractJob(@Body() body: unknown): Promise<ExtractResult & { summary?: string }> {
+    async extractJob(@Body() body: unknown): Promise<
+        ExtractResult & {
+            summary?: string;
+            summaryJson?: import('./job-extract.service').JobPostSummary;
+        }
+    > {
         this.logger.log(
             `POST /ai/job-extract bodyKeys=${Object.keys((body as any) || {}).join(',')}`,
         );
@@ -99,12 +104,19 @@ export class AiController {
         const { url, sessionId } = parsed.data as { url: string; sessionId?: string };
         const r = await this.jobExtract.extract(url);
         if (!r.ok) return r;
-        // LLM 요약을 추가로 생성하여 프리뷰 품질 개선
+        this.logger.log(`extract 결과: ${r.content}`);
+        // LLM 요약(텍스트/JSON)을 추가로 생성하여 프리뷰 품질 개선
         let summary: string | undefined;
+        let summaryJson: import('./job-extract.service').JobPostSummary | undefined;
         try {
             summary = await this.jobExtract.summarizeJobPost(r.content);
         } catch {
             summary = undefined;
+        }
+        try {
+            summaryJson = await this.jobExtract.summarizeJobPostJson(r.content);
+        } catch {
+            summaryJson = undefined;
         }
         try {
             if (sessionId) {
@@ -116,7 +128,7 @@ export class AiController {
                 });
             }
         } catch {}
-        return { ...r, summary };
+        return { ...r, summary, summaryJson };
     }
 
     // POST /api/ai/followups
