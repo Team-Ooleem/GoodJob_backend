@@ -118,6 +118,25 @@ export class JobExtractService {
             }
 
             const baseUrl = finalUrl || urlStr;
+
+            // iframe 체크: 채용공고가 iframe으로 임베드된 경우
+            const iframeUrl = this.extractIframeSrc(html);
+            if (iframeUrl) {
+                this.logger.log(`코드=iframe_detected src=${iframeUrl}`);
+                try {
+                    // iframe URL로 직접 콘텐츠 추출 시도
+                    const iframeResult = await this.extractFromIframe(iframeUrl, baseUrl);
+                    if (iframeResult.ok) {
+                        this.logger.log(
+                            `코드=iframe_extract_ok len=${iframeResult.content.length}`,
+                        );
+                        return iframeResult;
+                    }
+                } catch (e: any) {
+                    this.logger.warn(`코드=iframe_extract_fail reason=${e?.message}`);
+                }
+            }
+
             const meta = this.extractMeta(html);
             let textFromHtml = this.extractMainText(html);
             const title = meta['og:title'] || meta.title || '';
@@ -174,6 +193,92 @@ export class JobExtractService {
         } catch (e: any) {
             this.logger.error(`job-extract 실패: ${e?.message}`);
             return { ok: false, url: urlStr, error: e?.message || 'unknown error' };
+        }
+    }
+
+    // iframe src URL 추출
+    private extractIframeSrc(html: string): string | undefined {
+        // 채용공고 관련 iframe 패턴들
+        const iframePatterns = [
+            /<iframe[^>]+src=["']([^"']+)["'][^>]*(?:name=["']JOB_BOARD_CONTENT["']|id=["']JOB_BOARD_CONTENT["'])/i,
+            /<iframe[^>]+(?:name=["']JOB_BOARD_CONTENT["']|id=["']JOB_BOARD_CONTENT["'])[^>]+src=["']([^"']+)["']/i,
+            /<iframe[^>]+src=["']([^"']*(?:greenhouse|lever|workday|bamboo|job|career|recruit)[^"']*)["']/i,
+            /<iframe[^>]+src=["']([^"']+)["'][^>]*(?:job|career|recruit)/i,
+        ];
+
+        for (const pattern of iframePatterns) {
+            const match = html.match(pattern);
+            if (match && match[1]) {
+                const src = match[1].trim();
+                // 유효한 URL인지 확인
+                try {
+                    new URL(src);
+                    return src;
+                } catch {
+                    // 상대 URL인 경우는 일단 스킵 (복잡해짐)
+                    continue;
+                }
+            }
+        }
+
+        return undefined;
+    }
+
+    // iframe URL에서 직접 콘텐츠 추출
+    private async extractFromIframe(
+        iframeUrl: string,
+        baseUrl: string,
+    ): Promise<ExtractResult> {
+        this.logger.log(`iframe 콘텐츠 추출 시작: ${iframeUrl}`);
+
+        try {
+            // 먼저 정적 페이지로 시도
+            let html = '';
+            let finalUrl: string | undefined = undefined;
+
+            try {
+                const r = await this.fetchHtml(iframeUrl);
+                html = r.html;
+                finalUrl = r.finalUrl;
+            } catch (e: any) {
+                // 403/406 등의 경우 동적 렌더링 시도
+                if (/HTTP\s+(403|406|503)/.test(String(e?.message))) {
+                    this.logger.warn(`iframe 정적 추출 실패, 동적 시도: ${e?.message}`);
+                    const r2 = await this.fetchHtmlDynamic(iframeUrl);
+                    html = r2.html;
+                    finalUrl = r2.finalUrl;
+                } else {
+                    throw e;
+                }
+            }
+
+            if (!html) {
+                return { ok: false, url: baseUrl, error: 'iframe HTML 추출 실패' };
+            }
+
+            // iframe 콘텐츠에서 메타데이터와 텍스트 추출
+            const meta = this.extractMeta(html);
+            const textFromHtml = this.extractMainText(html);
+            const title = meta['og:title'] || meta.title || '';
+            const company = this.guessCompany(meta, textFromHtml);
+
+            if (!textFromHtml || this.isTextInsufficient(textFromHtml)) {
+                return { ok: false, url: baseUrl, error: 'iframe 콘텐츠 부족' };
+            }
+
+            return {
+                ok: true,
+                url: baseUrl, // 원본 페이지 기준으로 통일
+                source: 'html',
+                title: title || undefined,
+                company: company || undefined,
+                content: textFromHtml,
+                imagesTried: [],
+                meta,
+            };
+        } catch (e: any) {
+            this.logger.error(`iframe 추출 실패: ${e?.message}`);
+            return { ok: false, url: baseUrl, error: e?.message || 'iframe 추출 실패' };
         }
     }
 
@@ -235,6 +340,45 @@ export class JobExtractService {
             });
 
             await page.goto(urlStr, { waitUntil: 'domcontentloaded' });
+
+            // iframe이 있는 경우 iframe 콘텐츠 로딩까지 대기
+            const hasIframe = await page.$(
+                'iframe[src*="greenhouse"], iframe[src*="lever"], iframe[src*="workday"], iframe[name="JOB_BOARD_CONTENT"], iframe[id="JOB_BOARD_CONTENT"]',
+            );
+            if (hasIframe) {
+                this.logger.log('iframe 감지, iframe 로딩 대기 중...');
+                try {
+                    // iframe이 완전히 로드될 때까지 조금 더 대기
+                    await page.waitForTimeout(3000);
+                    // iframe 내부 콘텐츠가 로드되기를 기다림
+                    await page
+                        .waitForFunction(
+                            () => {
+                                const iframe = document.querySelector(
+                                    'iframe[src*="greenhouse"], iframe[src*="lever"], iframe[src*="workday"], iframe[name="JOB_BOARD_CONTENT"], iframe[id="JOB_BOARD_CONTENT"]',
+                                ) as HTMLIFrameElement;
+                                if (!iframe) return true;
+                                try {
+                                    // iframe 접근이 가능한지 확인 (same-origin이 아니면 에러 발생)
+                                    return (
+                                        iframe.contentDocument &&
+                                        iframe.contentDocument.body &&
+                                        iframe.contentDocument.body.children.length > 0
+                                    );
+                                } catch {
+                                    // cross-origin iframe인 경우 접근 불가이므로 true 반환
+                                    return true;
+                                }
+                            },
+                            { timeout: 5000 },
+                        )
+                        .catch(() => {
+                            this.logger.warn('iframe 내부 콘텐츠 로딩 대기 타임아웃');
+                        });
+                } catch (e: any) {
+                    this.logger.warn(`iframe 로딩 대기 실패: ${e?.message}`);
+                }
+            }
 
             // 사람인 특화: 채용공고 콘텐츠 로딩 대기
             if (urlStr.includes('saramin.co.kr')) {
