@@ -1,3 +1,4 @@
+import { Injectable } from '@nestjs/common';
 import {
     WebSocketGateway,
     WebSocketServer,
@@ -8,17 +9,31 @@ import {
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import * as Y from 'yjs';
+import { DatabaseService } from '../../database/database.service';
+
+type RoomState = {
+    doc: Y.Doc;
+    dirty: boolean;
+    lastActivity: number;
+};
 
 @WebSocketGateway({
     cors: { origin: '*', credentials: true },
 })
+@Injectable()
 export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+    constructor(private readonly db: DatabaseService) {}
+
     @WebSocketServer() server: Server;
-    private docs = new Map<string, Y.Doc>();
+    private rooms = new Map<string, RoomState>();
+
+    private readonly AUTOSAVE_INTERVAL = 30000; // 30초마다 저장
+    private readonly IDLE_TIMEOUT = 10 * 60 * 1000; // 10분 idle 시 정리
 
     // --- 초기화 확인 ---
     afterInit() {
         console.log('🚀 WebSocket server initialized', !!this.server);
+        this.startAutoSaveLoop();
     }
 
     handleConnection(client: Socket) {
@@ -29,18 +44,76 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         console.log('❌ disconnected', client.id);
     }
 
-    private getDoc(room: string) {
-        let doc = this.docs.get(room);
-        if (!doc) {
-            doc = new Y.Doc();
-            this.docs.set(room, doc);
+    private async getRoom(room: string): Promise<RoomState> {
+        let state = this.rooms.get(room);
+        if (!state) {
+            const doc = new Y.Doc();
+
+            // DB에서 기존 json_data 불러오기
+            const row = await this.db.queryOne<{ json_data: string | null }>(
+                `SELECT json_data FROM canvas WHERE id = ?`,
+                [room],
+            );
+            if (row?.json_data) {
+                try {
+                    console.log(`📥 [getRoom] load DB json_data length=${row.json_data.length}`);
+                    const update = Buffer.from(row.json_data, 'base64');
+                    Y.applyUpdate(doc, update);
+                    console.log(
+                        `📝 [getRoom] after applyUpdate, map=`,
+                        doc.getMap('objects').toJSON(),
+                    );
+                } catch (err) {
+                    console.error(`❌ failed to load canvas state for ${room}`, err);
+                }
+            }
+
+            state = { doc, dirty: false, lastActivity: Date.now() };
+
+            // Y.Doc 업데이트 → dirty 플래그
+            doc.on('update', () => {
+                state!.dirty = true;
+                state!.lastActivity = Date.now();
+            });
+
+            this.rooms.set(room, state);
         }
-        return doc;
+        return state;
+    }
+
+    private startAutoSaveLoop() {
+        setInterval(async () => {
+            const now = Date.now();
+            for (const [roomId, state] of this.rooms.entries()) {
+                try {
+                    if (state.dirty) {
+                        // 🔑 항상 전체 스냅샷 저장
+                        const update = Y.encodeStateAsUpdate(
+                            state.doc,
+                            Y.encodeStateVector(new Y.Doc()),
+                        );
+                        await this.db.query(`UPDATE canvas SET json_data = ? WHERE id = ?`, [
+                            Buffer.from(update).toString('base64'),
+                            roomId,
+                        ]);
+                        state.dirty = false;
+                        console.log(`💾 autosaved full snapshot for ${roomId}`);
+                    }
+
+                    if (now - state.lastActivity > this.IDLE_TIMEOUT) {
+                        this.rooms.delete(roomId);
+                        console.log(`🗑️ removed idle room ${roomId}`);
+                    }
+                } catch (err) {
+                    console.error(`❌ autosave failed for ${roomId}`, err);
+                }
+            }
+        }, this.AUTOSAVE_INTERVAL);
     }
 
     // --- Yjs 협업용 join ---
     @SubscribeMessage('joinCanvas')
-    handleJoinCanvas(client: Socket, room: string) {
+    async handleJoinCanvas(client: Socket, room: string) {
         if (!room) {
             console.error('❌ joinCanvas called without room');
             return;
@@ -48,8 +121,9 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 
         client.join(room);
 
-        const doc = this.getDoc(room);
+        const { doc } = await this.getRoom(room);
         const init = Y.encodeStateAsUpdate(doc);
+        console.log(`🚀 [joinCanvas] sending init size=${init.length}`);
         client.emit('init', Array.from(init));
 
         console.log(`📌 (Canvas) ${client.id} joined ${room}`);
@@ -70,12 +144,12 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 
     // --- Yjs 업데이트 동기화 ---
     @SubscribeMessage('sync')
-    handleSync(
+    async handleSync(
         client: Socket,
         payload: { room: string; update: Uint8Array | number[] | ArrayBuffer },
     ) {
         const { room, update } = payload;
-        const doc = this.getDoc(room);
+        const { doc } = await this.getRoom(room);
 
         let u8: Uint8Array;
         if (update instanceof Uint8Array) u8 = update;
@@ -83,8 +157,14 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         else if (Array.isArray(update)) u8 = Uint8Array.from(update);
         else return;
 
+        console.log(`📩 [sync] update 수신: room=${room}, bytes=${u8.length}`);
         Y.applyUpdate(doc, u8);
+        console.log(`📝 [sync] after applyUpdate, map=`, doc.getMap('objects').toJSON());
+
         client.to(room).emit('update', Array.from(u8));
+
+        const state = this.rooms.get(room);
+        if (state) state.lastActivity = Date.now();
     }
 
     // --- WebRTC 전용 join ---
@@ -149,7 +229,7 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     handleDrawingStart(client: Socket, payload: { room: string; id: string; brush?: any }) {
         client.to(payload.room).emit('drawing:start', {
             id: payload.id,
-            brush: payload.brush, // 🆕 brush도 relay
+            brush: payload.brush,
         });
     }
 
@@ -161,7 +241,7 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         client.to(payload.room).emit('drawing:progress', {
             id: payload.id,
             points: payload.points,
-            brush: payload.brush, // 🆕 brush도 relay
+            brush: payload.brush,
         });
     }
 

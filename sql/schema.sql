@@ -164,7 +164,7 @@ CREATE TABLE canvas (
     application_id INT NOT NULL,               -- 연결된 멘토링 신청 ID
     name VARCHAR(255) NULL,                    -- 캔버스 이름
     created_by INT NOT NULL,                   -- 캔버스를 만든 유저
-    json_data JSON NULL COMMENT 'Fabric.js 오브젝트 직렬화 상태 저장',
+    json_data LONGTEXT NULL COMMENT 'Fabric.js 오브젝트 직렬화 상태 저장',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT fk_canvas_user FOREIGN KEY (created_by) 
         REFERENCES users(idx) ON DELETE CASCADE,
