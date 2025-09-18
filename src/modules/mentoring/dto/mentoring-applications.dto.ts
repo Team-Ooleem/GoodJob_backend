@@ -14,7 +14,7 @@ export class MentoringApplicationItemDto {
     application_id: number;
     product_idx: number;
     product_title: string;
-    booked_date: string; // YYYY-MM-DD
+    booked_date: string | null; // YYYY-MM-DD or null
     application_status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'completed';
     mentee: MenteeSummaryDto;
     mentor: MentorSummaryDto;
@@ -31,4 +31,3 @@ export class MentoringApplicationsResponseDto {
     applications: MentoringApplicationItemDto[];
     page_info: MentoringApplicationsPageInfoDto;
 }
-
