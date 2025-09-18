@@ -24,7 +24,9 @@
         "db:init": "node scripts/setup-database-universal.js",
         "db:init:reset": "node scripts/setup-database-universal.js --reset",
         "db:init:with-data": "node scripts/setup-database-universal.js --with-data",
-        "db:init:with-data:reset": "node scripts/setup-database-universal.js --reset --with-data"
+        "db:init:with-data:reset": "node scripts/setup-database-universal.js --reset --with-data",
+        "db:cleanup:calibration": "node scripts/cleanup-calibration-json.js",
+        "db:cleanup:calibration:dry": "node scripts/cleanup-calibration-json.js --dry-run"
     },
     "dependencies": {
         "@aws-sdk/client-s3": "^3.879.0",
@@ -33,6 +35,7 @@
         "@google-cloud/speech": "^7.2.0",
         "@google-cloud/storage": "^7.17.0",
         "@google-cloud/text-to-speech": "^6.3.0",
+        "@google-cloud/vision": "^5.3.3",
         "@nestjs/axios": "^4.0.1",
         "@nestjs/common": "^11.0.1",
         "@nestjs/config": "^4.0.2",
@@ -65,6 +68,7 @@
         "passport": "^0.7.0",
         "passport-jwt": "^4.0.1",
         "pdfjs-dist": "^5.4.149",
+        "playwright": "^1.55.0",
         "reflect-metadata": "^0.2.2",
         "rxjs": "^7.8.1",
         "socket.io": "^4.8.1",
