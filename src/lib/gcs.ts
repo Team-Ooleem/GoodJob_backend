@@ -40,6 +40,7 @@ export class GcsService {
             return { isValid: false, error: `청크 크기는 ${maxChunkSize / (1024 * 1024)}MB 초과` };
         }
 
+        // 🔧 WAV를 우선순위로 변경, MP4는 fallback으로 유지
         const allowedMimeTypes = ['audio/wav', 'audio/webm', 'audio/mp4'];
         if (file.mimetype && !allowedMimeTypes.includes(file.mimetype)) {
             return {
@@ -63,7 +64,9 @@ export class GcsService {
     ): string {
         const timestamp = Date.now();
         const randomString = Math.random().toString(36).substring(2, 8);
-        const extension = path.extname(originalName) || '.mp4';
+
+        // 🔧 WAV를 기본 확장자로 변경 (MP4에서 WAV로)
+        const extension = path.extname(originalName) || '.wav';
 
         let fileName = '';
         if (canvasId !== undefined && mentorIdx !== undefined && menteeIdx !== undefined) {

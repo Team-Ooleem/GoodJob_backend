@@ -36,7 +36,6 @@ export class GoogleSpeechProvider implements SpeechProvider {
         gcsUrl?: string,
     ): Promise<TranscriptionResult> {
         if (!this.speechClient) return this.createSampleResult();
-
         try {
             // 동적으로 sampleRateHertz를 포함/제외하기 위한 구성
             const baseConfig: any = {
@@ -60,7 +59,7 @@ export class GoogleSpeechProvider implements SpeechProvider {
                 // 한국어 인식 개선
                 enableWordConfidence: true,
                 enableWordTimeOffsets: true,
-                enableAutomaticPunctuation: true,
+                enableAutomaticPunctuation: false,
 
                 // 대화용 성능 최적화
                 maxAlternatives: 1, // 안정적인 결과를 위해 1개로 제한

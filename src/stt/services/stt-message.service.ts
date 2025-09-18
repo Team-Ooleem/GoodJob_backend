@@ -26,7 +26,9 @@ export class STTMessageService {
                     audioUrl: row.audio_url,
                     timestamp: row.created_at,
                     mentor_idx: row.mentor_idx,
+                    mentor_name: row.mentor_name,
                     mentee_idx: row.mentee_idx,
+                    mentee_name: row.mentee_name,
                     segments: [],
                     audioDuration: 0,
                 });

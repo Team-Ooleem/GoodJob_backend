@@ -57,3 +57,18 @@ export interface ContextSpeakerData {
     startTime: number;
     endTime: number;
 }
+
+export interface MP4Cache {
+    chunks: MP4Chunk[];
+    totalSize: number;
+    totalDuration: number;
+}
+
+export interface MP4Chunk {
+    buffer: Buffer;
+    chunkIndex: number;
+    size: number;
+    startTime: number;
+    endTime: number;
+    duration: number;
+}

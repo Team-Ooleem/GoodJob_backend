@@ -103,6 +103,8 @@ export interface RawSessionData {
     created_at: string;
     mentor_idx: number;
     mentee_idx: number;
+    mentor_name?: string;
+    mentee_name?: string;
     speaker_idx: number;
     text_content: string;
     start_time: number;
@@ -115,6 +117,8 @@ export interface TransformedSession {
     timestamp: string;
     mentor_idx: number;
     mentee_idx: number;
+    mentor_name?: string;
+    mentee_name?: string;
     segments: Array<{
         speakerTag: number;
         textContent: string;
@@ -138,4 +142,59 @@ export interface PynoteSegment {
 export interface PynoteResponse {
     success: boolean;
     speaker_segments?: any[];
+}
+
+// 🆕 PyAnote 결과 타입 정의
+export interface PyAnoteResult {
+    success: boolean;
+    speaker_segments: PyAnoteSegment[];
+    audioBuffer?: Buffer;
+}
+
+export interface PyAnoteSegment {
+    start_time: number;
+    end_time: number;
+    speaker_tag: string;
+    text_content: string;
+}
+
+export interface PyAnoteSTTResult {
+    speakers: SpeakerSegment[];
+    totalDuration: number;
+}
+
+// 🆕 매핑된 스피커 세그먼트 타입
+export interface MappedSpeakerSegment {
+    userId: number;
+    text_Content: string;
+    startTime: number;
+    endTime: number;
+}
+
+// 🆕 데이터베이스 쿼리 결과 타입
+export interface DatabaseQueryResult {
+    insertId?: number;
+    affectedRows?: number;
+    changedRows?: number;
+}
+
+// 🆕 임시 세션 데이터 타입
+export interface TempSessionData {
+    stt_session_idx: number;
+}
+
+// 🆕 세그먼트 데이터 타입
+export interface SegmentQueryResult {
+    speaker_idx: number;
+    text_content: string;
+    start_time: number;
+    end_time: number;
+}
+
+// 🆕 컨텍스트 스피커 데이터 타입
+export interface ContextSpeakerData {
+    speakerTag: number;
+    text_content: string;
+    startTime: number;
+    endTime: number;
 }

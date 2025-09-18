@@ -40,7 +40,7 @@ export class STTService {
         return this.adjustTimings(result, sessionStartTimeOffset);
     }
 
-    private async transcribeWithPynoteDiarizationFromGcs(
+    async transcribeWithPynoteDiarizationFromGcs(
         gcsUrl: string,
         mimeType: string,
         sessionStartTimeOffset: number,
@@ -98,10 +98,9 @@ export class STTService {
                             allSpeakers.push({
                                 ...speaker,
                                 speakerTag: segment.speakerTag,
-                                startTime:
-                                    sessionStartTimeOffset + segment.startTime + speaker.startTime,
-                                endTime:
-                                    sessionStartTimeOffset + segment.startTime + speaker.endTime,
+                                //  pyannote 시간을 그대로 사용
+                                startTime: sessionStartTimeOffset + segment.startTime,
+                                endTime: sessionStartTimeOffset + segment.endTime,
                             });
                         }
                     } else if (sttResult.transcript) {
@@ -209,17 +208,16 @@ export class STTService {
     }
 
     private createAudioConfig(mimeType: string) {
-        // MP4/M4A 파일의 경우 다른 설정 사용
+        // AI 서버에서 보내는 것은 항상 WAV 형식 (16kHz, 모노)
         if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
             return {
-                encoding: 'MP3', // MP3 인코딩 사용
-                sampleRate: 44100,
+                encoding: 'LINEAR16', // WAV 형식으로 변
                 languageCode: 'ko-KR',
                 enableSpeakerDiarization: true,
                 diarizationSpeakerCount: 2,
                 enableAutomaticPunctuation: false,
                 maxAlternatives: 1,
-                speechContexts: [], // 빈 배열로 설정
+                speechContexts: [],
             };
         }
 
@@ -235,7 +233,6 @@ export class STTService {
 
         return {
             encoding,
-            sampleRate: 44100,
             languageCode: 'ko-KR',
             enableSpeakerDiarization: true,
             diarizationSpeakerCount: 2,

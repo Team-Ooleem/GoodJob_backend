@@ -100,4 +100,27 @@ export class AudioProcessorUtil {
         }
         return gcsUrl;
     }
+    static mergeAudioBuffers(audioBuffers: Buffer[]): Buffer {
+        try {
+            if (!audioBuffers || audioBuffers.length === 0) {
+                throw new Error('오디오 버퍼가 없습니다');
+            }
+
+            if (audioBuffers.length === 1) {
+                return audioBuffers[0];
+            }
+
+            // 모든 버퍼를 하나로 합치기 (간단한 방법)
+            const mergedBuffer = Buffer.concat(audioBuffers);
+
+            console.log(
+                `✅ ${audioBuffers.length}개 오디오 버퍼 합치기 완료: ${mergedBuffer.length} bytes`,
+            );
+            return mergedBuffer;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`오디오 버퍼 합치기 실패: ${errorMessage}`);
+            throw new Error(`오디오 합치기 실패: ${errorMessage}`);
+        }
+    }
 }

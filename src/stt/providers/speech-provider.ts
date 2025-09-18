@@ -12,7 +12,7 @@ export interface SpeechProvider {
 
 export interface AudioConfig {
     encoding: string;
-    sampleRate: number;
+    sampleRate?: number;
     languageCode: string;
     enableAutomaticPunctuation: boolean;
     maxAlternatives: number;
