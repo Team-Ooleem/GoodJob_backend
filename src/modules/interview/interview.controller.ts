@@ -9,13 +9,21 @@ import {
     type CreateFollowupsParams,
     type AnalysisResult,
 } from './interview.service';
+import { JobExtractService, type ExtractResult } from './job-extract.service';
 import { DatabaseService } from '@/database/database.service';
 
 // ===== 요청 바디 스키마 & 타입 =====
-const CreateQuestionBodySchema = z.union([
-    z.object({ resumeSummary: z.string().min(10) }),
-    z.object({ resumeFileId: z.string().min(1) }),
-]);
+const CreateQuestionBodySchema = z
+    .union([
+        z.object({ resumeSummary: z.string().min(10) }),
+        z.object({ resumeFileId: z.string().min(1) }),
+    ])
+    .and(
+        z.object({
+            sessionId: z.string().optional(),
+            jobPostUrl: z.string().url().optional(),
+        }),
+    );
 
 const CreateFollowupsBodySchema = z.object({
     originalQuestion: z.object({
@@ -23,6 +31,7 @@ const CreateFollowupsBodySchema = z.object({
         text: z.string().min(5),
     }),
     answer: z.string().min(5),
+    sessionId: z.string().optional(),
 });
 
 const AnalyzeAnswerBodySchema = z.object({
@@ -38,6 +47,7 @@ export class AiController {
         private readonly ai: AiService,
         private readonly resumeFiles: ResumeFileService,
         private readonly db: DatabaseService,
+        private readonly jobExtract: JobExtractService,
     ) {}
 
     // POST /api/ai/question
@@ -53,16 +63,72 @@ export class AiController {
         }
         const userId = Number((req as any).user_idx ?? (req as any).user?.idx);
         if (!userId) throw new BadRequestException('unauthorized');
+        const anyData = parsed.data as any;
+        const sessionId: string | undefined = anyData.sessionId;
+        const jobPostUrl: string | undefined = anyData.jobPostUrl;
+
         if ('resumeFileId' in parsed.data) {
             this.logger.log(`createQuestion: resumeFileId=${parsed.data.resumeFileId}`);
             const summary = await this.resumeFiles.getSummaryById(parsed.data.resumeFileId, userId);
             if (!summary || summary.length < 10) {
                 throw new BadRequestException('요약이 비어있습니다. 먼저 요약을 등록하세요.');
             }
-            return this.ai.createQuestion(summary);
+            return this.ai.createQuestionWithJobPost(summary, { sessionId, jobPostUrl });
         }
-        this.logger.log(`createQuestion: resumeSummaryLen=${parsed.data.resumeSummary.length}`);
-        return this.ai.createQuestion(parsed.data.resumeSummary);
+        this.logger.log(
+            `createQuestion: resumeSummaryLen=${parsed.data.resumeSummary.length}, jobPostUrl=${jobPostUrl ? 'Y' : 'N'}`,
+        );
+        return this.ai.createQuestionWithJobPost(parsed.data.resumeSummary, {
+            sessionId,
+            jobPostUrl,
+        });
+    }
+
+    // POST /api/ai/job-extract (프런트 사전 검증/프리뷰용)
+    @Post('job-extract')
+    async extractJob(@Body() body: unknown): Promise<
+        ExtractResult & {
+            summary?: string;
+            summaryJson?: import('./job-extract.service').JobPostSummary;
+        }
+    > {
+        this.logger.log(
+            `POST /ai/job-extract bodyKeys=${Object.keys((body as any) || {}).join(',')}`,
+        );
+        const schema = z.object({ url: z.string().url(), sessionId: z.string().optional() });
+        const parsed = schema.safeParse(body);
+        if (!parsed.success) {
+            this.logger.warn(`job-extract 스키마 오류: ${JSON.stringify(parsed.error.flatten())}`);
+            throw new BadRequestException(parsed.error.flatten());
+        }
+        const { url, sessionId } = parsed.data as { url: string; sessionId?: string };
+        const r = await this.jobExtract.extract(url);
+        if (!r.ok) return r;
+        this.logger.log(`extract 결과: ${r.content}`);
+        // LLM 요약(텍스트/JSON)을 추가로 생성하여 프리뷰 품질 개선
+        let summary: string | undefined;
+        let summaryJson: import('./job-extract.service').JobPostSummary | undefined;
+        try {
+            summary = await this.jobExtract.summarizeJobPost(r.content);
+        } catch {
+            summary = undefined;
+        }
+        try {
+            summaryJson = await this.jobExtract.summarizeJobPostJson(r.content);
+        } catch {
+            summaryJson = undefined;
+        }
+        try {
+            if (sessionId) {
+                this.ai.setJobContext(sessionId, {
+                    url,
+                    title: r.ok ? r.title : undefined,
+                    company: r.ok ? r.company : undefined,
+                    summary: summary,
+                });
+            }
+        } catch {}
+        return { ...r, summary, summaryJson };
     }
 
     // POST /api/ai/followups
@@ -79,8 +145,9 @@ export class AiController {
             throw new BadRequestException(parsed.error.flatten());
         }
         // 스키마로 보장된 타입을 서비스 입력 DTO로 그대로 사용
-        const params: CreateFollowupsParams = parsed.data;
-        return this.ai.createFollowups(params);
+        const params: CreateFollowupsParams = parsed.data as any;
+        const sessionId: string | undefined = (parsed.data as any).sessionId;
+        return this.ai.createFollowups(params, { sessionId });
     }
 
     /**

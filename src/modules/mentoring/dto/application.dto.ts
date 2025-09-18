@@ -29,5 +29,5 @@ export class ApplicationResponseDto {
     message_to_mentor: string;
     payment: ApplicationPaymentDto;
     created_at: string; // ISO string
+    canvas_id?: string;
 }
-
