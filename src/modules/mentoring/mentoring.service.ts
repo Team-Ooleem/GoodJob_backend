@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { v4 as uuidv4 } from 'uuid';
 import { MentoringProductDto } from './dto/product.dto';
 import { MentoringProductSlotsDto } from './dto/product-slots.dto';
 import { ProductRegularSlotsResponseDto } from './dto/product-regular-slots.dto';
@@ -445,6 +446,17 @@ export class MentoringService {
         );
         */
         return this.databaseService.transaction(async (conn) => {
+            // 0) 멘토 이름 조회 (멘토 프로필 -> 유저 이름)
+            const mentorRowSql = `
+                SELECT u.name AS mentor_name
+                  FROM mentoring_products p
+                  JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
+                  JOIN users u ON mp.user_idx = u.idx
+                 WHERE p.product_idx = ?
+                 LIMIT 1
+            `;
+            const [mentorRow] = await conn.query<any[]>(mentorRowSql, [productIdx]);
+            const mentorName: string | undefined = mentorRow?.[0]?.mentor_name;
             const paySql = `
                 INSERT INTO payments (user_idx, product_idx, amount, payment_status, transaction_id, paid_at)
                 VALUES (?, ?, ?, ?, ?, CASE WHEN ? = 'completed' THEN NOW() ELSE NULL END)
@@ -488,6 +500,15 @@ export class MentoringService {
             const [payRow] = await conn.query<any[]>(payRowSql, [paymentId]);
             const payment = payRow[0];
 
+            // 4) 캔버스 생성 (멘토명 기반 타이틀)
+            const canvasId = uuidv4();
+            const canvasTitle = mentorName ? `${mentorName}님의 라이브룸` : null;
+            await conn.execute(`INSERT INTO canvas (id, name, created_by) VALUES (?, ?, ?)`, [
+                canvasId,
+                canvasTitle,
+                menteeIdx,
+            ]);
+
             return {
                 application_id: applicationId,
                 product_idx: productIdx,
@@ -506,6 +527,7 @@ export class MentoringService {
                 created_at: created?.created_at
                     ? new Date(created.created_at).toISOString()
                     : new Date().toISOString(),
+                canvas_id: canvasId,
             };
         });
     }
