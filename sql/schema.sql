@@ -156,36 +156,6 @@ CREATE TABLE `conversation_read_status` (
   CONSTRAINT `conversation_read_status_user_fk` FOREIGN KEY (`user_id`) REFERENCES `users` (`idx`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='채팅방 읽음 상태 테이블';
 
-
-DROP TABLE IF EXISTS `canvas`;
--- 캔버스 기본 정보
-CREATE TABLE canvas (
-    id CHAR(36) NOT NULL PRIMARY KEY,          -- UUID (문자열)
-    application_id INT NOT NULL,               -- 연결된 멘토링 신청 ID
-    name VARCHAR(255) NULL,                    -- 캔버스 이름
-    created_by INT NOT NULL,                   -- 캔버스를 만든 유저
-    json_data LONGTEXT NULL COMMENT 'Fabric.js 오브젝트 직렬화 상태 저장',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT fk_canvas_user FOREIGN KEY (created_by) 
-        REFERENCES users(idx) ON DELETE CASCADE,
-    CONSTRAINT fk_canvas_application FOREIGN KEY (application_id) 
-        REFERENCES mentoring_applications(application_id) ON DELETE CASCADE,
-    UNIQUE KEY uq_canvas_application (application_id)  -- 1:1 관계 보장
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-
-DROP TABLE IF EXISTS `canvas_participant`;
--- 캔버스 참여자 정보
-CREATE TABLE canvas_participant (
-    canvas_id CHAR(36) NOT NULL,        -- 캔버스 ID
-    user_id INT NOT NULL,               -- 참여자 유저 ID
-    role ENUM('owner','editor','viewer') DEFAULT 'editor',
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (canvas_id, user_id),
-    FOREIGN KEY (canvas_id) REFERENCES canvas(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE CASCADE
-);
-
 -- 외래키 제약조건 없이 테이블 생성
 DROP TABLE IF EXISTS `stt_speaker_segments`;
 DROP TABLE IF EXISTS `stt_transcriptions`;
@@ -347,3 +317,33 @@ CREATE TABLE `mentoring_reviews` (
   CONSTRAINT `mentoring_reviews_mentee_fk` FOREIGN KEY (`mentee_idx`) REFERENCES `users` (`idx`) ON DELETE CASCADE,
   CONSTRAINT `rating_check` CHECK (`rating` >= 1 AND `rating` <= 5)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='멘토링 리뷰 테이블';
+
+
+DROP TABLE IF EXISTS `canvas`;
+-- 캔버스 기본 정보
+CREATE TABLE canvas (
+    id CHAR(36) NOT NULL PRIMARY KEY,          -- UUID (문자열)
+    application_id INT NOT NULL,               -- 연결된 멘토링 신청 ID
+    name VARCHAR(255) NULL,                    -- 캔버스 이름
+    created_by INT NOT NULL,                   -- 캔버스를 만든 유저
+    json_data LONGTEXT NULL COMMENT 'Fabric.js 오브젝트 직렬화 상태 저장',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_canvas_user FOREIGN KEY (created_by) 
+        REFERENCES users(idx) ON DELETE CASCADE,
+    CONSTRAINT fk_canvas_application FOREIGN KEY (application_id) 
+        REFERENCES mentoring_applications(application_id) ON DELETE CASCADE,
+    UNIQUE KEY uq_canvas_application (application_id)  -- 1:1 관계 보장
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+DROP TABLE IF EXISTS `canvas_participant`;
+-- 캔버스 참여자 정보
+CREATE TABLE canvas_participant (
+    canvas_id CHAR(36) NOT NULL,        -- 캔버스 ID
+    user_id INT NOT NULL,               -- 참여자 유저 ID
+    role ENUM('owner','editor','viewer') DEFAULT 'editor',
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (canvas_id, user_id),
+    FOREIGN KEY (canvas_id) REFERENCES canvas(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
