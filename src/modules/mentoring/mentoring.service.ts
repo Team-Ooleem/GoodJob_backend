@@ -503,11 +503,10 @@ export class MentoringService {
             // 4) 캔버스 생성 (멘토명 기반 타이틀)
             const canvasId = uuidv4();
             const canvasTitle = mentorName ? `${mentorName}님의 라이브룸` : null;
-            await conn.execute(`INSERT INTO canvas (id, name, created_by) VALUES (?, ?, ?)`, [
-                canvasId,
-                canvasTitle,
-                menteeIdx,
-            ]);
+            await conn.execute(
+                `INSERT INTO canvas (id, application_id, name, created_by) VALUES (?, ?, ?, ?)`,
+                [canvasId, applicationId, canvasTitle, menteeIdx],
+            );
 
             return {
                 application_id: applicationId,
