@@ -1225,6 +1225,7 @@ export class MentoringService {
                 SELECT 
                     p.product_idx,
                     p.title,
+                    p.description,
                     p.price,
                     u.name AS mentor_nickname,
                     u.profile_img,
@@ -1238,7 +1239,7 @@ export class MentoringService {
                 LEFT JOIN mentoring_reviews r ON p.product_idx = r.product_idx
                 LEFT JOIN mentoring_applications a ON p.product_idx = a.product_idx
                 ${whereClause}
-                GROUP BY p.product_idx, p.title, p.price, u.name, u.profile_img, mp.introduction, p.created_at
+                GROUP BY p.product_idx, p.title, p.description, p.price, u.name, u.profile_img, mp.introduction, p.created_at
                 ${orderBy}
                 LIMIT ${limit + 1}
             `;
@@ -1261,9 +1262,9 @@ export class MentoringService {
                 title: row.title,
                 mentor: {
                     nickname: row.mentor_nickname,
-                    profile: row.mentor_profile,
+                    profile: row.description, // 멘토링 상품 설명으로 변경
                     profile_img: row.profile_img || 'https://picsum.photos/200?3',
-                    info: [row.mentor_profile], // 멘토 프로필을 info 배열에 포함
+                    info: [row.description], // 멘토링 상품 설명을 info 배열에 포함
                 },
                 rating: row.rating,
                 participants: row.participants,
