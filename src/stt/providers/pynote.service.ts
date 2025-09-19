@@ -10,7 +10,7 @@ export class PynoteService {
 
     constructor() {
         this.serviceUrl = process.env.PYNOTE_SERVICE_URL || 'http://localhost:8081';
-        this.apiKey = process.env.PYNOTE_API_KEY || '';
+        this.apiKey = process.env.HF_TOKEN || '';
 
         // 초기화 로그 추가
         this.logger.log(`PynoteService 초기화 완료 - URL: ${this.serviceUrl}`);
@@ -42,7 +42,6 @@ export class PynoteService {
                     headers: {
                         'Content-Type': 'multipart/form-data', // ✅ Form Data 헤더
                     },
-                    timeout: 60000,
                 },
             );
 
@@ -70,7 +69,6 @@ export class PynoteService {
                 formData,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
-                    timeout: 60000,
                 },
             );
 
@@ -108,6 +106,12 @@ export class PynoteService {
             formData.append('mentee_idx', menteeIdx.toString());
             formData.append('session_start_offset', sessionStartOffset.toString());
 
+            // 🔧 pyannote 정확도 조절 파라미터 추가
+            formData.append('min_duration_on', '1.0'); // 최소 발화 시간 (초)
+            formData.append('min_duration_off', '0.5'); // 최소 침묵 시간 (초)
+            formData.append('num_speakers', '2'); // 고정 화자 수 (멘토-멘티)
+            formData.append('merge_threshold', '2.0'); // 짧은 세그먼트 병합 임계값 (초)
+
             const response = await axios.post(
                 `${this.serviceUrl}/diarization/get-segments-from-gcs`,
                 formData,
@@ -115,7 +119,6 @@ export class PynoteService {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                     },
-                    timeout: 60000,
                 },
             );
 

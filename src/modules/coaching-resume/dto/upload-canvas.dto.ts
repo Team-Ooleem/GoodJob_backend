@@ -7,4 +7,3 @@ export class UploadCanvasDto {
     @IsString()
     fileName: string;
 }
-

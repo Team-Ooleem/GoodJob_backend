@@ -17,7 +17,7 @@ export class STTService {
 
     async transcribeAudioBuffer(
         audioBuffer: Buffer,
-        mimeType = 'audio/mp4',
+        mimeType = 'audio/wav',
         sessionStartTimeOffset = 0,
         gcsUrl?: string,
         usePynoteDiarization = false,
@@ -40,7 +40,7 @@ export class STTService {
         return this.adjustTimings(result, sessionStartTimeOffset);
     }
 
-    private async transcribeWithPynoteDiarizationFromGcs(
+    async transcribeWithPynoteDiarizationFromGcs(
         gcsUrl: string,
         mimeType: string,
         sessionStartTimeOffset: number,
@@ -49,7 +49,7 @@ export class STTService {
         menteeIdx?: number,
     ): Promise<STTResult> {
         try {
-            this.logger.log('�� pynote GCS 세그먼트 분리 + 세그먼트별 STT 시작');
+            this.logger.log('세그먼트별 STT 시작');
 
             // 1. pynote에서 GCS URL로 세그먼트 분리
             const segmentResult = await this.pynoteService.getSegmentsFromGcs(
@@ -79,9 +79,6 @@ export class STTService {
 
             for (let i = 0; i < segmentResult.segments.length; i++) {
                 const segment = segmentResult.segments[i];
-                this.logger.log(
-                    `�� 세그먼트 ${i + 1}/${segmentResult.segments.length} STT 처리 시작`,
-                );
 
                 try {
                     const audioBuffer = Buffer.from(segment.audioBuffer, 'base64');
@@ -98,10 +95,9 @@ export class STTService {
                             allSpeakers.push({
                                 ...speaker,
                                 speakerTag: segment.speakerTag,
-                                startTime:
-                                    sessionStartTimeOffset + segment.startTime + speaker.startTime,
-                                endTime:
-                                    sessionStartTimeOffset + segment.startTime + speaker.endTime,
+                                //  pyannote 시간을 그대로 사용
+                                startTime: sessionStartTimeOffset + segment.startTime,
+                                endTime: sessionStartTimeOffset + segment.endTime,
                             });
                         }
                     } else if (sttResult.transcript) {
@@ -114,8 +110,6 @@ export class STTService {
                             confidence: sttResult.confidence || 0.9,
                         });
                     }
-
-                    this.logger.log(`✅ 세그먼트 ${i + 1} STT 완료: "${sttResult.transcript}"`);
                 } catch (segmentError) {
                     this.logger.error(
                         `❌ 세그먼트 ${i + 1} STT 실패: ${segmentError instanceof Error ? segmentError.message : String(segmentError)}`,
@@ -124,9 +118,7 @@ export class STTService {
                 }
             }
 
-            this.logger.log(
-                `✅ pynote 세그먼트 분리 + STT 처리 완료: ${allSpeakers.length}개 세그먼트`,
-            );
+            this.logger.log(`STT 처리 완료: ${allSpeakers.length}개 세그먼트`);
 
             return {
                 transcript: allSpeakers.map((s) => s.text_Content).join(' '),
@@ -135,7 +127,7 @@ export class STTService {
             };
         } catch (error: unknown) {
             this.logger.error(
-                `pynote GCS 세그먼트 분리 + STT 처리 실패: ${error instanceof Error ? error.message : String(error)}`,
+                `STT 처리 실패: ${error instanceof Error ? error.message : String(error)}`,
             );
 
             // fallback to Google Speech
@@ -146,7 +138,7 @@ export class STTService {
     // �� Google Speech 직접 사용 (fallback용)
     private async transcribeWithGoogleSpeech(gcsUrl: string, mimeType: string): Promise<STTResult> {
         try {
-            this.logger.log('🔄 Google Speech 직접 사용 (fallback)');
+            this.logger.log('Google Speech 직접 사용 (fallback)');
 
             const audioData = this.prepareAudioData('', gcsUrl);
             const config = this.createAudioConfig(mimeType);
@@ -163,7 +155,7 @@ export class STTService {
 
     async transcribeAudioFromGcs(
         gcsUrl: string,
-        mimeType = 'audio/mp4',
+        mimeType = 'audio/wav',
         sessionStartTimeOffset = 0,
         usePynoteDiarization = true,
         canvasId?: string,
@@ -209,17 +201,16 @@ export class STTService {
     }
 
     private createAudioConfig(mimeType: string) {
-        // MP4/M4A 파일의 경우 다른 설정 사용
-        if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
+        // AI 서버에서 보내는 것은 항상 WAV 형식 (16kHz, 모노)
+        if (mimeType.includes('wav') || mimeType.includes('wav')) {
             return {
-                encoding: 'MP3', // MP3 인코딩 사용
-                sampleRate: 44100,
+                encoding: 'LINEAR16', // WAV 형식으로 변
                 languageCode: 'ko-KR',
                 enableSpeakerDiarization: true,
                 diarizationSpeakerCount: 2,
                 enableAutomaticPunctuation: false,
                 maxAlternatives: 1,
-                speechContexts: [], // 빈 배열로 설정
+                speechContexts: [],
             };
         }
 
@@ -235,7 +226,6 @@ export class STTService {
 
         return {
             encoding,
-            sampleRate: 44100,
             languageCode: 'ko-KR',
             enableSpeakerDiarization: true,
             diarizationSpeakerCount: 2,

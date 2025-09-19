@@ -48,7 +48,7 @@ export default registerAs('app', () => ({
 
     // Pynote 설정
     pynote: {
-        apiKey: process.env.PYNOTE_API_KEY || '',
+        apiKey: process.env.HF_TOKEN || '',
         serviceUrl: process.env.AUDIO_API_BASE || 'http://localhost:8081',
     },
 
