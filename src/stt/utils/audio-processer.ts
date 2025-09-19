@@ -25,14 +25,6 @@ export class AudioProcessorUtil {
         }
     }
 
-    // 🆕 오디오 전처리
-    static preprocessAudio(audioBuffer: Buffer, mimeType: string = 'audio/mp4'): Buffer {
-        console.log(`${mimeType} 오디오 처리: ${audioBuffer.length} bytes`);
-
-        // 모든 형식은 원본 그대로 반환 (전처리 하지 않음)
-        return audioBuffer;
-    }
-
     // 🆕 포맷별 duration 추정
     static estimateDurationByFormat(audioBuffer: Buffer, mimeType: string): number {
         if (mimeType.includes('wav')) {
@@ -99,5 +91,168 @@ export class AudioProcessorUtil {
             if (match) return `gs://${match[1]}/${match[2]}`;
         }
         return gcsUrl;
+    }
+
+    static mergeAudioBuffers(buffers: Buffer[]): Buffer {
+        if (!buffers || buffers.length === 0) {
+            throw new Error('병합할 버퍼가 없습니다');
+        }
+
+        if (buffers.length === 1) {
+            return buffers[0];
+        }
+
+        try {
+            // Buffer.concat을 사용하여 여러 오디오 버퍼를 하나로 병합
+            const mergedBuffer = Buffer.concat(buffers);
+            console.log(
+                `오디오 병합 완료: ${buffers.length}개 버퍼 → ${mergedBuffer.length} bytes`,
+            );
+            return mergedBuffer;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`오디오 병합 실패: ${errorMessage}`);
+            throw new Error(`오디오 병합 실패: ${errorMessage}`);
+        }
+    }
+
+    static mergeAudioBuffersWav(audioBuffers: Buffer[]): Buffer {
+        try {
+            if (!audioBuffers || audioBuffers.length === 0) {
+                throw new Error('오디오 버퍼가 없습니다');
+            }
+
+            if (audioBuffers.length === 1) {
+                return audioBuffers[0];
+            }
+
+            // WAV 파일 병합을 위한 헤더 분석 및 데이터 추출
+            const audioDataChunks: Buffer[] = [];
+            let totalDataSize = 0;
+            let sampleRate = 44100; // 기본값
+            let channels = 2; // 기본값
+            let bitsPerSample = 16; // 기본값
+
+            for (let i = 0; i < audioBuffers.length; i++) {
+                const buffer = audioBuffers[i];
+
+                try {
+                    // WAV 헤더인지 확인 (RIFF 시그니처)
+                    if (buffer.length >= 44 && buffer.toString('ascii', 0, 4) === 'RIFF') {
+                        // WAV 파일인 경우 헤더 정보 추출
+                        if (i === 0) {
+                            // 첫 번째 파일에서 오디오 포맷 정보 추출
+                            channels = buffer.readUInt16LE(22);
+                            sampleRate = buffer.readUInt32LE(24);
+                            bitsPerSample = buffer.readUInt16LE(34);
+                            console.log(
+                                `오디오 포맷: ${channels}ch, ${sampleRate}Hz, ${bitsPerSample}bit`,
+                            );
+                        }
+
+                        // data 청크 찾기
+                        let dataOffset = 44; // 표준 WAV 헤더 크기
+                        let dataChunkFound = false;
+
+                        while (dataOffset < buffer.length - 8) {
+                            const chunkId = buffer.toString('ascii', dataOffset, dataOffset + 4);
+                            const chunkSize = buffer.readUInt32LE(dataOffset + 4);
+
+                            if (chunkId === 'data') {
+                                // 실제 오디오 데이터 추출
+                                const audioData = buffer.subarray(
+                                    dataOffset + 8,
+                                    dataOffset + 8 + chunkSize,
+                                );
+                                audioDataChunks.push(audioData);
+                                totalDataSize += audioData.length;
+                                console.log(
+                                    `청크 ${i}: ${audioData.length} bytes 오디오 데이터 추출`,
+                                );
+                                dataChunkFound = true;
+                                break;
+                            } else {
+                                // 다른 청크는 건너뛰기
+                                dataOffset += 8 + chunkSize;
+                            }
+                        }
+
+                        // data 청크를 찾지 못한 경우 fallback
+                        if (!dataChunkFound) {
+                            const audioData = buffer.subarray(44); // WAV 헤더 이후 전체 데이터
+                            audioDataChunks.push(audioData);
+                            totalDataSize += audioData.length;
+                        }
+                    } else {
+                        // WAV가 아닌 경우 전체 버퍼를 오디오 데이터로 간주
+                        audioDataChunks.push(buffer);
+                        totalDataSize += buffer.length;
+                    }
+                } catch (error) {
+                    console.warn(error);
+                    audioDataChunks.push(buffer);
+                    totalDataSize += buffer.length;
+                }
+            }
+
+            // 새로운 WAV 헤더 생성
+            const headerSize = 44;
+            const fileSize = headerSize + totalDataSize - 8;
+            const blockAlign = (channels * bitsPerSample) / 8;
+            const byteRate = sampleRate * blockAlign;
+
+            const header = Buffer.alloc(headerSize);
+            let offset = 0;
+
+            // RIFF 헤더
+            header.write('RIFF', offset);
+            offset += 4;
+            header.writeUInt32LE(fileSize, offset);
+            offset += 4;
+            header.write('WAVE', offset);
+            offset += 4;
+
+            // fmt 청크
+            header.write('fmt ', offset);
+            offset += 4;
+            header.writeUInt32LE(16, offset);
+            offset += 4; // fmt 청크 크기
+            header.writeUInt16LE(1, offset);
+            offset += 2; // 오디오 포맷 (PCM)
+            header.writeUInt16LE(channels, offset);
+            offset += 2;
+            header.writeUInt32LE(sampleRate, offset);
+            offset += 4;
+            header.writeUInt32LE(byteRate, offset);
+            offset += 4;
+            header.writeUInt16LE(blockAlign, offset);
+            offset += 2;
+            header.writeUInt16LE(bitsPerSample, offset);
+            offset += 2;
+
+            // data 청크 헤더
+            header.write('data', offset);
+            offset += 4;
+            header.writeUInt32LE(totalDataSize, offset);
+
+            // 헤더와 모든 오디오 데이터 병합
+            const mergedBuffer = Buffer.concat([header, ...audioDataChunks]);
+
+            console.log(`✅ WAV 파일 병합 완료: ${mergedBuffer.length} bytes`);
+            console.log(`  - 헤더: ${headerSize} bytes`);
+            console.log(`  - 오디오 데이터: ${totalDataSize} bytes`);
+            console.log(`  - 포맷: ${channels}ch, ${sampleRate}Hz, ${bitsPerSample}bit`);
+
+            return mergedBuffer;
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error(`오디오 버퍼 합치기 실패: ${errorMessage}`);
+
+            // fallback: 단순 연결
+            console.log('Fallback: 단순 버퍼 연결 방식 사용');
+            const fallbackBuffer = Buffer.concat(audioBuffers);
+            console.log(`Fallback 완료: ${fallbackBuffer.length} bytes`);
+            return fallbackBuffer;
+        }
     }
 }

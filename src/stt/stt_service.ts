@@ -1,10 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { GoogleSpeechProvider } from './providers/google-speech';
 import { AudioProcessorUtil } from './utils/audio-processer';
 import { TextProcessorUtil } from './utils/text_processor';
 import { TranscriptionResult, STTResult } from './entities/transcription';
 import { SpeechPatternsUtil } from './utils/speech-patterms';
 import { PynoteService } from './providers/pynote.service';
+import { DatabaseService } from '@/database/database.service';
 
 @Injectable()
 export class STTService {
@@ -13,11 +14,12 @@ export class STTService {
     constructor(
         private readonly googleSpeechProvider: GoogleSpeechProvider,
         private readonly pynoteService: PynoteService,
+        private readonly db: DatabaseService,
     ) {}
 
     async transcribeAudioBuffer(
         audioBuffer: Buffer,
-        mimeType = 'audio/mp4',
+        mimeType = 'audio/wav',
         sessionStartTimeOffset = 0,
         gcsUrl?: string,
         usePynoteDiarization = false,
@@ -163,7 +165,7 @@ export class STTService {
 
     async transcribeAudioFromGcs(
         gcsUrl: string,
-        mimeType = 'audio/mp4',
+        mimeType = 'audio/wav',
         sessionStartTimeOffset = 0,
         usePynoteDiarization = true,
         canvasId?: string,
@@ -210,9 +212,9 @@ export class STTService {
 
     private createAudioConfig(mimeType: string) {
         // MP4/M4A 파일의 경우 다른 설정 사용
-        if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
+        if (mimeType.includes('wav') || mimeType.includes('wav')) {
             return {
-                encoding: 'MP3', // MP3 인코딩 사용
+                encoding: 'LINEAR16', // MP3 인코딩 사용
                 sampleRate: 44100,
                 languageCode: 'ko-KR',
                 enableSpeakerDiarization: true,
@@ -277,5 +279,26 @@ export class STTService {
         };
 
         return sttResult;
+    }
+
+    // 간단한 사용자 역할 확인 함수
+    async getCanvasUserRoles(canvasId: string) {
+        if (!canvasId) {
+            throw new BadRequestException('canvasId is required');
+        }
+
+        // 캔버스 참여자 조회 (더 간단하고 안전한 방법)
+        const participants = await this.db.query<{ user_id: number; role: string }>(
+            `SELECT user_id, role FROM canvas_participant WHERE canvas_id = ?`,
+            [canvasId],
+        );
+
+        const mentor = participants.find((p) => p.role === 'owner')?.user_id;
+        const mentee = participants.find((p) => p.role === 'editor')?.user_id;
+
+        return {
+            mentor,
+            mentee,
+        };
     }
 }

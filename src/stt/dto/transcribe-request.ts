@@ -7,10 +7,10 @@ export class TranscribeBase64RequestDto {
     @IsNotEmpty()
     audioData: string;
 
-    @ApiProperty({ description: '오디오 MIME 타입', required: false, default: 'audio/mp4' })
+    @ApiProperty({ description: '오디오 MIME 타입', required: false, default: 'audio/wav' })
     @IsOptional()
     @IsString()
-    mimeType?: string = 'audio/mp4';
+    mimeType?: string = 'audio/wav';
 }
 
 export class TranscribeWithContextRequestDto {
@@ -19,10 +19,10 @@ export class TranscribeWithContextRequestDto {
     @IsNotEmpty()
     audioData: string;
 
-    @ApiProperty({ description: '오디오 MIME 타입', required: false, default: 'audio/mp4' })
+    @ApiProperty({ description: '오디오 MIME 타입', required: false, default: 'audio/wav' })
     @IsOptional()
     @IsString()
-    mimeType?: string = 'audio/mp4';
+    mimeType?: string = 'audio/wav';
 
     @ApiProperty({ description: '캔버스 인덱스' })
     @IsNumber()
@@ -48,10 +48,10 @@ export class TranscribeChunkRequestDto {
     @IsNotEmpty()
     audioData: string;
 
-    @ApiProperty({ description: '오디오 MIME 타입', required: false, default: 'audio/mp4' })
+    @ApiProperty({ description: '오디오 MIME 타입', required: false, default: 'audio/wav' })
     @IsOptional()
     @IsString()
-    mimeType?: string = 'audio/mp4';
+    mimeType?: string = 'audio/wav';
 
     @ApiProperty({ description: '캔버스 ID' })
     @IsString()
@@ -106,10 +106,10 @@ export class TranscribeRequestDto {
     @IsNotEmpty()
     audioData: string;
 
-    @ApiProperty({ description: '오디오 MIME 타입', required: false, default: 'audio/mp4' })
+    @ApiProperty({ description: '오디오 MIME 타입', required: false, default: 'audio/wav' })
     @IsOptional()
     @IsString()
-    mimeType?: string = 'audio/mp4';
+    mimeType?: string = 'audio/wav';
 
     @ApiProperty({ description: '캔버스 ID' })
     @IsString()

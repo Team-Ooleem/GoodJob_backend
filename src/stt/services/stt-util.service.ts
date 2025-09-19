@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { SpeakerSegment, MappedSpeakerSegment } from '../entities/speaker-segment';
-
+import { DatabaseService } from '../../database/database.service';
 @Injectable()
 export class STTUtilService {
+    constructor(private readonly databaseService: DatabaseService) {}
+
     // Base64 검증
     isValidBase64(str: string): boolean {
         try {
@@ -62,5 +64,23 @@ export class STTUtilService {
                     ].includes(text),
             )
             .join(' ');
+    }
+
+    async getParticipants(canvasId: string, mentorIdx?: number, menteeIdx?: number) {
+        const participants = (await this.databaseService.execute(
+            `SELECT cp.user_id, mp.mentor_idx, mp.is_approved 
+             FROM canvas_participant cp
+             LEFT JOIN mentor_profiles mp ON cp.user_id = mp.user_idx
+             WHERE cp.canvas_id = ?`,
+            [canvasId],
+        )) as Array<{ user_id: number; mentor_idx: number | null; is_approved: number | null }>;
+
+        const mentorUser = participants.find((p) => p.mentor_idx && p.is_approved === 1) || null;
+        const menteeUser = participants.find((p) => !p.mentor_idx || p.is_approved !== 1) || null;
+
+        return {
+            actualMentorIdx: mentorUser?.user_id || mentorIdx,
+            actualMenteeIdx: menteeUser?.user_id || menteeIdx,
+        };
     }
 }

@@ -6,10 +6,9 @@ import { ChunkCacheData, SessionUserResponse } from '../entities/transcription';
 export class STTSessionService {
     private readonly logger = new Logger(STTSessionService.name);
     private chunkCache: Map<string, ChunkCacheData> = new Map();
-    private readonly MAX_CACHE_SIZE = 50;
+    private readonly MAX_CACHE_SIZE = 100;
     private readonly BATCH_SIZE = 1000;
-    private readonly INACTIVITY_THRESHOLD = 5000; // 5초
-
+    private readonly INACTIVITY_THRESHOLD = 30000; // 300
     constructor(private readonly databaseService: DatabaseService) {}
 
     // 세션 사용자 조회
@@ -95,5 +94,44 @@ export class STTSessionService {
         }
 
         return { success: true, cleanedCount };
+    }
+
+    getMaxSegmentIndex(canvasId: string): number {
+        let maxIndex = 0;
+
+        for (const [key, cached] of this.chunkCache.entries()) {
+            if (key.startsWith(`${canvasId}_`)) {
+                maxIndex = Math.max(maxIndex, cached.segmentIndex);
+            }
+        }
+
+        return maxIndex;
+    }
+
+    findActiveSessionKey(canvasId: string): string | null {
+        // 🔧 수정: 가장 최근 활동한 세션 반환
+        let latestKey: string | null = null;
+        let latestActivity = 0;
+
+        for (const [key, cached] of this.chunkCache.entries()) {
+            if (key.startsWith(`${canvasId}_`) && cached.chunks.length > 0) {
+                if (cached.lastActivity > latestActivity) {
+                    latestActivity = cached.lastActivity;
+                    latestKey = key;
+                }
+            }
+        }
+
+        return latestKey;
+    }
+
+    findAllActiveSessionKeys(canvasId: string): string[] {
+        const keys: string[] = [];
+        for (const [key, cached] of this.chunkCache.entries()) {
+            if (key.startsWith(`${canvasId}_`) && cached.chunks.length > 0) {
+                keys.push(key);
+            }
+        }
+        return keys;
     }
 }
