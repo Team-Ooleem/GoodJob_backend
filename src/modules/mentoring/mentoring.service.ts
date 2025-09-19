@@ -457,7 +457,10 @@ export class MentoringService {
             `;
             const [mentorRow] = await conn.query<any[]>(mentorRowSql, [productIdx]);
             const mentorName: string | undefined = mentorRow?.[0]?.mentor_name;
-            const mentorIdx: number = mentorRow?.[0]?.mentor_idx;
+            const mentorUserIdx: number | undefined = mentorRow?.[0]?.mentor_idx;
+            if (mentorUserIdx == null) {
+                throw new BadRequestException('멘토 사용자 ID를 찾을 수 없습니다.');
+            }
             const paySql = `
                 INSERT INTO payments (user_idx, product_idx, amount, payment_status, transaction_id, paid_at)
                 VALUES (?, ?, ?, ?, ?, CASE WHEN ? = 'completed' THEN NOW() ELSE NULL END)
@@ -515,7 +518,7 @@ export class MentoringService {
                 // 멘토 등록 (owner)
                 await conn.execute(
                     `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
-                    [canvasId, mentorIdx, 'owner'],
+                    [canvasId, mentorUserIdx, 'owner'],
                 );
 
                 // 멘티 등록 (editor)
