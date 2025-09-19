@@ -446,9 +446,9 @@ export class MentoringService {
         );
         */
         return this.databaseService.transaction(async (conn) => {
-            // 0) 멘토 이름 조회 (멘토 프로필 -> 유저 이름)
+            // 0) 멘토 정보 조회 (멘토 프로필 -> 유저 이름, 멘토 ID)
             const mentorRowSql = `
-                SELECT u.name AS mentor_name
+                SELECT u.name AS mentor_name, mp.user_idx AS mentor_idx
                   FROM mentoring_products p
                   JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
                   JOIN users u ON mp.user_idx = u.idx
@@ -457,6 +457,7 @@ export class MentoringService {
             `;
             const [mentorRow] = await conn.query<any[]>(mentorRowSql, [productIdx]);
             const mentorName: string | undefined = mentorRow?.[0]?.mentor_name;
+            const mentorIdx: number = mentorRow?.[0]?.mentor_idx;
             const paySql = `
                 INSERT INTO payments (user_idx, product_idx, amount, payment_status, transaction_id, paid_at)
                 VALUES (?, ?, ?, ?, ?, CASE WHEN ? = 'completed' THEN NOW() ELSE NULL END)
@@ -508,6 +509,19 @@ export class MentoringService {
                 await conn.execute(
                     `INSERT INTO canvas (id, application_id, name, created_by) VALUES (?, ?, ?, ?)`,
                     [canvasId, applicationId, canvasTitle, menteeIdx],
+                );
+
+                // 5) 캔버스 참여자 등록 (멘토와 멘티)
+                // 멘토 등록 (owner)
+                await conn.execute(
+                    `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
+                    [canvasId, mentorIdx, 'owner'],
+                );
+
+                // 멘티 등록 (editor)
+                await conn.execute(
+                    `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
+                    [canvasId, menteeIdx, 'editor'],
                 );
             }
 
