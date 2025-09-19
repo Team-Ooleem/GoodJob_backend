@@ -380,22 +380,83 @@ export class CalibrationService {
     }
 
     private computeAudioDeviationScore(raw: AudioFeatures, baseline: AudioFeatures): number {
-        const deviations = [
-            Math.abs((raw.f0_mean || 0) - (baseline.f0_mean || 0)) /
-                Math.max(baseline.f0_mean || 1, 1),
-            Math.abs((raw.f0_std || 0) - (baseline.f0_std || 0)) /
-                Math.max(baseline.f0_std || 1, 1),
-            Math.abs((raw.rms_cv || 0) - (baseline.rms_cv || 0)) /
-                Math.max(baseline.rms_cv || 0.1, 0.1),
-            Math.abs((raw.jitter_like || 0) - (baseline.jitter_like || 0)) /
-                Math.max(baseline.jitter_like || 0.01, 0.01),
-            Math.abs((raw.shimmer_like || 0) - (baseline.shimmer_like || 0)) /
-                Math.max(baseline.shimmer_like || 0.01, 0.01),
-        ].filter((d) => isFinite(d) && d >= 0);
+        // 표준화 헬퍼
+        const anyBase = baseline as any;
+        const clamp = (x: number, a: number, b: number) => Math.max(a, Math.min(b, x));
+        const safeNum = (x: any, d = 0) => (typeof x === 'number' && isFinite(x) ? x : d);
+        const z = (x: number, mu: number, sigma: number) => {
+            const s = Math.max(1e-8, sigma);
+            return (x - mu) / s;
+        };
+        const MAD_TO_SIGMA = 1.4826;
+        const pickSigma = (name: string, fallback: number): number => {
+            // 우선순위: *_sigma_robust → *_std → *_mad×1.4826 → fallback
+            const robust = safeNum(anyBase[`${name}_sigma_robust`], NaN);
+            if (isFinite(robust) && robust > 0) return clamp(robust, 1e-4, 10);
+            const stdv = safeNum(anyBase[`${name}_std`], NaN);
+            if (isFinite(stdv) && stdv > 0) return clamp(stdv, 1e-4, 10);
+            const madv = safeNum(anyBase[`${name}_mad`], NaN);
+            if (isFinite(madv) && madv > 0) return clamp(madv * MAD_TO_SIGMA, 1e-4, 10);
+            return fallback;
+        };
 
-        return deviations.length > 0
-            ? deviations.reduce((a, b) => a + b, 0) / deviations.length
-            : 0;
+        // 1) 톤 오프셋(평균 F0) – 세미톤 차이 기반 (mu=0)
+        const f0Mean = safeNum(raw.f0_mean, 0);
+        const f0Ref = safeNum(anyBase.f0_median_hz ?? anyBase.f0_mean, 0) || 0;
+        const stShift = f0Ref > 0 ? 12 * Math.log2((f0Mean + 1e-8) / (f0Ref + 1e-8)) : 0;
+        const sigSt = Math.max(0.05, safeNum(anyBase.f0_std_semitone, 0.2));
+        const zTone = z(stShift, 0, sigSt);
+
+        // 2) 톤 안정성 – f0_std_semitone (mu=baseline.f0_std_semitone, sigma≈same scale)
+        const rawStStd = safeNum((raw as any).f0_std_semitone, 0);
+        const baseStStd = safeNum(anyBase.f0_std_semitone, 0);
+        const sigStStd = Math.max(0.05, baseStStd || 0.2);
+        const zToneStab = z(rawStStd, baseStStd, sigStStd);
+
+        // 3) 에너지 변동 – rms_cv (mu=baseline.rms_cv, sigma: rms_cv_std or db std proxy)
+        const rmsCv = safeNum(raw.rms_cv, 0);
+        const baseRmsCv = safeNum(anyBase.rms_cv, 0);
+        const sigRmsCv = Math.max(
+            0.05,
+            pickSigma('rms_cv', Math.max(0.08, safeNum(anyBase.rms_db_std_voiced, 0.12))),
+        );
+        const zRms = z(rmsCv, baseRmsCv, sigRmsCv);
+
+        // 4) jitter/shimmer (robust sigma 선호)
+        const jitter = safeNum(raw.jitter_like, 0);
+        const baseJitter = safeNum(anyBase.jitter_like, 0);
+        const sigJitter = Math.max(
+            1e-4,
+            pickSigma('jitter_like', Math.max(0.01, baseJitter * 0.5 || 0.015)),
+        );
+        const zJitter = z(jitter, baseJitter, sigJitter);
+
+        const shimmer = safeNum(raw.shimmer_like, 0);
+        const baseShimmer = safeNum(anyBase.shimmer_like, 0);
+        const sigShimmer = Math.max(
+            1e-4,
+            pickSigma('shimmer_like', Math.max(0.02, baseShimmer * 0.5 || 0.03)),
+        );
+        const zShimmer = z(shimmer, baseShimmer, sigShimmer);
+
+        // 5) 발화 비율 – silence_ratio (mu=baseline, sigma fallback)
+        const sil = safeNum(raw.silence_ratio, 0);
+        const baseSil = safeNum(anyBase.silence_ratio, 0.1);
+        const sigSil = Math.max(0.05, pickSigma('silence_ratio', 0.1));
+        const zSil = z(sil, baseSil, sigSil);
+
+        // 가중 RMS 합성 (0~1로 스케일: z=2를 크게 벗어남으로 간주)
+        const terms: Array<{ w: number; z: number }> = [
+            { w: 0.15, z: zTone },
+            { w: 0.2, z: zToneStab },
+            { w: 0.15, z: zRms },
+            { w: 0.25, z: zJitter },
+            { w: 0.15, z: zShimmer },
+            { w: 0.1, z: zSil },
+        ].filter((t) => isFinite(t.z));
+        const wSum = terms.reduce((a, b) => a + b.w, 0) || 1;
+        const rms = Math.sqrt(terms.reduce((a, b) => a + b.w * b.z * b.z, 0) / wSum);
+        return clamp(rms / 2, 0, 1);
     }
 
     private computeVisualDeviationScore(
