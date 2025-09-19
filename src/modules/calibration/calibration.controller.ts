@@ -8,6 +8,7 @@ import {
     Req,
     UploadedFile,
     UseInterceptors,
+    BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CalibrationService } from './calibration.service';
@@ -34,32 +35,13 @@ export class CalibrationController {
         @Req() req: any,
     ) {
         const userId = Number(req.user_idx ?? req.user?.idx);
-
-        // 음성 분석
-        const audioFeatures = file ? await this.audioClient.analyzeAudio(file) : null;
-
-        // 영상 데이터 파싱
-        const visualData =
-            typeof visualDataRaw === 'string'
-                ? (JSON.parse(visualDataRaw) as any as VisualAggregateDto)
-                : (visualDataRaw as VisualAggregateDto | undefined);
-
-        // 세션별 캘리브레이션 데이터 저장
-        const result = await this.calibrationSvc.saveSessionCalibration(
+        return this.calibrationSvc.calibrateSessionCombined(
             sessionId,
             userId,
-            audioFeatures as any,
-            visualData,
-            '나는 핀토스를 부순다.', // 고정 텍스트
-            parseInt(durationMs) || 0,
+            file ?? null,
+            visualDataRaw,
+            durationMs,
         );
-
-        return {
-            ok: true,
-            audioFeatures,
-            visualData,
-            calibration: result,
-        };
     }
 
     /**
