@@ -177,6 +177,12 @@ export class AiService {
         this.sessionJobCtx.set(sessionId, { ...ctx, ts: Date.now() });
     }
 
+    // 세션 종료/취소 시 메모리 컨텍스트 제거
+    clearSessionContext(sessionId: string) {
+        if (!sessionId) return;
+        this.sessionJobCtx.delete(sessionId);
+    }
+
     constructor(
         private readonly configService: AppConfigService,
         private readonly jobExtract?: JobExtractService,
