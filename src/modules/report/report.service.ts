@@ -56,6 +56,12 @@ export class ReportService {
                payload=VALUES(payload)`,
             [sessionId, userId, overallScore, 0, JSON.stringify(payload)],
         );
+
+        // 리포트 발행 시점에 세션 종료 시간 기록(최초 1회만)
+        await this.db.execute(
+            `UPDATE interview_sessions SET ended_at = COALESCE(ended_at, NOW()) WHERE session_id = ?`,
+            [sessionId],
+        );
     }
 
     // ===== Public API =====

@@ -82,6 +82,16 @@ export class AiController {
             if (!summary || summary.length < 10) {
                 throw new BadRequestException('요약이 비어있습니다. 먼저 요약을 등록하세요.');
             }
+            // 세션-이력서 연결: 세션이 있다면 external_key로 이력서 파일 id 저장
+            if (sessionId && parsed.data.resumeFileId) {
+                await this.db.execute(
+                    `INSERT INTO interview_sessions (session_id, user_id, external_key)
+                     VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE 
+                       external_key = IFNULL(external_key, VALUES(external_key))`,
+                    [sessionId, userId, parsed.data.resumeFileId],
+                );
+            }
             return this.ai.createQuestionWithJobPost(summary, { sessionId, jobPostUrl });
         }
         this.logger.log(
@@ -192,6 +202,14 @@ export class AiController {
             // 이력서 텍스트(요약 우선) 로딩
             let resumeText = '';
             if (resumeFileId) {
+                // 세션-이력서 연결 보장
+                await this.db.execute(
+                    `INSERT INTO interview_sessions (session_id, user_id, external_key)
+                     VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE 
+                       external_key = IFNULL(external_key, VALUES(external_key))`,
+                    [sessionId, userId, resumeFileId],
+                );
                 const resume = await this.resumeFiles.getMine(resumeFileId, userId);
                 resumeText = (
                     resume.summary?.trim()?.length

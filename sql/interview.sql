@@ -3,10 +3,11 @@ USE `new-good-job-test`;
 CREATE TABLE IF NOT EXISTS interview_sessions (
   session_id      VARCHAR(64) PRIMARY KEY,
   user_id         INT NOT NULL,
-  external_key    VARCHAR(128) UNIQUE NULL,
+  external_key    VARCHAR(64) NULL COMMENT 'resume_files.id 참조(비고유)',
   created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   ended_at        TIMESTAMP NULL,
   INDEX idx_sessions_user_created (user_id, created_at),
+  INDEX idx_sessions_external_key (external_key),
   CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
