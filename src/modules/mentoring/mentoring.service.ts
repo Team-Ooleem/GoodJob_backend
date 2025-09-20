@@ -1264,7 +1264,6 @@ export class MentoringService {
                     nickname: row.mentor_nickname,
                     profile: row.description, // 멘토링 상품 설명으로 변경
                     profile_img: row.profile_img || 'https://picsum.photos/200?3',
-                    info: [row.description], // 멘토링 상품 설명을 info 배열에 포함
                 },
                 rating: row.rating,
                 participants: row.participants,

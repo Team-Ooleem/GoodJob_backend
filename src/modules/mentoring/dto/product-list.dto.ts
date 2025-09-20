@@ -5,7 +5,6 @@ export class MentoringProductListItemDto {
         nickname: string;
         profile: string;
         profile_img: string;
-        info: string[];
     };
     rating: number;
     participants: number;
