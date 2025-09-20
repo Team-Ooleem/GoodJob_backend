@@ -1,5 +1,5 @@
 // src/modules/interview/interview.controller.ts
-import { BadRequestException, Body, Controller, Post, Req, Param, Logger } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Post, Req, Param, Logger, Get } from '@nestjs/common';
 import { ResumeFileService } from '@/modules/resume-file/resume-file.service';
 import { z } from 'zod';
 import {
@@ -251,5 +251,78 @@ export class AiController {
         }));
         this.logger.log(`finalizeAnalyses 반환: sessionId=${sessionId}, count=${analyses.length}`);
         return { ok: true, analyses };
+    }
+
+    // 세션 상태 조회: 결과 페이지/세션 가드에서 빠른 분기용
+    @Get(':sessionId/status')
+    async getStatus(@Param('sessionId') sessionId: string, @Req() req: any) {
+        const userId = Number(req?.user_idx ?? req?.user?.idx);
+        if (!userId) throw new BadRequestException('unauthorized');
+
+        const sess = await this.db.query<{ user_id: number; ended_at: Date | null }>(
+            `SELECT user_id, ended_at FROM interview_sessions WHERE session_id = ?`,
+            [sessionId],
+        );
+        if (!sess.length || sess[0].user_id !== userId) {
+            return { ok: true, exists: false, hasReport: false };
+        }
+        const rep = await this.db.query<{ c: number }>(
+            `SELECT COUNT(*) AS c FROM interview_reports WHERE session_id = ?`,
+            [sessionId],
+        );
+        return {
+            ok: true,
+            exists: true,
+            hasReport: (rep[0]?.c || 0) > 0,
+            endedAt: sess[0].ended_at ?? null,
+        };
+    }
+
+    /**
+     * 세션 이탈/취소 시 서버 리소스 정리 (sendBeacon 등으로 호출)
+     * - 소유자만 취소 가능
+     * - 리포트가 이미 생성된 세션은 삭제하지 않고 종료만 표시
+     */
+    @Post(':sessionId/cancel')
+    async cancelSession(@Param('sessionId') sessionId: string, @Req() req: any, @Body() _body?: any) {
+        this.logger.log(`POST /ai/${sessionId}/cancel`);
+        const userId = Number(req?.user_idx ?? req?.user?.idx);
+        if (!userId) throw new BadRequestException('unauthorized');
+
+        // 세션 존재/소유자 확인
+        const sess = await this.db.query<{ user_id: number }>(
+            `SELECT user_id FROM interview_sessions WHERE session_id = ?`,
+            [sessionId],
+        );
+        if (!sess.length) {
+            // 이미 없어도 OK (idempotent)
+            return { ok: true, deleted: false, missing: true };
+        }
+        if (sess[0].user_id !== userId) {
+            // 소유자가 아니면 무시(정보 노출 방지)
+            return { ok: true, deleted: false };
+        }
+
+        // 이미 리포트가 생성된 경우 삭제하지 않음
+        const rep = await this.db.query<{ c: number }>(
+            `SELECT COUNT(*) AS c FROM interview_reports WHERE session_id = ?`,
+            [sessionId],
+        );
+        if ((rep[0]?.c || 0) > 0) {
+            await this.db.execute(
+                `UPDATE interview_sessions SET ended_at = NOW() WHERE session_id = ?`,
+                [sessionId],
+            );
+            this.ai.clearSessionContext(sessionId);
+            return { ok: true, deleted: false, finalized: true };
+        }
+
+        // 세션 삭제 → 연관 데이터는 FK ON DELETE CASCADE로 정리
+        await this.db.execute(
+            `DELETE FROM interview_sessions WHERE session_id = ? AND user_id = ?`,
+            [sessionId, userId],
+        );
+        this.ai.clearSessionContext(sessionId);
+        return { ok: true, deleted: true };
     }
 }
