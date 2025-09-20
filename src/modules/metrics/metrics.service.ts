@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { VisualAggregateDto } from './dto/visual-aggregate.dto';
+import { CalibrationService } from '../calibration/calibration.service';
 
 /** 열거형 키 */
 type PresenceKey = 'good' | 'average' | 'needs_improvement';
@@ -113,7 +114,10 @@ export interface NormalizedScoreResult {
 
 @Injectable()
 export class MetricsService {
-    constructor(private readonly db: DatabaseService) {}
+    constructor(
+        private readonly db: DatabaseService,
+        private readonly calibration: CalibrationService,
+    ) {}
 
     /**
      * 세션/문항 존재 보장 (idempotent)
@@ -209,6 +213,35 @@ export class MetricsService {
                 a.ended_at_ms ?? null,
             ],
         );
+
+        // 업서트 이후, 캘리브레이션 기반 정규화 점수를 계산/저장
+        try {
+            const normalization = await this.calibration.normalizeVisualFeatures(sessionId, a);
+            if (normalization.calibrationApplied && normalization.deviationScore !== undefined) {
+                const normalizedScore = Math.max(
+                    0,
+                    Math.min(100, 100 - normalization.deviationScore * 100),
+                );
+                await this.calibration.saveNormalizedVisualScore(
+                    sessionId,
+                    questionId,
+                    normalizedScore,
+                    true,
+                );
+            } else {
+                const defaultScore = this.calculateDefaultVisualScore(a);
+                await this.calibration.saveNormalizedVisualScore(
+                    sessionId,
+                    questionId,
+                    defaultScore,
+                    false,
+                );
+            }
+        } catch (e) {
+            // 정규화 실패는 집계 저장에 영향을 주지 않음
+
+            console.warn('visual normalization failed:', (e as any)?.message || e);
+        }
     }
 
     /**
@@ -583,5 +616,20 @@ export class MetricsService {
         };
 
         return { overall, perQuestion };
+    }
+
+    // 기본(캘리브레이션 부재 시) 시각 점수 계산: 0~100
+    private calculateDefaultVisualScore(a: VisualAggregateDto): number {
+        const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+        const conf = a.confidence_mean != null ? clamp01(a.confidence_mean) : 0;
+        const smile = a.smile_mean != null ? clamp01(a.smile_mean) : 0;
+        const presenceTotal =
+            (a.presence_good || 0) +
+            (a.presence_average || 0) +
+            (a.presence_needs_improvement || 0);
+        const presenceGoodRatio = presenceTotal > 0 ? a.presence_good / presenceTotal : 0.5;
+        // 가중합: 자신감 50%, presence 30%, 미소 20%
+        const base01 = 0.5 * conf + 0.3 * presenceGoodRatio + 0.2 * smile;
+        return Math.round(clamp01(base01) * 100);
     }
 }

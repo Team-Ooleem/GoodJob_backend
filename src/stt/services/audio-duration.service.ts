@@ -56,7 +56,6 @@ export class AudioDurationService {
 
                     const durationValue = metadata.format.duration;
                     const duration = durationValue ? parseFloat(String(durationValue)) : 0;
-                    this.logger.log(`🎬 정확한 MP4 길이: ${duration.toFixed(3)}초`);
                     resolve(duration);
                 });
             } catch (error) {
