@@ -88,8 +88,8 @@ export class CalibrationService {
         calibration: CalibrationResult | null;
     }> {
         const durMsNum = typeof durationMs === 'string' ? parseInt(durationMs) || 0 : durationMs;
-        if (!Number.isFinite(durMsNum) || durMsNum < 5000) {
-            throw new BadRequestException('캘리브레이션 길이가 5초 미만입니다. 다시 진행해주세요.');
+        if (!Number.isFinite(durMsNum) || durMsNum < 2000) {
+            throw new BadRequestException('녹음 길이가 너무 짧습니다. 다시 진행해주세요.');
         }
 
         const audioFeatures = file ? await this.audioClient.analyzeAudio(file) : null;
@@ -103,11 +103,9 @@ export class CalibrationService {
             visualData &&
             typeof visualData.gaze_stability === 'number' &&
             Number.isFinite(visualData.gaze_stability) &&
-            visualData.gaze_stability < 0.6
+            visualData.gaze_stability < 0.4
         ) {
-            throw new BadRequestException(
-                '시선 안정성이 충분하지 않습니다(gaze_stability ≥ 0.6). 다시 진행해주세요.',
-            );
+            throw new BadRequestException('카메라를 좀 더 응시해주세요.');
         }
         // 헤드포즈 평균 절대각: |yaw| ≤ 25°, |pitch| ≤ 20° (프론트에서 평균 절대각을 보내므로 그대로 비교)
         const avgYaw = (visualData as any)?.avg_yaw_deg;
