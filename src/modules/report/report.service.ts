@@ -26,7 +26,7 @@ export class ReportService {
             );
             if (!rows.length) return null;
             const raw = rows[0]?.payload;
-            return typeof raw === 'string' ? JSON.parse(raw) : raw;
+            return typeof raw === 'string' ? (JSON.parse(raw) as InterviewAnalysisResult) : raw;
         } catch {
             return null;
         }
@@ -238,7 +238,6 @@ export class ReportService {
             textAnalysis,
             audioVisual,
             questionFeedback,
-            overallEvaluation,
             selfIntro,
             calibrationInfo,
         ] = await Promise.all([
@@ -247,7 +246,6 @@ export class ReportService {
             this.getTextAnalysis(sessionId),
             this.getAudioVisual(sessionId),
             this.getQuestionFeedback(sessionId),
-            this.getOverallEvaluation(sessionId),
             this.getSelfIntro(sessionId),
             this.scoreCalculation.getCalibrationInfo(sessionId),
         ]);
@@ -273,47 +271,77 @@ export class ReportService {
         return result;
     }
 
-    // ===== Listing APIs (unchanged) =====
-    async listReports(limit = 20, offset = 0, externalKey?: string): Promise<any[]> {
-        const args: any[] = [];
-        let where = '';
-        if (externalKey) {
-            where = 'WHERE s.external_key = ?';
-            args.push(externalKey);
-        }
-        args.push(limit, offset);
+    // ===== Listing APIs =====
 
+    async listReportsByUser(userId: number): Promise<any[]> {
         const rows = await this.db.query<{
             session_id: string;
-            overall_score: number;
-            question_count: number;
-            created_at: Date;
+            ended_at: Date | null;
+            resume_title: string | null;
+            payload: string;
+            duration_minutes: number | null;
         }>(
-            `SELECT r.session_id, r.overall_score, r.question_count, r.created_at
+            `SELECT 
+                r.session_id,
+                s.ended_at,
+                COALESCE(rf.original_name, latest_rf.original_name) as resume_title,
+                r.payload,
+                CASE 
+                    WHEN s.ended_at IS NOT NULL 
+                    THEN TIMESTAMPDIFF(MINUTE, s.created_at, s.ended_at)
+                    ELSE TIMESTAMPDIFF(MINUTE, s.created_at, NOW())
+                END as duration_minutes
              FROM interview_reports r
              JOIN interview_sessions s ON s.session_id = r.session_id
-             ${where}
-             ORDER BY r.created_at DESC
-             LIMIT ? OFFSET ?`,
-            args,
+             LEFT JOIN resume_files rf ON rf.id = s.external_key
+             LEFT JOIN (
+                 SELECT user_id, original_name,
+                        ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY created_at DESC) as rn
+                 FROM resume_files 
+                 WHERE user_id = ?
+             ) latest_rf ON latest_rf.user_id = s.user_id AND latest_rf.rn = 1 AND rf.id IS NULL
+             WHERE s.user_id = ?
+             ORDER BY r.created_at DESC`,
+            [userId, userId],
         );
-        return rows;
+
+        // 1분 자기소개 추천 추출
+        const processedRows = await Promise.all(
+            rows.map(async (row) => {
+                // payload에서 1분 자기소개 추천 추출
+                let selfIntroScript = this.extractSelfIntroScript(row.payload);
+
+                // payload에 self_intro_script가 없으면 동적으로 생성
+                if (!selfIntroScript) {
+                    try {
+                        const selfIntroResult = await this.getSelfIntro(row.session_id);
+                        selfIntroScript = selfIntroResult.selfIntroScript || null;
+                    } catch (error) {
+                        console.error(`자기소개 생성 실패 (${row.session_id}):`, error);
+                        selfIntroScript = null;
+                    }
+                }
+
+                return {
+                    session_id: row.session_id,
+                    ended_at: row.ended_at,
+                    resume_title: row.resume_title || null, // 명시적으로 null 처리
+                    duration_minutes: row.duration_minutes,
+                    self_intro_script: selfIntroScript,
+                };
+            }),
+        );
+
+        return processedRows;
     }
 
-    async listReportsByUser(userId: number, limit = 20, offset = 0): Promise<any[]> {
-        const rows = await this.db.query<{
-            session_id: string;
-            overall_score: number;
-            question_count: number;
-            created_at: Date;
-        }>(
-            `SELECT r.session_id, r.overall_score, r.question_count, r.created_at
-             FROM interview_reports r
-             WHERE r.user_id = ?
-             ORDER BY r.created_at DESC
-             LIMIT ? OFFSET ?`,
-            [userId, limit, offset],
-        );
-        return rows;
+    private extractSelfIntroScript(payload: string): string | null {
+        try {
+            const data = JSON.parse(payload) as { self_intro_script?: string };
+            return data?.self_intro_script || null;
+        } catch (error) {
+            console.error('1분 자기소개 추천 추출 실패:', error);
+            return null;
+        }
     }
 }
