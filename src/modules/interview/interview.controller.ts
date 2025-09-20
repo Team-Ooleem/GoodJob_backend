@@ -1,5 +1,14 @@
 // src/modules/interview/interview.controller.ts
-import { BadRequestException, Body, Controller, Post, Req, Param, Logger, Get } from '@nestjs/common';
+import {
+    BadRequestException,
+    Body,
+    Controller,
+    Post,
+    Req,
+    Param,
+    Logger,
+    Get,
+} from '@nestjs/common';
 import { ResumeFileService } from '@/modules/resume-file/resume-file.service';
 import { z } from 'zod';
 import {
@@ -267,8 +276,8 @@ export class AiController {
             return { ok: true, exists: false, hasReport: false };
         }
         const rep = await this.db.query<{ c: number }>(
-            `SELECT COUNT(*) AS c FROM interview_reports WHERE session_id = ?`,
-            [sessionId],
+            `SELECT COUNT(*) AS c FROM interview_reports WHERE session_id = ? AND user_id = ?`,
+            [sessionId, userId],
         );
         return {
             ok: true,
@@ -284,7 +293,11 @@ export class AiController {
      * - 리포트가 이미 생성된 세션은 삭제하지 않고 종료만 표시
      */
     @Post(':sessionId/cancel')
-    async cancelSession(@Param('sessionId') sessionId: string, @Req() req: any, @Body() _body?: any) {
+    async cancelSession(
+        @Param('sessionId') sessionId: string,
+        @Req() req: any,
+        @Body() _body?: any,
+    ) {
         this.logger.log(`POST /ai/${sessionId}/cancel`);
         const userId = Number(req?.user_idx ?? req?.user?.idx);
         if (!userId) throw new BadRequestException('unauthorized');
@@ -305,8 +318,8 @@ export class AiController {
 
         // 이미 리포트가 생성된 경우 삭제하지 않음
         const rep = await this.db.query<{ c: number }>(
-            `SELECT COUNT(*) AS c FROM interview_reports WHERE session_id = ?`,
-            [sessionId],
+            `SELECT COUNT(*) AS c FROM interview_reports WHERE session_id = ? AND user_id = ?`,
+            [sessionId, userId],
         );
         if ((rep[0]?.c || 0) > 0) {
             await this.db.execute(
