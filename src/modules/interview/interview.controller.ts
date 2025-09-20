@@ -1,5 +1,14 @@
 // src/modules/interview/interview.controller.ts
-import { BadRequestException, Body, Controller, Post, Req, Param, Logger, Get } from '@nestjs/common';
+import {
+    BadRequestException,
+    Body,
+    Controller,
+    Post,
+    Req,
+    Param,
+    Logger,
+    Get,
+} from '@nestjs/common';
 import { ResumeFileService } from '@/modules/resume-file/resume-file.service';
 import { z } from 'zod';
 import {
@@ -72,6 +81,16 @@ export class AiController {
             const summary = await this.resumeFiles.getSummaryById(parsed.data.resumeFileId, userId);
             if (!summary || summary.length < 10) {
                 throw new BadRequestException('요약이 비어있습니다. 먼저 요약을 등록하세요.');
+            }
+            // 세션-이력서 연결: 세션이 있다면 external_key로 이력서 파일 id 저장
+            if (sessionId && parsed.data.resumeFileId) {
+                await this.db.execute(
+                    `INSERT INTO interview_sessions (session_id, user_id, external_key)
+                     VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE 
+                       external_key = IFNULL(external_key, VALUES(external_key))`,
+                    [sessionId, userId, parsed.data.resumeFileId],
+                );
             }
             return this.ai.createQuestionWithJobPost(summary, { sessionId, jobPostUrl });
         }
@@ -183,6 +202,14 @@ export class AiController {
             // 이력서 텍스트(요약 우선) 로딩
             let resumeText = '';
             if (resumeFileId) {
+                // 세션-이력서 연결 보장
+                await this.db.execute(
+                    `INSERT INTO interview_sessions (session_id, user_id, external_key)
+                     VALUES (?, ?, ?)
+                     ON DUPLICATE KEY UPDATE 
+                       external_key = IFNULL(external_key, VALUES(external_key))`,
+                    [sessionId, userId, resumeFileId],
+                );
                 const resume = await this.resumeFiles.getMine(resumeFileId, userId);
                 resumeText = (
                     resume.summary?.trim()?.length
@@ -267,8 +294,8 @@ export class AiController {
             return { ok: true, exists: false, hasReport: false };
         }
         const rep = await this.db.query<{ c: number }>(
-            `SELECT COUNT(*) AS c FROM interview_reports WHERE session_id = ?`,
-            [sessionId],
+            `SELECT COUNT(*) AS c FROM interview_reports WHERE session_id = ? AND user_id = ?`,
+            [sessionId, userId],
         );
         return {
             ok: true,
@@ -284,7 +311,11 @@ export class AiController {
      * - 리포트가 이미 생성된 세션은 삭제하지 않고 종료만 표시
      */
     @Post(':sessionId/cancel')
-    async cancelSession(@Param('sessionId') sessionId: string, @Req() req: any, @Body() _body?: any) {
+    async cancelSession(
+        @Param('sessionId') sessionId: string,
+        @Req() req: any,
+        @Body() _body?: any,
+    ) {
         this.logger.log(`POST /ai/${sessionId}/cancel`);
         const userId = Number(req?.user_idx ?? req?.user?.idx);
         if (!userId) throw new BadRequestException('unauthorized');
@@ -305,8 +336,8 @@ export class AiController {
 
         // 이미 리포트가 생성된 경우 삭제하지 않음
         const rep = await this.db.query<{ c: number }>(
-            `SELECT COUNT(*) AS c FROM interview_reports WHERE session_id = ?`,
-            [sessionId],
+            `SELECT COUNT(*) AS c FROM interview_reports WHERE session_id = ? AND user_id = ?`,
+            [sessionId, userId],
         );
         if ((rep[0]?.c || 0) > 0) {
             await this.db.execute(

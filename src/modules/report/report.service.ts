@@ -35,14 +35,32 @@ export class ReportService {
     async saveReport(sessionId: string, payload: InterviewAnalysisResult): Promise<void> {
         const overallScore = payload.overall_score ?? 0;
 
+        // 세션에서 user_id 조회 후 보고서에 함께 저장
+        const sessRows = await this.db.query<{ user_id: number }>(
+            `SELECT user_id FROM interview_sessions WHERE session_id = ?`,
+            [sessionId],
+        );
+        const userId = sessRows[0]?.user_id;
+        if (!userId) {
+            // 세션이 없으면 저장하지 않음 (무결성 보장)
+            return;
+        }
+
         await this.db.execute(
-            `INSERT INTO interview_reports (session_id, overall_score, question_count, payload)
-             VALUES (?, ?, ?, ?)
+            `INSERT INTO interview_reports (session_id, user_id, overall_score, question_count, payload)
+             VALUES (?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE 
+               user_id=VALUES(user_id),
                overall_score=VALUES(overall_score), 
                question_count=VALUES(question_count), 
                payload=VALUES(payload)`,
-            [sessionId, overallScore, 0, JSON.stringify(payload)],
+            [sessionId, userId, overallScore, 0, JSON.stringify(payload)],
+        );
+
+        // 리포트 발행 시점에 세션 종료 시간 기록(최초 1회만)
+        await this.db.execute(
+            `UPDATE interview_sessions SET ended_at = COALESCE(ended_at, NOW()) WHERE session_id = ?`,
+            [sessionId],
         );
     }
 
@@ -291,8 +309,7 @@ export class ReportService {
         }>(
             `SELECT r.session_id, r.overall_score, r.question_count, r.created_at
              FROM interview_reports r
-             JOIN interview_sessions s ON s.session_id = r.session_id
-             WHERE s.user_id = ?
+             WHERE r.user_id = ?
              ORDER BY r.created_at DESC
              LIMIT ? OFFSET ?`,
             [userId, limit, offset],

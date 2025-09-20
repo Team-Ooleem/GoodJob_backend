@@ -3,10 +3,11 @@ USE `new-good-job-test`;
 CREATE TABLE IF NOT EXISTS interview_sessions (
   session_id      VARCHAR(64) PRIMARY KEY,
   user_id         INT NOT NULL,
-  external_key    VARCHAR(128) UNIQUE NULL,
+  external_key    VARCHAR(64) NULL COMMENT 'resume_files.id 참조(비고유)',
   created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   ended_at        TIMESTAMP NULL,
   INDEX idx_sessions_user_created (user_id, created_at),
+  INDEX idx_sessions_external_key (external_key),
   CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -109,12 +110,15 @@ CREATE TABLE IF NOT EXISTS audio_metrics_question (
 -- 분석 결과 리포트 저장(선택)
 CREATE TABLE IF NOT EXISTS interview_reports (
   session_id     VARCHAR(64) PRIMARY KEY,
+  user_id        INT NOT NULL,
   overall_score  INT NOT NULL,
   question_count INT NOT NULL,
   payload        JSON NOT NULL,
   created_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_ir_session FOREIGN KEY (session_id) REFERENCES interview_sessions(session_id) ON DELETE CASCADE
+  CONSTRAINT fk_ir_session FOREIGN KEY (session_id) REFERENCES interview_sessions(session_id) ON DELETE CASCADE,
+  CONSTRAINT fk_ir_user FOREIGN KEY (user_id) REFERENCES users(idx) ON DELETE RESTRICT,
+  INDEX idx_ir_user_created (user_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- -- Indexes for faster listing/filtering
