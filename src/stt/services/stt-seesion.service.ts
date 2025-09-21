@@ -8,7 +8,6 @@ export class STTSessionService {
     private chunkCache: Map<string, ChunkCacheData> = new Map();
     private readonly MAX_CACHE_SIZE = 100;
     private readonly BATCH_SIZE = 1000;
-    private readonly INACTIVITY_THRESHOLD = 30000; // 300
     constructor(private readonly databaseService: DatabaseService) {}
 
     // 세션 사용자 조회
@@ -83,17 +82,7 @@ export class STTSessionService {
 
     // 비활성 세션 정리
     cleanupInactiveSessions() {
-        const now = Date.now();
-        let cleanedCount = 0;
-
-        for (const [sessionKey, cached] of this.chunkCache.entries()) {
-            if (now - cached.lastActivity > this.INACTIVITY_THRESHOLD) {
-                this.chunkCache.delete(sessionKey);
-                cleanedCount++;
-            }
-        }
-
-        return { success: true, cleanedCount };
+        return { success: true, cleanedCount: 0 };
     }
 
     getMaxSegmentIndex(canvasId: string): number {

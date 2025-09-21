@@ -1,4 +1,5 @@
 import { SpeakerSegment } from './speaker-segment';
+import { SessionTimeInfo } from './session-timer';
 
 export interface TranscriptionResult {
     transcript: string;
@@ -39,18 +40,32 @@ export interface TranscribeChunkRequest {
 
 export interface STTWithContextResponse {
     success: boolean;
-    timestamp: string;
+    transcript: string;
+    confidence: number;
     processingTime: number;
     sttSessionIdx: number;
-    contextText: string;
-    audioUrl: string;
     speakers: Array<{
-        speakerTag: number;
         text_content: string;
         startTime: number;
         endTime: number;
+        speakerTag: number;
     }>;
-    segmentIndex?: number;
+    contextText: string;
+    audioUrl: string;
+    timestamp: string;
+    mentor_idx: number;
+    mentee_idx: number;
+    speakerInfo: { mentor: string; mentee: string };
+    canvasId: string;
+    segmentIndex?: number; // ✅ 선택적 프로퍼티로 통일
+
+    // 세션 시간 정보
+    sessionTimeInfo?: SessionTimeInfo;
+    timeWarning?: {
+        level: 'warning' | 'critical';
+        message: string;
+        remainingMinutes: number;
+    };
 }
 
 export interface SessionUserResponse {
@@ -91,6 +106,8 @@ export interface ChunkCacheData {
             speakerTag: number;
         }>;
         duration: number; // 🆕 duration 필드 추가
+        processing?: boolean;
+        chunkIndex?: number;
     }>;
     segmentIndex: number;
     lastActivity: number;
@@ -138,4 +155,33 @@ export interface PynoteSegment {
 export interface PynoteResponse {
     success: boolean;
     speaker_segments?: any[];
+}
+
+/**
+ * 세션 시간 조회 API 응답
+ */
+export interface SessionTimeResponse {
+    success: boolean;
+    canvasId: string;
+    sessionKey: string | null;
+    startTime: number | null;
+    duration: number;
+    elapsedMinutes: number;
+    remainingTime: number;
+    remainingMinutes: number;
+    maxDuration: number;
+    isExpired: boolean;
+    warningLevel: string;
+    message: string;
+}
+
+/**
+ * 세션 강제 종료 API 응답
+ */
+export interface SessionEndResponse {
+    success: boolean;
+    message: string;
+    canvasId: string;
+    finalDuration?: number;
+    finalElapsedMinutes?: number;
 }
