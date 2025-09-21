@@ -173,14 +173,12 @@ export class STTService {
                 } else {
                     // 둘 다 없으면 빈 텍스트로 플레이스홀더 생성
                     allSpeakers.push({
-                        text_Content: '[음성 인식 실패]',
+                        text_Content: '',
                         speakerTag: segment.speakerTag,
                         startTime: baseStartTime,
                         endTime: sessionStartTimeOffset + segment.endTime,
                         confidence: 0.1,
                     });
-
-                    this.logger.warn(`⚠️ 세그먼트 텍스트 없음, 플레이스홀더 생성`);
                 }
             }
 
@@ -190,7 +188,7 @@ export class STTService {
             // 6. 결과 반환
             const combinedTranscript = allSpeakers
                 .map((s) => s.text_Content)
-                .filter((text) => text && text !== '[음성 인식 실패]')
+                .filter((text) => text && text.trim())
                 .join(' ');
 
             this.logger.log(
@@ -200,7 +198,9 @@ export class STTService {
             return {
                 transcript: combinedTranscript,
                 confidence: 0.9,
-                speakers: allSpeakers,
+                speakers: allSpeakers.filter(
+                    (speaker) => speaker.text_Content && speaker.text_Content.trim(),
+                ),
             };
         } catch (error: unknown) {
             this.logger.error(

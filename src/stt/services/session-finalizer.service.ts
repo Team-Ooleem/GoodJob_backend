@@ -155,7 +155,7 @@ export class SessionFinalizerService {
         sessionKeys: string[];
         allProcessed: boolean;
     }> {
-        const maxWaitTime = 30000;
+        const maxWaitTime = 120000;
         const checkInterval = 500;
         const startWait = Date.now();
 
