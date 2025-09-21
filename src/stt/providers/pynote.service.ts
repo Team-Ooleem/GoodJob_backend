@@ -9,7 +9,7 @@ export class PynoteService {
     private readonly apiKey: string;
 
     constructor() {
-        this.serviceUrl = process.env.PYNOTE_SERVICE_URL || 'http://localhost:8081';
+        this.serviceUrl = process.env.AI_API_BASE || 'http://localhost:8081';
         this.apiKey = process.env.HF_TOKEN || '';
 
         // 초기화 로그 추가
@@ -42,7 +42,7 @@ export class PynoteService {
                     headers: {
                         'Content-Type': 'multipart/form-data', // ✅ Form Data 헤더
                     },
-                    timeout: 60000,
+                    timeout: 120000,
                 },
             );
 
@@ -70,7 +70,7 @@ export class PynoteService {
                 formData,
                 {
                     headers: { 'Content-Type': 'multipart/form-data' },
-                    timeout: 60000,
+                    timeout: 120000,
                 },
             );
 
@@ -121,7 +121,7 @@ export class PynoteService {
                     headers: {
                         'Content-Type': 'multipart/form-data',
                     },
-                    timeout: 60000,
+                    timeout: 120000,
                 },
             );
 
