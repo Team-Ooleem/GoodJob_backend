@@ -42,6 +42,27 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
 
     handleDisconnect(client: Socket) {
         console.log('❌ disconnected', client.id);
+
+        // 클라이언트가 속한 모든 방 확인
+        const rooms = Array.from(client.rooms);
+
+        for (const room of rooms) {
+            if (room === client.id) continue; // 개인 방 제외
+
+            const roomSet = this.server.sockets.adapter.rooms.get(room);
+            const remainingSize = roomSet?.size || 0;
+
+            console.log(`📌 방 ${room}에서 ${client.id} 나감 (남은 인원: ${remainingSize})`);
+
+            // 방에 혼자만 남거나 아무도 없으면 녹화 종료
+            if (remainingSize <= 1) {
+                console.log('🛑 한 명 이하 남음 - 녹화 종료 신호 전송');
+                this.server.to(room).emit('stopRecording', {
+                    reason: '참가자가 나가서 녹화가 종료되었습니다.',
+                    timestamp: new Date().toISOString(),
+                });
+            }
+        }
     }
 
     private async getRoom(room: string): Promise<RoomState> {
@@ -180,6 +201,20 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
             const [firstClientId] = Array.from(roomSet);
             console.log(`🎯 sending ready to initiator: ${firstClientId}`);
             this.server.to(firstClientId).emit('ready');
+
+            console.log('두명 모두 연결됨! 녹음시작 신호 전송');
+
+            // 🆕 첫 번째 참가자만 녹화 담당으로 지정
+            this.server.to(firstClientId).emit('startRecording', {
+                message: '두 명 모두 연결되었습니다. 녹음을 시작합니다.',
+                isRecorder: true, // 녹화 담당자
+            });
+
+            // 🆕 두 번째 참가자는 녹화 안 함
+            this.server.to(client.id).emit('startRecording', {
+                message: '두 명 모두 연결되었습니다.',
+                isRecorder: false, // 녹화 안 함
+            });
         }
 
         if (callback) callback(size);
