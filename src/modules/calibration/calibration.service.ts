@@ -88,9 +88,9 @@ export class CalibrationService {
         calibration: CalibrationResult | null;
     }> {
         const durMsNum = typeof durationMs === 'string' ? parseInt(durationMs) || 0 : durationMs;
-        if (!Number.isFinite(durMsNum) || durMsNum < 2000) {
-            throw new BadRequestException('녹음 길이가 너무 짧습니다. 다시 진행해주세요.');
-        }
+        // if (!Number.isFinite(durMsNum) || durMsNum < 2000) {
+        //     throw new BadRequestException('녹음 길이가 너무 짧습니다. 다시 진행해주세요.');
+        // }
 
         const audioFeatures = file ? await this.audioClient.analyzeAudio(file) : null;
 
