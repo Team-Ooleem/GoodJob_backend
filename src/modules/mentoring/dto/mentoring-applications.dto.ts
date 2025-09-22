@@ -16,6 +16,9 @@ export class MentoringApplicationItemDto {
     product_title: string;
     booked_date: string | null; // YYYY-MM-DD or null
     application_status: 'pending' | 'approved' | 'rejected' | 'cancelled' | 'completed';
+    canvas_id?: number | null;
+    start_time?: string | null; // ISO string
+    end_time?: string | null;   // ISO string
     mentee: MenteeSummaryDto;
     mentor: MentorSummaryDto;
 }

@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
 import { CanvasService } from './canvas.service';
 import { CanvasController } from './canvas.controller';
-import { DatabaseService } from '../../database/database.service';
+import { DatabaseModule } from '../../database/database.module';
 
 @Module({
+    imports: [DatabaseModule],
     controllers: [CanvasController],
-    providers: [CanvasService, DatabaseService],
+    providers: [CanvasService],
+    exports: [CanvasService],
 })
 export class CanvasModule {}

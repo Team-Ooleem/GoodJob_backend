@@ -44,14 +44,17 @@ export class TextAnalysisService {
     ) {}
 
     // DB에서 문항별 Content/Context 분석 불러오기
-    async getPerQuestionTextAnalyses(
-        sessionId: string,
-    ): Promise<
-        Array<{ questionId: string; content?: ContentAnalysisRow; context?: ContextAnalysisRow }>
+    async getPerQuestionTextAnalyses(sessionId: string): Promise<
+        Array<{
+            questionId: string;
+            questionText?: string;
+            content?: ContentAnalysisRow;
+            context?: ContextAnalysisRow;
+        }>
     > {
         // questions와 조인하여 order_no 기준 정렬, 없으면 question_id 정렬 폴백
         const rows = await this.db.query<any>(
-            `SELECT iaa.question_id, iaa.content_analysis_json, iaa.context_analysis_json, q.order_no
+            `SELECT iaa.question_id, iaa.content_analysis_json, iaa.context_analysis_json, q.order_no, q.text AS question_text
                FROM interview_answer_analyses iaa
           LEFT JOIN questions q
                  ON q.session_id = iaa.session_id AND q.question_id = iaa.question_id
@@ -61,6 +64,7 @@ export class TextAnalysisService {
         );
         const out: Array<{
             questionId: string;
+            questionText?: string;
             content?: ContentAnalysisRow;
             context?: ContextAnalysisRow;
         }> = [];
@@ -81,7 +85,12 @@ export class TextAnalysisService {
                             ? JSON.parse(r.context_analysis_json)
                             : r.context_analysis_json;
             } catch {}
-            out.push({ questionId: String(r.question_id), content: c, context: k });
+            out.push({
+                questionId: String(r.question_id),
+                questionText: r?.question_text != null ? String(r.question_text) : undefined,
+                content: c,
+                context: k,
+            });
         }
         return out;
     }
