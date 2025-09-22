@@ -193,4 +193,52 @@ export class CanvasService {
             mentee,
         };
     }
+
+    async getRemainingTimeByCanvas(canvasId: string) {
+        if (!canvasId) {
+            throw new BadRequestException('canvasId is required');
+        }
+
+        // 1) 캔버스 + 예약 정보 조회
+        const canvas = await this.db.queryOne<{
+            canvas_id: string;
+            name: string | null;
+            created_by: number;
+            created_at: any;
+            booked_date: string | null;
+            hour_slot: number | null;
+        }>(
+            `
+        SELECT 
+            c.id AS canvas_id,
+            c.name,
+            c.created_by,
+            c.created_at,
+            a.booked_date,
+            rs.hour_slot
+        FROM canvas c
+        JOIN mentoring_applications a ON a.application_id = c.application_id
+        JOIN mentoring_regular_slots rs ON a.regular_slots_idx = rs.regular_slots_idx
+        WHERE c.id = ?
+        `,
+            [canvasId],
+        );
+
+        if (!canvas) {
+            throw new NotFoundException('Canvas not found');
+        }
+
+        // 3) 예약 시간(scheduled_at) 계산
+        let scheduled_at: string | null = null;
+        if (canvas.booked_date && canvas.hour_slot !== null) {
+            const d = new Date(canvas.booked_date);
+            d.setUTCHours(canvas.hour_slot, 0, 0, 0);
+            scheduled_at = d.toISOString();
+        }
+
+        return {
+            canvas_id: String(canvas.canvas_id),
+            scheduled_at, // ISO 8601
+        };
+    }
 }
