@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { MentoringProductDto } from './dto/product.dto';
 import { MentoringProductSlotsDto } from './dto/product-slots.dto';
@@ -34,6 +34,7 @@ import { DatabaseService } from '@/database/database.service';
 @Injectable()
 export class MentoringService {
     constructor(private readonly databaseService: DatabaseService) {}
+    private readonly logger = new Logger(MentoringService.name);
     async getMentorProduct(
         mentorIdx: number,
         productIdx: number,
@@ -521,23 +522,64 @@ export class MentoringService {
             if (dto.payment.status === 'completed') {
                 canvasId = uuidv4();
                 const canvasTitle = mentorName ? `${mentorName}님의 라이브룸` : null;
+                this.logger.log(
+                    `[createApplication] start canvas create canvasId=${canvasId} application_id=${applicationId} created_by=${menteeIdx} mentorUserIdx=${mentorUserIdx}`,
+                );
                 await conn.execute(
                     `INSERT INTO canvas (id, application_id, name, created_by) VALUES (?, ?, ?, ?)`,
                     [canvasId, applicationId, canvasTitle, menteeIdx],
                 );
+                this.logger.log(
+                    `[createApplication] inserted canvas canvasId=${canvasId} application_id=${applicationId}`,
+                );
 
                 // 5) 캔버스 참여자 등록 (멘토와 멘티)
                 // 멘토 등록 (owner)
-                await conn.execute(
-                    `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
-                    [canvasId, mentorUserIdx, 'owner'],
-                );
+                try {
+                    const [mentorExistsRow]: any[] = await conn.query(
+                        'SELECT COUNT(*) AS cnt FROM users WHERE idx = ? LIMIT 1',
+                        [mentorUserIdx],
+                    );
+                    const [menteeExistsRow]: any[] = await conn.query(
+                        'SELECT COUNT(*) AS cnt FROM users WHERE idx = ? LIMIT 1',
+                        [menteeIdx],
+                    );
+                    const mentorExists = Number(mentorExistsRow?.[0]?.cnt ?? 0) > 0;
+                    const menteeExists = Number(menteeExistsRow?.[0]?.cnt ?? 0) > 0;
+                    const sameUser = Number(mentorUserIdx) === Number(menteeIdx);
+                    this.logger.log(
+                        `[createApplication] pre-insert check canvasId=${canvasId} mentorExists=${mentorExists} menteeExists=${menteeExists} sameUser=${sameUser}`,
+                    );
+
+                    await conn.execute(
+                        `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
+                        [canvasId, mentorUserIdx, 'owner'],
+                    );
+                    this.logger.log(
+                        `[createApplication] inserted owner canvasId=${canvasId} userId=${mentorUserIdx}`,
+                    );
+                } catch (err: any) {
+                    this.logger.error(
+                        `[createApplication] owner insert failed canvasId=${canvasId} userId=${mentorUserIdx} code=${err?.code} errno=${err?.errno} sqlState=${err?.sqlState} msg=${err?.sqlMessage}`,
+                    );
+                    throw err;
+                }
 
                 // 멘티 등록 (editor)
-                await conn.execute(
-                    `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
-                    [canvasId, menteeIdx, 'editor'],
-                );
+                try {
+                    await conn.execute(
+                        `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
+                        [canvasId, menteeIdx, 'editor'],
+                    );
+                    this.logger.log(
+                        `[createApplication] inserted editor canvasId=${canvasId} userId=${menteeIdx}`,
+                    );
+                } catch (err: any) {
+                    this.logger.error(
+                        `[createApplication] editor insert failed canvasId=${canvasId} userId=${menteeIdx} code=${err?.code} errno=${err?.errno} sqlState=${err?.sqlState} msg=${err?.sqlMessage}`,
+                    );
+                    throw err;
+                }
             }
 
             return {

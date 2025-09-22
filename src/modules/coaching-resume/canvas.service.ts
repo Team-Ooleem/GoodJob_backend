@@ -3,6 +3,7 @@ import {
     ForbiddenException,
     Injectable,
     NotFoundException,
+    Logger,
 } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { CreateCanvasDto } from './dto/create-canvas.dto';
@@ -16,11 +17,16 @@ export class CanvasService {
         private readonly db: DatabaseService,
         private readonly config: AppConfigService,
     ) {}
+    private readonly logger = new Logger(CanvasService.name);
 
     async createCanvas(dto: CreateCanvasDto, userId: number) {
         const canvasId: string = uuidv4();
 
         return this.db.transaction(async (conn) => {
+            this.logger.log(
+                `[createCanvas] start canvasId=${canvasId} name=${dto?.name ?? ''} ownerId=${userId} editorId=${dto?.participantId}`,
+            );
+
             // 1. 캔버스 생성
             await conn.execute(`INSERT INTO canvas (id, name, created_by) VALUES (?, ?, ?)`, [
                 canvasId,
@@ -28,17 +34,56 @@ export class CanvasService {
                 userId,
             ]);
 
-            // 2. 생성자 참여자 등록 (owner)
-            await conn.execute(
-                `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
-                [canvasId, userId, 'owner'],
-            );
+            try {
+                const [ownerExistsRow]: any[] = await conn.query(
+                    'SELECT COUNT(*) AS cnt FROM users WHERE idx = ? LIMIT 1',
+                    [userId],
+                );
+                const [editorExistsRow]: any[] = await conn.query(
+                    'SELECT COUNT(*) AS cnt FROM users WHERE idx = ? LIMIT 1',
+                    [dto.participantId],
+                );
+                const ownerExists = Number(ownerExistsRow?.[0]?.cnt ?? 0) > 0;
+                const editorExists = Number(editorExistsRow?.[0]?.cnt ?? 0) > 0;
+                const sameUser = Number(dto.participantId) === Number(userId);
+                this.logger.log(
+                    `[createCanvas] pre-insert check canvasId=${canvasId} ownerExists=${ownerExists} editorExists=${editorExists} sameUser=${sameUser}`,
+                );
 
-            // 3. 다른 사람 참여자 등록 (editor)
-            await conn.execute(
-                `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
-                [canvasId, dto.participantId, 'editor'],
-            );
+                // 2. 생성자 참여자 등록 (owner)
+                try {
+                    await conn.execute(
+                        `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
+                        [canvasId, userId, 'owner'],
+                    );
+                    this.logger.log(
+                        `[createCanvas] inserted owner canvasId=${canvasId} userId=${userId}`,
+                    );
+                } catch (err: any) {
+                    this.logger.error(
+                        `[createCanvas] owner insert failed canvasId=${canvasId} userId=${userId} code=${err?.code} errno=${err?.errno} sqlState=${err?.sqlState} msg=${err?.sqlMessage}`,
+                    );
+                    throw err;
+                }
+
+                // 3. 다른 사람 참여자 등록 (editor)
+                try {
+                    await conn.execute(
+                        `INSERT INTO canvas_participant (canvas_id, user_id, role) VALUES (?, ?, ?)`,
+                        [canvasId, dto.participantId, 'editor'],
+                    );
+                    this.logger.log(
+                        `[createCanvas] inserted editor canvasId=${canvasId} userId=${dto.participantId}`,
+                    );
+                } catch (err: any) {
+                    this.logger.error(
+                        `[createCanvas] editor insert failed canvasId=${canvasId} userId=${dto?.participantId} code=${err?.code} errno=${err?.errno} sqlState=${err?.sqlState} msg=${err?.sqlMessage}`,
+                    );
+                    throw err;
+                }
+            } catch (err) {
+                throw err;
+            }
 
             return {
                 id: canvasId,
