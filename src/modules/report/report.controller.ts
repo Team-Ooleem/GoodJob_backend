@@ -68,30 +68,11 @@ export class ReportController {
         return { success: true, data: selfIntro };
     }
 
-    // List recent reports (optional externalKey filter for user scoping)
-    @Get()
-    async list(
-        @Query('limit') limit?: string,
-        @Query('offset') offset?: string,
-        @Query('externalKey') externalKey?: string,
-    ) {
-        const lim = Math.max(1, Math.min(100, parseInt(limit || '20', 10) || 20));
-        const off = Math.max(0, parseInt(offset || '0', 10) || 0);
-        const rows = await this.svc.listReports(lim, off, externalKey);
-        return { success: true, data: rows };
-    }
-
     // List my reports based on authenticated user
     @Get('my')
-    async listMy(
-        @Query('limit') limit?: string,
-        @Query('offset') offset?: string,
-        @Req() req?: any,
-    ) {
-        const lim = Math.max(1, Math.min(100, parseInt(limit || '20', 10) || 20));
-        const off = Math.max(0, parseInt(offset || '0', 10) || 0);
+    async listMy(@Req() req?: any) {
         const userId = Number(req?.user_idx ?? req?.user?.idx);
-        const rows = await this.svc.listReportsByUser(userId, lim, off);
+        const rows = await this.svc.listReportsByUser(userId);
         return { success: true, data: rows };
     }
 }

@@ -320,7 +320,6 @@ export class MentoringService {
             available: Number(r.reserved_count ?? 0) === 0,
         }));
 
-        // 가능한(예약되지 않은) 정기 슬롯만 반환
         const slots = slotsAll.filter((s) => s.available);
 
         return {
@@ -332,15 +331,27 @@ export class MentoringService {
 
     async getProductRegularSlots(productIdx: number): Promise<ProductRegularSlotsResponseDto> {
         const sql = `
-            SELECT regular_slots_idx, day_of_week, hour_slot
-              FROM mentoring_regular_slots
-             WHERE product_idx = ?
-             ORDER BY day_of_week, hour_slot
+            SELECT 
+                s.regular_slots_idx, 
+                s.day_of_week, 
+                s.hour_slot,
+                CASE 
+                    WHEN COUNT(a.application_id) > 0 THEN 1 
+                    ELSE 0 
+                END AS is_booked
+              FROM mentoring_regular_slots s
+              LEFT JOIN mentoring_applications a 
+                ON s.regular_slots_idx = a.regular_slots_idx
+               AND a.application_status IN ('pending', 'approved', 'completed')
+             WHERE s.product_idx = ?
+             GROUP BY s.regular_slots_idx, s.day_of_week, s.hour_slot
+             ORDER BY s.day_of_week, s.hour_slot
         `;
         const rows = await this.databaseService.query<{
             regular_slots_idx: number;
             day_of_week: number;
             hour_slot: number;
+            is_booked: number;
         }>(sql, [productIdx]);
 
         const slots = rows.map((r) => ({
@@ -348,6 +359,7 @@ export class MentoringService {
             day_of_week: Number(r.day_of_week),
             hour_slot: Number(r.hour_slot),
             time_range: `${String(r.hour_slot).padStart(2, '0')}:00-${String(r.hour_slot + 1).padStart(2, '0')}:00`,
+            is_booked: Number(r.is_booked) === 1,
         }));
 
         return { product_idx: productIdx, slots };
@@ -1281,7 +1293,6 @@ export class MentoringService {
                     nickname: row.mentor_nickname,
                     profile: row.description, // 멘토링 상품 설명으로 변경
                     profile_img: row.profile_img || 'https://picsum.photos/200?3',
-                    info: [row.description], // 멘토링 상품 설명을 info 배열에 포함
                 },
                 rating: row.rating,
                 participants: row.participants,
