@@ -251,4 +251,79 @@ export class CanvasService {
             scheduled_at, // ISO 8601
         };
     }
+
+    async getSessionStatus(canvasId: string): Promise<{
+        isCompleted: boolean;
+        application_status: string | null;
+        scheduled_at: string | null;
+        completed_at: string | null;
+    }> {
+        const canvas = await this.db.query(
+            `SELECT c.*, ma.application_status, ma.completed_at, ma.booked_date, rs.hour_slot
+             FROM canvas c 
+             LEFT JOIN mentoring_applications ma ON c.application_id = ma.application_id 
+             LEFT JOIN mentoring_regular_slots rs ON ma.regular_slots_idx = rs.regular_slots_idx
+             WHERE c.id = ?`,
+            [canvasId],
+        );
+
+        if (!canvas[0]) {
+            throw new NotFoundException('Canvas not found');
+        }
+
+        const canvasData = canvas[0] as {
+            application_status: string | null;
+            completed_at: string | null;
+            booked_date: string | null;
+            hour_slot: number | null;
+        };
+        const now = new Date();
+
+        // scheduled_at 계산
+        let scheduled_at: string | null = null;
+        if (canvasData.booked_date && canvasData.hour_slot !== null) {
+            const d = new Date(canvasData.booked_date);
+            d.setUTCHours(canvasData.hour_slot, 0, 0, 0);
+            scheduled_at = d.toISOString();
+        }
+
+        const isCompleted = Boolean(
+            canvasData.application_status === 'completed' ||
+                (canvasData.application_status === 'approved' &&
+                    scheduled_at &&
+                    new Date(scheduled_at) <= now),
+        );
+
+        return {
+            isCompleted,
+            application_status: canvasData.application_status,
+            scheduled_at,
+            completed_at: canvasData.completed_at,
+        };
+    }
+    async completeSession(canvasId: string): Promise<{
+        success: boolean;
+        completed_at: string;
+    }> {
+        return this.db.transaction(async (conn) => {
+            const canvas = await conn.query(`SELECT application_id FROM canvas WHERE id = ?`, [
+                canvasId,
+            ]);
+
+            if (!canvas[0]) {
+                throw new NotFoundException('Canvas not found');
+            }
+
+            const applicationId = (canvas[0] as any).application_id;
+
+            await conn.query(
+                `UPDATE mentoring_applications 
+                 SET application_status = 'completed', completed_at = NOW() 
+                 WHERE application_id = ?`,
+                [applicationId],
+            );
+
+            return { success: true, completed_at: new Date().toISOString() };
+        });
+    }
 }
