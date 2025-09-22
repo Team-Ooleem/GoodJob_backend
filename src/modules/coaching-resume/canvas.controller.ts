@@ -29,4 +29,14 @@ export class CanvasController {
         const requesterId = req?.user?.idx ?? req?.user_idx;
         return this.canvasService.getCanvasDetail(canvasId, requesterId);
     }
+
+    @Get(':canvasId/status')
+    async getSessionStatus(@Param('canvasId') canvasId: string) {
+        return this.canvasService.getSessionStatus(canvasId);
+    }
+
+    @Post(':canvasId/complete')
+    async completeSession(@Param('canvasId') canvasId: string) {
+        return this.canvasService.completeSession(canvasId);
+    }
 }
