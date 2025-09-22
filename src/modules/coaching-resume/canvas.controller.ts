@@ -38,6 +38,7 @@ export class CanvasController {
     @Post(':canvasId/complete')
     async completeSession(@Param('canvasId') canvasId: string) {
         return this.canvasService.completeSession(canvasId);
+    }
     // 캔버스 상세 조회 (멘토/멘티 정보 포함)
     @Get('socket/:canvasId')
     async getRemainingTimeByCanvas(@Param('canvasId') canvasId: string) {
