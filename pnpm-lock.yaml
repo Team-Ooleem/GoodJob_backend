@@ -26,6 +26,9 @@ importers:
       '@google-cloud/text-to-speech':
         specifier: ^6.3.0
         version: 6.3.0
+      '@google-cloud/vision':
+        specifier: ^5.3.3
+        version: 5.3.3
       '@nestjs/axios':
         specifier: ^4.0.1
         version: 4.0.1(@nestjs/common@11.1.6(class-transformer@0.5.1)(class-validator@0.14.2)(reflect-metadata@0.2.2)(rxjs@7.8.2))(axios@1.11.0)(rxjs@7.8.2)
@@ -122,6 +125,9 @@ importers:
       pdfjs-dist:
         specifier: ^5.4.149
         version: 5.4.149
+      playwright:
+        specifier: ^1.55.0
+        version: 1.55.0
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -752,6 +758,10 @@ packages:
     resolution: {integrity: sha512-G/FQx5cE/+DqBbOpA5jKsegGwdPniU6PuIEMt+qxWgFxvxuFOzVmp6zYchtYuwAWV5/8Dgs0yAmjvNZv3uXLQg==}
     engines: {node: '>=18'}
 
+  '@google-cloud/promisify@5.0.0':
+    resolution: {integrity: sha512-N8qS6dlORGHwk7WjGXKOSsLjIjNINCPicsOX6gyyLiYk7mq3MtII96NZ9N2ahwA2vnkLmZODOIH9rlNniYWvCQ==}
+    engines: {node: '>=18'}
+
   '@google-cloud/speech@7.2.0':
     resolution: {integrity: sha512-bklwpRJlZH6XPsljFkaibeTx5JsbMQZPlhMxTAITs8uY/EOqUkockhQscgpRC4A6Jdl7iHTZfZbYqHRaClS5Mg==}
     engines: {node: '>=18'}
@@ -762,6 +772,10 @@ packages:
 
   '@google-cloud/text-to-speech@6.3.0':
     resolution: {integrity: sha512-Yy3+vKYFs1/oGWWDQoonvaUc8beDObcZFl+HCMjSu5+Okld2Bk8gjNekv37f5posRlQSN65xF7h5m8r2jmXJZg==}
+    engines: {node: '>=18'}
+
+  '@google-cloud/vision@5.3.3':
+    resolution: {integrity: sha512-zByFQWEJiOcEDYjHLh6zzt3f8cW5k9f4yMF37TeBhPzaG/W0tKdmLHnFFIz1gKAhXgyvh2VNwotSbYlgH9iPGA==}
     engines: {node: '>=18'}
 
   '@grpc/grpc-js@1.13.4':
@@ -2788,6 +2802,11 @@ packages:
   fs.realpath@1.0.0:
     resolution: {integrity: sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==}
 
+  fsevents@2.3.2:
+    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+    engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
+    os: [darwin]
+
   fsevents@2.3.3:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
@@ -3772,6 +3791,16 @@ packages:
   pkg-dir@4.2.0:
     resolution: {integrity: sha512-HRDzbaKjC+AOWVXxAU/x54COGeIv9eb+6CkDSQoNTt4XyWoIJvuPsXizxu/Fr23EiekbtZwmh1IcIG/l/a10GQ==}
     engines: {node: '>=8'}
+
+  playwright-core@1.55.0:
+    resolution: {integrity: sha512-GvZs4vU3U5ro2nZpeiwyb0zuFaqb9sUiAJuyrWpcGouD8y9/HLgGbNRjIph7zU9D3hnPaisMl9zG9CgFi/biIg==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.55.0:
+    resolution: {integrity: sha512-sdCWStblvV1YU909Xqx0DhOjPZE4/5lJsIS84IfN9dAZfcl/CIZ5O8l3o0j7hPMjDvqoTF8ZUcc+i/GL5erstA==}
+    engines: {node: '>=18'}
+    hasBin: true
 
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
@@ -5404,6 +5433,8 @@ snapshots:
 
   '@google-cloud/promisify@4.1.0': {}
 
+  '@google-cloud/promisify@5.0.0': {}
+
   '@google-cloud/speech@7.2.0':
     dependencies:
       '@google-cloud/common': 6.0.0
@@ -5438,6 +5469,13 @@ snapshots:
 
   '@google-cloud/text-to-speech@6.3.0':
     dependencies:
+      google-gax: 5.0.3
+    transitivePeerDependencies:
+      - supports-color
+
+  '@google-cloud/vision@5.3.3':
+    dependencies:
+      '@google-cloud/promisify': 5.0.0
       google-gax: 5.0.3
     transitivePeerDependencies:
       - supports-color
@@ -7832,6 +7870,9 @@ snapshots:
 
   fs.realpath@1.0.0: {}
 
+  fsevents@2.3.2:
+    optional: true
+
   fsevents@2.3.3:
     optional: true
 
@@ -9006,6 +9047,14 @@ snapshots:
   pkg-dir@4.2.0:
     dependencies:
       find-up: 4.1.0
+
+  playwright-core@1.55.0: {}
+
+  playwright@1.55.0:
+    dependencies:
+      playwright-core: 1.55.0
+    optionalDependencies:
+      fsevents: 2.3.2
 
   pluralize@8.0.0: {}
 
