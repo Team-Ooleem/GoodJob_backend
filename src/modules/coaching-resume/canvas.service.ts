@@ -109,6 +109,8 @@ export class CanvasService {
             created_at: any;
             booked_date: string | null;
             hour_slot: number | null;
+            start_time: any | null;
+            end_time: any | null;
         }>(
             `
         SELECT 
@@ -117,7 +119,15 @@ export class CanvasService {
             c.created_by,
             c.created_at,
             a.booked_date,
-            rs.hour_slot
+            rs.hour_slot,
+            TIMESTAMP(
+                a.booked_date,
+                MAKETIME(rs.hour_slot, 0, 0)
+            ) AS start_time,
+            TIMESTAMP(
+                a.booked_date,
+                MAKETIME(rs.hour_slot, 0, 0)
+            ) + INTERVAL 12 HOUR AS end_time
         FROM canvas c
         JOIN mentoring_applications a ON a.application_id = c.application_id
         JOIN mentoring_regular_slots rs ON a.regular_slots_idx = rs.regular_slots_idx
@@ -174,20 +184,20 @@ export class CanvasService {
 
         const myRole = me.cp_role === 'owner' ? 'mentor' : 'mentee';
 
-        // 3) 예약 시간(scheduled_at) 계산
-        let scheduled_at: string | null = null;
-        if (canvas.booked_date && canvas.hour_slot !== null) {
-            const d = new Date(canvas.booked_date);
-            d.setUTCHours(canvas.hour_slot, 0, 0, 0);
-            scheduled_at = d.toISOString();
-        }
+        // 3) 예약 시간: SQL에서 계산된 값을 그대로 사용
+        const start_time = canvas.start_time ? new Date(canvas.start_time).toISOString() : null;
+        const end_time = canvas.end_time ? new Date(canvas.end_time).toISOString() : null;
+        const scheduled_at = start_time; // 기존 호환성 유지
 
         return {
             canvas_id: String(canvas.canvas_id),
             name: canvas.name,
             created_by: canvas.created_by,
             created_at: canvas.created_at,
+            // 기존 호환을 위해 scheduled_at 유지 + 신규 start/end 추가
             scheduled_at, // ISO 8601
+            start_time, // ISO 8601
+            end_time, // ISO 8601
             role: myRole,
             mentor,
             mentee,
