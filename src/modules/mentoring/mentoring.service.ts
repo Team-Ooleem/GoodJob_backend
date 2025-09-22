@@ -1256,7 +1256,7 @@ export class MentoringService {
                     p.title,
                     p.description,
                     p.price,
-                    u.name AS mentor_nickname,
+                    mp.business_name AS mentor_nickname,
                     u.profile_img,
                     mp.introduction AS mentor_profile,
                     COALESCE(ROUND(AVG(r.rating), 1), 0) AS rating,
