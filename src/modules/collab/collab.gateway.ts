@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import * as Y from 'yjs';
 import { DatabaseService } from '../../database/database.service';
+import { CanvasService } from '../coaching-resume/canvas.service';
 
 type RoomState = {
     doc: Y.Doc;
@@ -22,13 +23,18 @@ type RoomState = {
 })
 @Injectable()
 export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
-    constructor(private readonly db: DatabaseService) {}
+    constructor(
+        private readonly db: DatabaseService,
+        private readonly canvasService: CanvasService,
+    ) {}
 
     @WebSocketServer() server: Server;
     private rooms = new Map<string, RoomState>();
 
     private readonly AUTOSAVE_INTERVAL = 30000; // 30초마다 저장
     private readonly IDLE_TIMEOUT = 10 * 60 * 1000; // 10분 idle 시 정리
+    private readonly SESSION_DURATION_MS = 60 * 60 * 1000; // 세션 길이: 60분
+    private roomTimers = new Map<string, NodeJS.Timeout>();
 
     // --- 초기화 확인 ---
     afterInit() {
@@ -111,11 +117,90 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         }, this.AUTOSAVE_INTERVAL);
     }
 
+    private async getSessionEndTime(room: string): Promise<number | null> {
+        try {
+            const info = await this.canvasService.getRemainingTimeByCanvas(room);
+            if (!info?.scheduled_at) return null;
+            const start = new Date(info.scheduled_at);
+            return start.getTime() + this.SESSION_DURATION_MS;
+        } catch (e) {
+            console.error(`❌ failed to fetch session end time for room=${room}`, e);
+            return null;
+        }
+    }
+
+    private async endRoomNow(room: string) {
+        try {
+            const state = this.rooms.get(room);
+            if (state) {
+                const update = Y.encodeStateAsUpdate(state.doc, Y.encodeStateVector(new Y.Doc()));
+                await this.db.query(`UPDATE canvas SET json_data = ? WHERE id = ?`, [
+                    Buffer.from(update).toString('base64'),
+                    room,
+                ]);
+            }
+        } catch (e) {
+            console.error(`❌ failed to persist final snapshot for room=${room}`, e);
+        }
+
+        try {
+            this.server.to(room).emit('session-ended');
+        } catch (e) {
+            console.error(`❌ failed to emit session-ended for room=${room}`, e);
+        }
+
+        const t = this.roomTimers.get(room);
+        if (t) clearTimeout(t);
+        this.roomTimers.delete(room);
+        this.rooms.delete(room);
+
+        // 방의 모든 소켓을 방에서 제거
+        const roomSet = this.server.sockets.adapter.rooms.get(room);
+        if (roomSet) {
+            for (const socketId of roomSet) {
+                const s = this.server.sockets.sockets.get(socketId);
+                s?.leave(room);
+            }
+        }
+
+        console.log(`⏹️ session closed and room cleared: ${room}`);
+    }
+
+    private async scheduleRoomShutdown(room: string) {
+        if (this.roomTimers.has(room)) return;
+
+        const endMs = await this.getSessionEndTime(room);
+        if (!endMs) return;
+
+        const delay = endMs - Date.now();
+        if (delay <= 0) {
+            await this.endRoomNow(room);
+            return;
+        }
+
+        const timer = setTimeout(() => this.endRoomNow(room), delay);
+        this.roomTimers.set(room, timer);
+
+        try {
+            this.server.to(room).emit('session-remaining-ms', delay);
+        } catch {}
+
+        console.log(`⏳ scheduled room shutdown for ${room} in ${Math.round(delay / 1000)}s`);
+    }
+
     // --- Yjs 협업용 join ---
     @SubscribeMessage('joinCanvas')
     async handleJoinCanvas(client: Socket, room: string) {
         if (!room) {
             console.error('❌ joinCanvas called without room');
+            return;
+        }
+
+        // 세션 종료 시간이 이미 지났으면 안내 후 종료
+        const endMs = await this.getSessionEndTime(room);
+        if (endMs && endMs - Date.now() <= 0) {
+            client.emit('session-ended');
+            console.log(`⛔ join denied, session already ended: ${room}`);
             return;
         }
 
@@ -125,6 +210,8 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         const init = Y.encodeStateAsUpdate(doc);
         console.log(`🚀 [joinCanvas] sending init size=${init.length}`);
         client.emit('init', Array.from(init));
+
+        await this.scheduleRoomShutdown(room);
 
         console.log(`📌 (Canvas) ${client.id} joined ${room}`);
     }
