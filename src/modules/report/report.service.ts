@@ -167,15 +167,24 @@ export class ReportService {
         };
     }
 
-    // 6. QuestionFeedbackCard - evidence_links
-    async getQuestionFeedback(
-        sessionId: string,
-    ): Promise<{ questionFeedback: InterviewAnalysisResult['evidence_links'] }> {
-        // 텍스트 분석 집계에서 evidence_links 추출
+    // 6. QuestionFeedbackCard - 문항별 질문 내용 + evidence links
+    async getQuestionFeedback(sessionId: string): Promise<{
+        questionFeedback: Array<{
+            questionId: string;
+            questionText: string;
+            links: NonNullable<InterviewAnalysisResult['evidence_links']>;
+        }>;
+    }> {
+        // 문항별 텍스트 분석에서 질문 텍스트와 링크를 매핑해 반환
         const perQs = await this.textAnalysis.getPerQuestionTextAnalyses(sessionId);
-        const tAgg = this.textAnalysis.aggregateTextAnalyses(perQs);
 
-        return { questionFeedback: tAgg.evidence_links };
+        const questionFeedback = perQs.map((q) => ({
+            questionId: q.questionId,
+            questionText: (q as any).questionText || '',
+            links: (q.context?.links || []).filter((l) => l && (l as any).answer_span) as any,
+        }));
+
+        return { questionFeedback };
     }
 
     // 7. OverallEvaluationCard - text_analysis_summary (top_reasons, top_improvements)
@@ -228,7 +237,7 @@ export class ReportService {
 
     async computeAndMaybeSave(
         sessionId: string,
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
         _dto?: AnalyzeReportDto,
     ): Promise<InterviewAnalysisResult> {
         // 개별 API들을 조합해서 전체 리포트 생성
@@ -237,7 +246,6 @@ export class ReportService {
             expressionIndices,
             textAnalysis,
             audioVisual,
-            questionFeedback,
             selfIntro,
             calibrationInfo,
         ] = await Promise.all([
@@ -245,10 +253,13 @@ export class ReportService {
             this.getExpressionIndices(sessionId),
             this.getTextAnalysis(sessionId),
             this.getAudioVisual(sessionId),
-            this.getQuestionFeedback(sessionId),
             this.getSelfIntro(sessionId),
             this.scoreCalculation.getCalibrationInfo(sessionId),
         ]);
+
+        // evidence_links는 집계에서 상위 링크를 따로 계산해 저장
+        const perQsForLinks = await this.textAnalysis.getPerQuestionTextAnalyses(sessionId);
+        const tAggForLinks = this.textAnalysis.aggregateTextAnalyses(perQsForLinks);
 
         const result: InterviewAnalysisResult = {
             overall_score:
@@ -261,7 +272,7 @@ export class ReportService {
             audio_summary: audioVisual.audioSummary,
             visual_summary: audioVisual.visualSummary,
             text_analysis_summary: textAnalysis.textAnalysis,
-            evidence_links: questionFeedback.questionFeedback,
+            evidence_links: tAggForLinks.evidence_links,
             self_intro_script: selfIntro.selfIntroScript,
         };
 

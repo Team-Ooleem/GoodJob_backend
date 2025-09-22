@@ -988,14 +988,25 @@ export class MentoringService {
             mp.business_name,
             jc.name AS mentor_job_category,
 
-            -- 캔버스 정보 (application_id FK 추가했을 경우)
-            c.id AS canvas_id
+            -- 캔버스 정보
+            c.id AS canvas_id,
+
+            -- 예약 시작/종료 시간
+            TIMESTAMP(
+                a.booked_date,
+                MAKETIME(rs.hour_slot, 0, 0)
+            ) AS start_time,
+            TIMESTAMP(
+                a.booked_date,
+                MAKETIME(rs.hour_slot, 0, 0)
+            ) + INTERVAL 12 HOUR AS end_time
         FROM mentoring_applications a
         JOIN users u ON a.mentee_idx = u.idx
         LEFT JOIN mentoring_products p ON a.product_idx = p.product_idx
         LEFT JOIN mentor_profiles mp ON p.mentor_idx = mp.mentor_idx
         LEFT JOIN job_category jc ON p.job_category_id = jc.id
         LEFT JOIN canvas c ON c.application_id = a.application_id
+        LEFT JOIN mentoring_regular_slots rs ON a.regular_slots_idx = rs.regular_slots_idx
         WHERE a.mentee_idx = ?
         ORDER BY a.created_at DESC
         LIMIT ? OFFSET ?
@@ -1009,10 +1020,10 @@ export class MentoringService {
                 canvas_id: r.canvas_id ?? null, // 연결 안된 경우 null
                 product_idx: r.product_idx,
                 product_title: r.product_title,
-                booked_date: r.booked_date
-                    ? new Date(r.booked_date).toISOString().slice(0, 10)
-                    : null,
+                booked_date: r.booked_date,
                 application_status: r.application_status,
+                start_time: r.start_time ? new Date(r.start_time).toISOString() : null,
+                end_time: r.end_time ? new Date(r.end_time).toISOString() : null,
                 mentee: {
                     user_idx: r.mentee_user_idx,
                     name: r.mentee_name,

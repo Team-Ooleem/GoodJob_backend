@@ -225,10 +225,7 @@ export class JobExtractService {
     }
 
     // iframe URL에서 직접 콘텐츠 추출
-    private async extractFromIframe(
-        iframeUrl: string,
-        baseUrl: string,
-    ): Promise<ExtractResult> {
+    private async extractFromIframe(iframeUrl: string, baseUrl: string): Promise<ExtractResult> {
         this.logger.log(`iframe 콘텐츠 추출 시작: ${iframeUrl}`);
 
         try {

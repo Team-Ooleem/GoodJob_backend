@@ -92,15 +92,44 @@ export class AiController {
                     [sessionId, userId, parsed.data.resumeFileId],
                 );
             }
-            return this.ai.createQuestionWithJobPost(summary, { sessionId, jobPostUrl });
+            const result = await this.ai.createQuestionWithJobPost(summary, { sessionId, jobPostUrl });
+            // 질문 생성과 동시에 questions.text 업서트
+            if (sessionId) {
+                // 세션 보장 (외래키 제약 대비)
+                await this.db.execute(
+                    `INSERT IGNORE INTO interview_sessions (session_id, user_id) VALUES (?, ?)`,
+                    [sessionId, userId],
+                );
+                await this.db.execute(
+                    `INSERT INTO questions (session_id, question_id, order_no, text)
+                     VALUES (?, ?, ?, ?)
+                     ON DUPLICATE KEY UPDATE text = VALUES(text)`,
+                    [sessionId, result.question.id, 0, result.question.text],
+                );
+            }
+            return result;
         }
         this.logger.log(
             `createQuestion: resumeSummaryLen=${parsed.data.resumeSummary.length}, jobPostUrl=${jobPostUrl ? 'Y' : 'N'}`,
         );
-        return this.ai.createQuestionWithJobPost(parsed.data.resumeSummary, {
+        const result = await this.ai.createQuestionWithJobPost(parsed.data.resumeSummary, {
             sessionId,
             jobPostUrl,
         });
+        // 질문 생성과 동시에 questions.text 업서트 (세션이 있을 때만)
+        if (sessionId) {
+            await this.db.execute(
+                `INSERT IGNORE INTO interview_sessions (session_id, user_id) VALUES (?, ?)`,
+                [sessionId, userId],
+            );
+            await this.db.execute(
+                `INSERT INTO questions (session_id, question_id, order_no, text)
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE text = VALUES(text)`,
+                [sessionId, result.question.id, 0, result.question.text],
+            );
+        }
+        return result;
     }
 
     // POST /api/ai/job-extract (프런트 사전 검증/프리뷰용)
@@ -152,7 +181,7 @@ export class AiController {
 
     // POST /api/ai/followups
     @Post('followups')
-    async createFollowups(@Body() body: unknown): Promise<FollowupsResult> {
+    async createFollowups(@Body() body: unknown, @Req() req: any): Promise<FollowupsResult> {
         this.logger.log(
             `POST /ai/followups bodyKeys=${Object.keys((body as any) || {}).join(',')}`,
         );
@@ -166,7 +195,33 @@ export class AiController {
         // 스키마로 보장된 타입을 서비스 입력 DTO로 그대로 사용
         const params: CreateFollowupsParams = parsed.data as any;
         const sessionId: string | undefined = (parsed.data as any).sessionId;
-        return this.ai.createFollowups(params, { sessionId });
+
+        const result = await this.ai.createFollowups(params, { sessionId });
+
+        // 꼬리질문도 질문 텍스트를 questions에 업서트
+        if (sessionId && result?.followups?.length) {
+            try {
+                const userId = Number(req?.user_idx ?? req?.user?.idx);
+                if (userId) {
+                    await this.db.execute(
+                        `INSERT IGNORE INTO interview_sessions (session_id, user_id) VALUES (?, ?)`,
+                        [sessionId, userId],
+                    );
+                }
+                for (const f of result.followups) {
+                    await this.db.execute(
+                        `INSERT INTO questions (session_id, question_id, order_no, text)
+                         VALUES (?, ?, ?, ?)
+                         ON DUPLICATE KEY UPDATE text = VALUES(text)`,
+                        [sessionId, f.id, 0, f.text],
+                    );
+                }
+            } catch (e) {
+                this.logger.warn(`followups 질문 저장 실패: ${String((e as any)?.message || e)}`);
+            }
+        }
+
+        return result;
     }
 
     /**
