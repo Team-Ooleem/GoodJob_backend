@@ -1,6 +1,7 @@
 export class MentorScopedProductMentorDto {
     mentor_idx: number;
     mentor_name: string;
+    profile_img: string | null;
     business_name: string;
     job_category: string;
 }
@@ -20,4 +21,3 @@ export class MentorScopedProductResponseDto {
     mentor: MentorScopedProductMentorDto;
     product: MentorScopedProductProductDto;
 }
-
