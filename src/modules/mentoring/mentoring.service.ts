@@ -43,6 +43,7 @@ export class MentoringService {
         const row = await this.databaseService.queryOne<{
             mentor_idx: number;
             mentor_name: string;
+            mentor_profile_img: string | null;
             business_name: string;
             mentor_job_category: string;
             product_idx: number;
@@ -57,6 +58,7 @@ export class MentoringService {
             `SELECT 
                  mp.mentor_idx,
                  u.name AS mentor_name,
+                 u.profile_img AS mentor_profile_img,
                  mp.business_name,
                  jc_m.name AS mentor_job_category,
                  p.product_idx,
@@ -86,6 +88,7 @@ export class MentoringService {
             mentor: {
                 mentor_idx: row.mentor_idx,
                 mentor_name: row.mentor_name,
+                profile_img: row.mentor_profile_img,
                 business_name: row.business_name,
                 job_category: row.mentor_job_category,
             },
@@ -203,6 +206,7 @@ export class MentoringService {
                 COUNT(DISTINCT r.review_idx) AS review_count,
                 COALESCE(ROUND(AVG(r.rating), 1), 0) AS average_rating,
                 u.name AS mentor_name,
+                u.profile_img AS mentor_profile_img,
                 jc2.name AS mentor_job_category,
                 mp.business_name,
                 COUNT(DISTINCT CASE WHEN a.application_status = 'completed' THEN a.mentee_idx END) AS mentee_count
@@ -214,7 +218,7 @@ export class MentoringService {
             LEFT JOIN mentoring_reviews r ON p.product_idx = r.product_idx
             LEFT JOIN mentoring_applications a ON p.product_idx = a.product_idx
             WHERE p.product_idx = ?
-            GROUP BY p.product_idx, p.title, p.description, p.price, jc.name, u.name, jc2.name, mp.business_name
+            GROUP BY p.product_idx, p.title, p.description, p.price, jc.name, u.name, u.profile_img, jc2.name, mp.business_name
         `;
 
         const row = await this.databaseService.queryOne<{
@@ -226,6 +230,7 @@ export class MentoringService {
             review_count: number;
             average_rating: number;
             mentor_name: string;
+            mentor_profile_img: string | null;
             mentor_job_category: string;
             business_name: string;
             mentee_count: number;
@@ -246,6 +251,7 @@ export class MentoringService {
             average_rating: Number(row.average_rating ?? 0),
             mentor: {
                 name: row.mentor_name,
+                profile_img: row.mentor_profile_img,
                 job_category: row.mentor_job_category,
                 career: '',
                 business_name: row.business_name,
