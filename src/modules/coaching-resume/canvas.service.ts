@@ -172,7 +172,7 @@ export class CanvasService {
             TIMESTAMP(
                 a.booked_date,
                 MAKETIME(rs.hour_slot, 0, 0)
-            ) + INTERVAL 12 HOUR AS end_time
+            ) + INTERVAL 24 HOUR AS end_time
         FROM canvas c
         JOIN mentoring_applications a ON a.application_id = c.application_id
         JOIN mentoring_regular_slots rs ON a.regular_slots_idx = rs.regular_slots_idx

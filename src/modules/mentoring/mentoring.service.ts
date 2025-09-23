@@ -1047,7 +1047,7 @@ export class MentoringService {
             TIMESTAMP(
                 a.booked_date,
                 MAKETIME(rs.hour_slot, 0, 0)
-            ) + INTERVAL 12 HOUR AS end_time
+            ) + INTERVAL 24 HOUR AS end_time
         FROM mentoring_applications a
         JOIN users u ON a.mentee_idx = u.idx
         LEFT JOIN mentoring_products p ON a.product_idx = p.product_idx
