@@ -29,7 +29,6 @@ import { STTMessageService } from './services/stt-message.service';
 import { STTUtilService } from './services/stt-util.service';
 import { AudioProcessorUtil } from './utils/audio-processer';
 import { AudioDurationService } from './services/audio-duration.service';
-import { SessionTimerService } from './services/session-timer.service';
 import { TranscribeContextUseCase } from './services/transcribe-context.use-case';
 
 @ApiTags('Speech-to-Text')
@@ -45,7 +44,6 @@ export class STTController {
         private readonly messageService: STTMessageService,
         private readonly utilService: STTUtilService,
         private readonly audioDurationService: AudioDurationService,
-        private readonly sessionTimerService: SessionTimerService,
         private readonly transcribeUseCase: TranscribeContextUseCase,
     ) {}
 

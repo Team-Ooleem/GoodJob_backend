@@ -9,7 +9,6 @@ import { DatabaseModule } from '../database/database.module';
 import { AudioDurationService } from './services/audio-duration.service';
 import { GcsService } from '../lib/gcs';
 import { PynoteService } from './providers/pynote.service';
-import { SessionTimerService } from './services/session-timer.service';
 import { TranscribeContextUseCase } from './services/transcribe-context.use-case';
 import { AudioChunkProcessorService } from './services/audio-chunk-processor.service';
 import { SessionFinalizerService } from './services/session-finalizer.service';
@@ -26,7 +25,6 @@ import { SessionFinalizerService } from './services/session-finalizer.service';
         AudioDurationService,
         GcsService,
         PynoteService,
-        SessionTimerService,
         TranscribeContextUseCase,
         AudioChunkProcessorService,
         SessionFinalizerService,

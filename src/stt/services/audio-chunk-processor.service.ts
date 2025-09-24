@@ -1,10 +1,7 @@
 // 파일 상단에 추가
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
+
 /* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
+
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { Injectable, Logger } from '@nestjs/common';
@@ -18,7 +15,6 @@ import { STTSessionService } from './stt-seesion.service';
 import { GcsService } from '../../lib/gcs';
 import { AudioDurationService } from './audio-duration.service';
 import { STTUtilService } from './stt-util.service';
-import { TimeCheckResult } from './session-timer.service';
 import { STTResult } from '../entities/transcription';
 
 // 세션 데이터 타입 확장
@@ -47,7 +43,6 @@ export class AudioChunkProcessorService {
         actualMenteeIdx: number,
         usePynoteDiarization: boolean,
         startTime: number,
-        timeCheck: TimeCheckResult,
     ): Promise<STTWithContextResponse> {
         const audioBuffer = Buffer.from(audioData, 'base64');
 
@@ -146,7 +141,6 @@ export class AudioChunkProcessorService {
                 actualMentorIdx,
                 actualMenteeIdx,
                 canvasId,
-                timeCheck,
                 startTime,
             );
         } catch (error) {
@@ -258,7 +252,6 @@ export class AudioChunkProcessorService {
         mentorIdx: number,
         menteeIdx: number,
         canvasId: string,
-        timeCheck: TimeCheckResult,
         startTime: number,
     ): STTWithContextResponse {
         return {
@@ -279,15 +272,6 @@ export class AudioChunkProcessorService {
             mentee_idx: menteeIdx,
             speakerInfo: { mentor: '', mentee: '' },
             canvasId: canvasId,
-            sessionTimeInfo: timeCheck.timeInfo,
-            timeWarning: timeCheck.shouldWarn
-                ? {
-                      level:
-                          timeCheck.timeInfo.warningLevel === 'critical' ? 'critical' : 'warning',
-                      message: timeCheck.message,
-                      remainingMinutes: timeCheck.timeInfo.remainingMinutes,
-                  }
-                : undefined,
         };
     }
 }
