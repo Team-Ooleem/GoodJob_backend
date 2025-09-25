@@ -146,7 +146,7 @@ export class TextProcessorUtil {
         // 2. 문장 끝으로 분리되지 않은 경우, 의미 단위로 분리
         const finalSentences: string[] = [];
         for (const sentence of sentences) {
-            if (sentence.length <= 100) {
+            if (sentence.length <= 500) {
                 // 100자 이하면 그대로 유지
                 finalSentences.push(sentence);
             } else {
@@ -190,7 +190,7 @@ export class TextProcessorUtil {
         const sentences: string[] = [];
         let remainingText = text.trim();
 
-        while (remainingText.length > 100) {
+        while (remainingText.length > 500) {
             // 100자보다 길면 분할
             let bestSplitIndex = -1;
             let bestBreak = '';
@@ -198,7 +198,7 @@ export class TextProcessorUtil {
             // 뒤에서부터 의미 있는 분할점 찾기
             for (const breakPoint of meaningfulBreaks) {
                 const lastIndex = remainingText.lastIndexOf(breakPoint, 100);
-                if (lastIndex > bestSplitIndex && lastIndex > 20) {
+                if (lastIndex > bestSplitIndex && lastIndex > 100) {
                     // 최소 20자 이상 유지
                     bestSplitIndex = lastIndex;
                     bestBreak = breakPoint;
@@ -216,7 +216,7 @@ export class TextProcessorUtil {
             } else {
                 // 의미 있는 분할점이 없으면 100자에서 강제 분할
                 sentences.push(remainingText.substring(0, 100).trim());
-                remainingText = remainingText.substring(100).trim();
+                remainingText = remainingText.substring(300).trim();
             }
         }
 
@@ -241,7 +241,7 @@ export class TextProcessorUtil {
         processed = this.resolveSpeakerOverlaps(processed);
 
         // 🆕 긴 문장 분리 적용
-        processed = this.splitLongSentences(processed);
+        // processed = this.splitLongSentences(processed);
 
         return processed;
     }
