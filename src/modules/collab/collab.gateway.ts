@@ -218,12 +218,12 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         }
 
         // 세션 종료 시간이 이미 지났으면 안내 후 종료
-        const endMs = await this.getSessionEndTime(room);
-        if (endMs && endMs - Date.now() <= 0) {
-            client.emit('session-ended');
-            console.log(`⛔ join denied, session already ended: ${room}`);
-            return;
-        }
+        // const endMs = await this.getSessionEndTime(room);
+        // if (endMs && endMs - Date.now() <= 0) {
+        //     client.emit('session-ended');
+        //     console.log(`⛔ join denied, session already ended: ${room}`);
+        //     return;
+        // }
 
         client.join(room);
 
@@ -232,7 +232,7 @@ export class CollabGateway implements OnGatewayInit, OnGatewayConnection, OnGate
         console.log(`🚀 [joinCanvas] sending init size=${init.length}`);
         client.emit('init', Array.from(init));
 
-        await this.scheduleRoomShutdown(room);
+        // await this.scheduleRoomShutdown(room);
 
         console.log(`📌 (Canvas) ${client.id} joined ${room}`);
     }

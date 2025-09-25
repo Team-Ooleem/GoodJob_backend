@@ -1,16 +1,8 @@
 // 파일 상단에 추가
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-return */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-/* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { TranscribeChunkRequest, STTWithContextResponse } from '../entities/transcription';
-import { SessionTimerService } from './session-timer.service';
+// import { SessionTimerService } from './session-timer.service';
 import { DatabaseService } from '../../database/database.service';
 import { STTUtilService } from './stt-util.service';
 import { AudioChunkProcessorService } from './audio-chunk-processor.service';
@@ -19,7 +11,6 @@ import { SessionFinalizerService } from './session-finalizer.service';
 @Injectable()
 export class TranscribeContextUseCase {
     constructor(
-        private readonly sessionTimerService: SessionTimerService,
         private readonly databaseService: DatabaseService,
         private readonly utilService: STTUtilService,
         private readonly audioChunkProcessor: AudioChunkProcessorService,
@@ -29,12 +20,6 @@ export class TranscribeContextUseCase {
     async execute(body: TranscribeChunkRequest): Promise<STTWithContextResponse> {
         // 1. 유효성 검증
         this.validateRequest(body);
-
-        // 2. 시간 제한 확인
-        const timeCheck = this.sessionTimerService.checkTimeLimit(body.canvasId);
-        if (!timeCheck.allowed) {
-            throw new BadRequestException(timeCheck.message);
-        }
 
         // 3. 참가자 정보 조회
         const participants = await this.getParticipants(body.canvasId);
@@ -54,7 +39,6 @@ export class TranscribeContextUseCase {
                 actualMenteeIdx,
                 body.usePynoteDiarization ?? true,
                 startTime,
-                timeCheck,
             );
 
             // 최종 청크일 때만 병합
