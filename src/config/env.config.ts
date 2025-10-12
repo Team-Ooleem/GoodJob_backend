@@ -46,6 +46,13 @@ export default registerAs('app', () => ({
         bucketName: process.env.AWS_BUCKET_NAME || '',
     },
 
+    // Qdrant 설정
+    qdrant: {
+        url: process.env.QDRANT_URL || 'http://localhost:6333',
+        apiKey: process.env.QDRANT_API_KEY || '',
+        resumeCollection: process.env.QDRANT_RESUME_COLLECTION || 'resume_chunks',
+    },
+
     // Pynote 설정
     pynote: {
         apiKey: process.env.PYNOTE_API_KEY || '',

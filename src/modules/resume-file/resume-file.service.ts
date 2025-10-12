@@ -2,6 +2,7 @@ import {
     BadRequestException,
     ForbiddenException,
     Injectable,
+    Logger,
     NotFoundException,
 } from '@nestjs/common';
 import { DatabaseService } from '@/database/database.service';
@@ -12,6 +13,8 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import OpenAI from 'openai';
 import { chunkText, mmr } from '@/lib/text';
+import { QdrantService } from '@/lib/qdrant.service';
+import { v5 as uuidv5 } from 'uuid';
 
 // Node.js 환경에서 pdfjs-dist 설정
 const pdfjsLib = pdfjs.getDocument;
@@ -30,11 +33,14 @@ export interface ResumeFileRecord {
 
 @Injectable()
 export class ResumeFileService {
+    private readonly logger = new Logger(ResumeFileService.name);
     private openai: OpenAI;
+    private static readonly qdrantNamespace = '3c74b5d5-2af7-4c54-9d2c-6fbed3c02aa8';
 
     constructor(
         private readonly db: DatabaseService,
         private readonly config: AppConfigService,
+        private readonly qdrant: QdrantService,
     ) {
         this.openai = new OpenAI({ apiKey: this.config.openai.apiKey });
     }
@@ -181,6 +187,87 @@ export class ResumeFileService {
         }
     }
 
+    private async embedChunks(
+        chunks: string[],
+        model: string,
+    ): Promise<{ vectors: number[][]; vectorDim: number }> {
+        if (!chunks.length) {
+            return { vectors: [], vectorDim: 0 };
+        }
+        const embRes = await this.openai.embeddings.create({
+            model,
+            input: chunks,
+        });
+        const vectors: number[][] = embRes.data.map((d: any) => d.embedding as number[]);
+        const vectorDim = vectors[0]?.length || 0;
+        return { vectors, vectorDim };
+    }
+
+    private async persistResumeChunks(params: {
+        fileId: string;
+        userId: number;
+        chunks: string[];
+        vectors: number[][];
+    }): Promise<void> {
+        const { fileId, userId, chunks, vectors } = params;
+        await this.db.query(`DELETE FROM resume_file_chunks WHERE file_id = ?`, [fileId]);
+
+        const qdrantPoints: {
+            id: string;
+            vector: number[];
+            payload: Record<string, unknown>;
+        }[] = [];
+
+        let offset = 0;
+        for (let i = 0; i < chunks.length; i++) {
+            const textChunk = chunks[i];
+            const vector = vectors[i] || [];
+            const vectorDim = vector.length;
+            const f32 = vectorDim ? new Float32Array(vector) : null;
+            const buf = f32 ? Buffer.from(f32.buffer) : null;
+            const startOffset = offset;
+            const endOffset = startOffset + textChunk.length;
+            offset = endOffset + 1;
+
+            await this.db.execute(
+                `INSERT INTO resume_file_chunks (file_id, idx, page, start_offset, end_offset, text, vector, vector_dim) VALUES (?,?,?,?,?,?,?,?)`,
+                [fileId, i, null, startOffset, endOffset, textChunk, buf, vectorDim || null],
+            );
+
+            if (this.qdrant.isEnabled && vectorDim > 0) {
+                const pointId = uuidv5(
+                    `${fileId}:${i}`,
+                    ResumeFileService.qdrantNamespace,
+                );
+                qdrantPoints.push({
+                    id: pointId,
+                    vector,
+                    payload: {
+                        file_id: fileId,
+                        user_id: userId,
+                        idx: i,
+                        text: textChunk,
+                        start_offset: startOffset,
+                        end_offset: endOffset,
+                    },
+                });
+            }
+        }
+
+        if (this.qdrant.isEnabled) {
+            const vectorDim = vectors[0]?.length || 0;
+            try {
+                if (vectorDim > 0) {
+                    await this.qdrant.replaceResumeChunks(fileId, qdrantPoints, vectorDim);
+                } else {
+                    await this.qdrant.deleteResumeChunks(fileId);
+                }
+            } catch (err: any) {
+                this.logger.warn(`Qdrant 동기화 실패: ${err?.message || err}`);
+            }
+        }
+    }
+
     /**
      * Download PDF from S3 and extract text, then summarize via OpenAI.
      */
@@ -254,7 +341,13 @@ export class ResumeFileService {
             const REDUCE_TOP_M = 6;
             const SMALL_DOC_THRESHOLD = 10_000;
 
-            // 작은 문서는 단일 패스로 요약
+            const chunks = chunkText(cleanText, CHUNK_TARGET_SIZE);
+            console.log(`청크 수: ${chunks.length}`);
+
+            let summary = '';
+            let docVecs: number[][] = [];
+            let vectorDim = 0;
+
             if (cleanText.length <= SMALL_DOC_THRESHOLD) {
                 const r = await this.openai.chat.completions.create({
                     model: CHAT_MODEL,
@@ -270,125 +363,88 @@ export class ResumeFileService {
                         },
                     ],
                 });
-                const summary = (r.choices[0]?.message?.content || '').trim();
+                summary = (r.choices[0]?.message?.content || '').trim();
                 if (!summary) throw new Error('요약 생성 실패(SMALL)');
 
-                const chunks = chunkText(cleanText, CHUNK_TARGET_SIZE);
-                const docVecs: number[][] = new Array(chunks.length).fill([]);
-                const vectorDim = 0;
-
-                await this.db.query(`DELETE FROM resume_file_chunks WHERE file_id = ?`, [id]);
-                for (let i = 0; i < chunks.length; i++) {
-                    const textChunk = chunks[i];
-                    const vec = docVecs[i] || [];
-                    const f32 = new Float32Array(vec);
-                    const buf = Buffer.from(f32.buffer);
-                    const startOffset =
-                        i === 0 ? 0 : chunks.slice(0, i).join('\n').length + (i > 0 ? 1 : 0);
-                    const endOffset = startOffset + textChunk.length;
-                    await this.db.execute(
-                        `INSERT INTO resume_file_chunks (file_id, idx, page, start_offset, end_offset, text, vector, vector_dim) VALUES (?,?,?,?,?,?,?,?)`,
-                        [id, i, null, startOffset, endOffset, textChunk, buf, vectorDim || null],
-                    );
-                }
-
-                await this.db.query(
-                    `UPDATE resume_files SET text_content=?, summary=?, parse_status='done', error_message=NULL WHERE id=?`,
-                    [storeText, summary, id],
-                );
-
-                return { textLen: cleanText.length, summary };
-            }
-
-            // 1) 청크 분할
-            const chunks = chunkText(cleanText, CHUNK_TARGET_SIZE);
-            console.log(`청크 수: ${chunks.length}`);
-
-            // 2) 임베딩 생성
-            console.log('임베딩 생성 시작...');
-            const embRes = await this.openai.embeddings.create({
-                model: EMBEDDING_MODEL,
-                input: chunks,
-            });
-            const docVecs: number[][] = embRes.data.map((d: any) => d.embedding as number[]);
-            const vectorDim = docVecs[0]?.length || 0;
-            console.log(`임베딩 차원: ${vectorDim}`);
-
-            // 2-2) 요약 목적 쿼리 벡터
-            const qEmb = await this.openai.embeddings.create({
-                model: EMBEDDING_MODEL,
-                input: '핵심 경력/기술/성과/직무적합성을 파악하기 위한 요약',
-            });
-            const qVec = qEmb.data[0].embedding as number[];
-
-            // 2-3) MMR로 Top-K 선별 (동적)
-            const dynamicTopK = Math.min(8, Math.max(4, Math.ceil(chunks.length * 0.2)));
-            const keepIdx = mmr(qVec, docVecs, Math.min(dynamicTopK, chunks.length), MMR_LAMBDA);
-            const topChunks = keepIdx.map((i) => chunks[i]);
-            console.log(`MMR로 선별된 청크 수: ${topChunks.length}`);
-
-            // 3) Map 단계: 각 청크 요약(JSON bullets) - 병렬/토큰 제한
-            const mapSystem =
-                '너는 채용 담당자다. 각 청크에서 핵심 경력/기술/성과/직무적합성만 bullet로 JSON 배열로 추출하라. 다른 텍스트는 금지한다.';
-            const mapResults: string[] = [];
-            for (let i = 0; i < topChunks.length; i += MAP_CONCURRENCY) {
-                const batch = topChunks.slice(i, i + MAP_CONCURRENCY).map((c) => {
-                    const cInput = c.length > TRIM_CHUNK_LEN ? c.slice(0, TRIM_CHUNK_LEN) : c;
-                    return this.openai.chat.completions.create({
-                        model: CHAT_MODEL,
-                        temperature: TEMPERATURE,
-                        max_tokens: MAP_MAX_TOKENS,
-                        messages: [
-                            { role: 'system', content: mapSystem },
-                            { role: 'user', content: `청크:\n${cInput}\n\nJSON 배열로만 답하라.` },
-                        ],
-                    });
+                const embedding = await this.embedChunks(chunks, EMBEDDING_MODEL);
+                docVecs = embedding.vectors;
+                vectorDim = embedding.vectorDim;
+            } else {
+                console.log('임베딩 생성 시작...');
+                const embRes = await this.openai.embeddings.create({
+                    model: EMBEDDING_MODEL,
+                    input: chunks,
                 });
-                const batchRes = await Promise.all(batch);
-                for (const r of batchRes) {
-                    mapResults.push(r.choices[0]?.message?.content ?? '[]');
-                }
-            }
+                docVecs = embRes.data.map((d: any) => d.embedding as number[]);
+                vectorDim = docVecs[0]?.length || 0;
+                console.log(`임베딩 차원: ${vectorDim}`);
 
-            // 4) Reduce 단계: 최종 요약 (입력 상한 및 토큰 제한)
-            const reducePrompt = `\n아래 bullet JSON 묶음을 통합해, 중복을 제거하고\n"핵심경력/핵심기술/대표성과/직무적합성"이 한눈에 보이게 8~12문장으로 요약하라.\n불필요한 수식어는 배제하라. 한국어로 작성.`;
-            const reduceInputs = mapResults.slice(0, REDUCE_TOP_M);
-            const r2 = await this.openai.chat.completions.create({
-                model: CHAT_MODEL,
-                temperature: TEMPERATURE,
-                max_tokens: REDUCE_MAX_TOKENS,
-                messages: [
-                    { role: 'system', content: '너는 채용 담당자다.' },
-                    {
-                        role: 'user',
-                        content: `${reducePrompt}\n\n입력(JSON들):\n${reduceInputs.join('\n')}`,
-                    },
-                ],
-            });
-            const summary = (r2.choices[0]?.message?.content || '').trim();
-            if (!summary) throw new Error('요약 생성 실패(Map-Reduce)');
+                const qEmb = await this.openai.embeddings.create({
+                    model: EMBEDDING_MODEL,
+                    input: '핵심 경력/기술/성과/직무적합성을 파악하기 위한 요약',
+                });
+                const qVec = qEmb.data[0].embedding as number[];
 
-            // 5) 청크/임베딩 저장: 기존 청크 삭제 후 재삽입
-            await this.db.query(`DELETE FROM resume_file_chunks WHERE file_id = ?`, [id]);
-            console.log('기존 청크 삭제 완료');
-
-            for (let i = 0; i < chunks.length; i++) {
-                const textChunk = chunks[i];
-                const vec = docVecs[i] || [];
-                const f32 = new Float32Array(vec);
-                const buf = Buffer.from(f32.buffer);
-                // 오프셋 추정: cleanText 내 누적 길이 기준
-                // 간단하게 재계산
-                const startOffset =
-                    i === 0 ? 0 : chunks.slice(0, i).join('\n').length + (i > 0 ? 1 : 0);
-                const endOffset = startOffset + textChunk.length;
-                await this.db.execute(
-                    `INSERT INTO resume_file_chunks (file_id, idx, page, start_offset, end_offset, text, vector, vector_dim) VALUES (?,?,?,?,?,?,?,?)`,
-                    [id, i, null, startOffset, endOffset, textChunk, buf, vectorDim || null],
+                const dynamicTopK = Math.min(8, Math.max(4, Math.ceil(chunks.length * 0.2)));
+                const keepIdx = mmr(
+                    qVec,
+                    docVecs,
+                    Math.min(dynamicTopK, chunks.length),
+                    MMR_LAMBDA,
                 );
+                const topChunks = keepIdx.map((i) => chunks[i]);
+                console.log(`MMR로 선별된 청크 수: ${topChunks.length}`);
+
+                const mapSystem =
+                    '너는 채용 담당자다. 각 청크에서 핵심 경력/기술/성과/직무적합성만 bullet로 JSON 배열로 추출하라. 다른 텍스트는 금지한다.';
+                const mapResults: string[] = [];
+                for (let i = 0; i < topChunks.length; i += MAP_CONCURRENCY) {
+                    const batch = topChunks.slice(i, i + MAP_CONCURRENCY).map((c) => {
+                        const cInput = c.length > TRIM_CHUNK_LEN ? c.slice(0, TRIM_CHUNK_LEN) : c;
+                        return this.openai.chat.completions.create({
+                            model: CHAT_MODEL,
+                            temperature: TEMPERATURE,
+                            max_tokens: MAP_MAX_TOKENS,
+                            messages: [
+                                { role: 'system', content: mapSystem },
+                                {
+                                    role: 'user',
+                                    content: `청크:\n${cInput}\n\nJSON 배열로만 답하라.`,
+                                },
+                            ],
+                        });
+                    });
+                    const batchRes = await Promise.all(batch);
+                    for (const r of batchRes) {
+                        mapResults.push(r.choices[0]?.message?.content ?? '[]');
+                    }
+                }
+
+                const reducePrompt = `\n아래 bullet JSON 묶음을 통합해, 중복을 제거하고\n"핵심경력/핵심기술/대표성과/직무적합성"이 한눈에 보이게 8~12문장으로 요약하라.\n불필요한 수식어는 배제하라. 한국어로 작성.`;
+                const reduceInputs = mapResults.slice(0, REDUCE_TOP_M);
+                const r2 = await this.openai.chat.completions.create({
+                    model: CHAT_MODEL,
+                    temperature: TEMPERATURE,
+                    max_tokens: REDUCE_MAX_TOKENS,
+                    messages: [
+                        { role: 'system', content: '너는 채용 담당자다.' },
+                        {
+                            role: 'user',
+                            content: `${reducePrompt}\n\n입력(JSON들):\n${reduceInputs.join('\n')}`,
+                        },
+                    ],
+                });
+                summary = (r2.choices[0]?.message?.content || '').trim();
+                if (!summary) throw new Error('요약 생성 실패(Map-Reduce)');
             }
 
-            // 6) 요약/원문 저장 및 상태 업데이트
+            await this.persistResumeChunks({
+                fileId: id,
+                userId: row.user_id,
+                chunks,
+                vectors: docVecs,
+            });
+
             await this.db.query(
                 `UPDATE resume_files SET text_content=?, summary=?, parse_status='done', error_message=NULL WHERE id=?`,
                 [storeText, summary, id],

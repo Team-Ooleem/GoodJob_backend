@@ -68,6 +68,18 @@ class EnvironmentVariables {
 
     @IsString()
     AWS_BUCKET_NAME: string;
+
+    @IsString()
+    @IsOptional()
+    QDRANT_URL?: string;
+
+    @IsString()
+    @IsOptional()
+    QDRANT_API_KEY?: string;
+
+    @IsString()
+    @IsOptional()
+    QDRANT_RESUME_COLLECTION?: string;
 }
 
 export function validate(config: Record<string, unknown>) {

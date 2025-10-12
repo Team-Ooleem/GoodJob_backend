@@ -36,6 +36,12 @@ export interface AwsConfig {
     bucketName: string;
 }
 
+interface QdrantConfig {
+    url: string;
+    apiKey?: string;
+    resumeCollection: string;
+}
+
 @Injectable()
 export class AppConfigService {
     constructor(private configService: ConfigService) {}
@@ -101,6 +107,16 @@ export class AppConfigService {
                 accessKeyId: '',
                 secretAccessKey: '',
                 bucketName: '',
+            }
+        );
+    }
+
+    get qdrant(): QdrantConfig {
+        return (
+            this.configService.get<QdrantConfig>('app.qdrant') || {
+                url: '',
+                apiKey: '',
+                resumeCollection: 'resume_chunks',
             }
         );
     }

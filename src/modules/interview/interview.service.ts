@@ -4,6 +4,7 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 import { AppConfigService } from '@/config/config.service';
 import { JobExtractService } from './job-extract.service';
+import { QdrantService } from '@/lib/qdrant.service';
 
 /** ===== Public DTOs (컨트롤러/다른 서비스에서 재사용 가능) ===== */
 export interface QuestionDto {
@@ -65,6 +66,14 @@ export interface AnalysisResult {
     content: ContentAnalysis;
     context: ContextAnalysis;
     usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | null;
+}
+
+interface AnalyzeAnswerParams {
+    answer: string;
+    resumeText: string;
+    resumeFileId?: string;
+    prevClaims?: string[];
+    userId?: number;
 }
 
 /** ===== Zod 스키마 (모델 JSON 응답 검증) ===== */
@@ -185,6 +194,7 @@ export class AiService {
 
     constructor(
         private readonly configService: AppConfigService,
+        private readonly qdrant: QdrantService,
         private readonly jobExtract?: JobExtractService,
     ) {
         this.client = new OpenAI({ apiKey: this.configService.openai.apiKey });
@@ -433,41 +443,86 @@ export class AiService {
     }
 
     // ====== NEW: 맥락(Context) 분석 ======
-    async analyzeContext(
-        answer: string,
-        resumeText: string,
-        prevClaims: string[] = [],
-    ): Promise<ContextAnalysis> {
+    async analyzeContext(params: {
+        answer: string;
+        resumeText: string;
+        resumeFileId?: string;
+        prevClaims?: string[];
+        userId?: number;
+    }): Promise<ContextAnalysis> {
         const t0 = Date.now();
+        const answer = params.answer;
+        const resumeText = params.resumeText;
+        const resumeFileId = params.resumeFileId;
+        const prevClaims = params.prevClaims ?? [];
+        const userId = params.userId;
+
         const ansSents = this.splitSentences(answer).slice(0, 8);
-        const resSents = this.splitSentences(resumeText).slice(0, 200);
         this.logger.log(
-            `analyzeContext 시작: ansSents=${ansSents.length}, resSents=${resSents.length}`,
+            `analyzeContext 시작: ansSents=${ansSents.length}, resumeFileId=${resumeFileId || ''}`,
         );
-        if (ansSents.length === 0 || resSents.length === 0) {
+        if (ansSents.length === 0) {
             return { context_score: 0, links: [], consistency: { contradiction: false } };
         }
 
-        // 임베딩: 문장 단위
         const embModel = 'text-embedding-3-small';
-        let ansEmb, resEmb;
+        let ansEmb;
         try {
-            [ansEmb, resEmb] = await Promise.all([
-                this.client.embeddings.create({ model: embModel, input: ansSents }),
-                this.client.embeddings.create({ model: embModel, input: resSents }),
-            ]);
+            ansEmb = await this.client.embeddings.create({ model: embModel, input: ansSents });
         } catch (e: any) {
             this.logger.error(`analyzeContext Embeddings 오류: ${e?.message}`, e?.stack);
             throw e;
         }
 
         const ansVecs: number[][] = ansEmb.data.map((d: any) => d.embedding as number[]);
-        const resVecs: number[][] = resEmb.data.map((d: any) => d.embedding as number[]);
+
+        let qdrantResults: Array<
+            Array<{ text: string; score: number; payload: Record<string, unknown> }>
+        > | null = null;
+        if (resumeFileId && this.qdrant?.isEnabled) {
+            try {
+                qdrantResults = await Promise.all(
+                    ansVecs.map((vec) =>
+                        this.qdrant.searchResumeChunks(vec, {
+                            fileId: resumeFileId,
+                            userId,
+                            limit: 2,
+                            scoreThreshold: 0.2,
+                        }),
+                    ),
+                );
+            } catch (e: any) {
+                this.logger.warn(`Qdrant 검색 실패: ${e?.message || e}`);
+                qdrantResults = null;
+            }
+        }
+
+        const needsFallback =
+            !qdrantResults ||
+            qdrantResults.some((hits) => !hits || !Array.isArray(hits) || hits.length === 0);
+
+        let resSents: string[] = [];
+        let resVecs: number[][] = [];
+        if (needsFallback && resumeText?.length) {
+            resSents = this.splitSentences(resumeText).slice(0, 200);
+            if (resSents.length) {
+                try {
+                    const resEmb = await this.client.embeddings.create({
+                        model: embModel,
+                        input: resSents,
+                    });
+                    resVecs = resEmb.data.map((d: any) => d.embedding as number[]);
+                } catch (e: any) {
+                    this.logger.warn(`Resume 임베딩 생성 실패: ${e?.message || e}`);
+                    resVecs = [];
+                }
+            }
+        }
 
         const cosine = (a: number[], b: number[]) => {
-            let dot = 0,
-                na = 0,
-                nb = 0;
+            let dot = 0;
+            let na = 0;
+            let nb = 0;
             const n = Math.min(a.length, b.length);
             for (let i = 0; i < n; i++) {
                 const ai = a[i];
@@ -481,21 +536,45 @@ export class AiService {
 
         const links: ContextLink[] = [];
         for (let i = 0; i < ansSents.length; i++) {
-            let bestIdx = 0,
-                bestSim = -1;
-            for (let j = 0; j < resVecs.length; j++) {
-                const sim = cosine(ansVecs[i], resVecs[j]);
-                if (sim > bestSim) {
-                    bestSim = sim;
-                    bestIdx = j;
-                }
+            const qHits = qdrantResults?.[i] ?? [];
+            const topHit = qHits.length ? qHits[0] : null;
+            if (topHit) {
+                links.push({
+                    answer_span: ansSents[i],
+                    resume_ref: String(topHit.text || ''),
+                    similarity: Number(topHit.score?.toFixed(3)),
+                });
+                continue;
             }
-            links.push({
-                answer_span: ansSents[i],
-                resume_ref: resSents[bestIdx],
-                similarity: Number(bestSim.toFixed(3)),
-            });
+
+            if (resVecs.length && resSents.length) {
+                let bestIdx = 0;
+                let bestSim = -1;
+                for (let j = 0; j < resVecs.length; j++) {
+                    const sim = cosine(ansVecs[i], resVecs[j]);
+                    if (sim > bestSim) {
+                        bestSim = sim;
+                        bestIdx = j;
+                    }
+                }
+                links.push({
+                    answer_span: ansSents[i],
+                    resume_ref: resSents[bestIdx] ?? '',
+                    similarity: Number(bestSim.toFixed(3)),
+                });
+            } else {
+                links.push({
+                    answer_span: ansSents[i],
+                    resume_ref: '',
+                    similarity: 0,
+                });
+            }
         }
+
+        const resSentsForLog = resSents.length ? resSents.length : (qdrantResults?.length ?? 0);
+        this.logger.log(
+            `analyzeContext 후보 링크 수: ${links.length}, resumeCandidates=${resSentsForLog}`,
+        );
 
         const system =
             '너는 면접 답변이 이력서와 얼마나 잘 연결되는지 평가하는 심사관이다. ' +
@@ -574,18 +653,21 @@ export class AiService {
     }
 
     // ====== NEW: 통합 분석 ======
-    async analyzeAnswer(
-        answer: string,
-        resumeSummaryOrFull: string,
-        prevClaims: string[] = [],
-    ): Promise<AnalysisResult> {
+    async analyzeAnswer(params: AnalyzeAnswerParams): Promise<AnalysisResult> {
+        const { answer, resumeText, resumeFileId, prevClaims = [], userId } = params;
         const t0 = Date.now();
         this.logger.log(
-            `analyzeAnswer 시작: aLen=${answer?.length ?? 0}, resumeLen=${resumeSummaryOrFull?.length ?? 0}, prevClaims=${prevClaims?.length ?? 0}`,
+            `analyzeAnswer 시작: aLen=${answer?.length ?? 0}, resumeLen=${resumeText?.length ?? 0}, prevClaims=${prevClaims?.length ?? 0}, resumeFileId=${resumeFileId || ''}`,
         );
         const [content, context] = await Promise.all([
             this.analyzeContent(answer),
-            this.analyzeContext(answer, resumeSummaryOrFull, prevClaims),
+            this.analyzeContext({
+                answer,
+                resumeText,
+                resumeFileId,
+                prevClaims,
+                userId,
+            }),
         ]);
         const res = { content, context, usage: null };
         this.logger.log(

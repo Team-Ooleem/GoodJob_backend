@@ -282,11 +282,13 @@ export class AiController {
             }
 
             // 분석 수행
-            const analysis: AnalysisResult = await this.ai.analyzeAnswer(
+            const analysis: AnalysisResult = await this.ai.analyzeAnswer({
                 answer,
                 resumeText,
+                resumeFileId,
                 prevClaims,
-            );
+                userId,
+            });
 
             // DB 저장(업서트)
             await this.db.execute(
