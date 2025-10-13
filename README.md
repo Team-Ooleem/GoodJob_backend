@@ -1,4 +1,8 @@
 # Good Job Nest
+<img width="1169" height="1659" alt="image" src="https://github.com/user-attachments/assets/53c7f04e-7fca-4ce1-9621-f1e7906e054b" />
+<img width="1168" height="1657" alt="image" src="https://github.com/user-attachments/assets/af5b6dfd-872c-4f56-a681-b47f0cc2dc9a" />
+
+
 
 NestJS 기반의 백엔드 프로젝트입니다.
 
@@ -132,3 +136,4 @@ pnpm test:e2e
 - **pnpm만 사용하세요** (package.json의 preinstall 스크립트가 이를 강제합니다)
 - **MySQL이 설치되어 있고 서비스가 실행 중이어야 합니다**
 - npm이나 yarn을 사용하면 설치가 실패할 수 있습니다
+
